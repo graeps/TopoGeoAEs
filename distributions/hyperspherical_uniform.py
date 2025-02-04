@@ -1,6 +1,7 @@
 import math
 
 import torch
+import torch.distributions.constraints
 
 
 class HypersphericalUniform(torch.distributions.Distribution):

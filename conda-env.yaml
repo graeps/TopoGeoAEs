@@ -1,4 +1,4 @@
-name: manifold-vae-env
+name: mvae-env
 channels:
   - defaults
   - conda-forge
@@ -11,3 +11,8 @@ dependencies:
   - matplotlib
   - jupyter
   - geomstats
+  - pip
+  - pip:
+      - geomstats[opt]
+variables:
+  GEOMSTATS_BACKEND: numpy

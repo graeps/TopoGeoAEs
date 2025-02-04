@@ -1,9 +1,9 @@
-import geomstats.backend as gs
+import geomstats._backend.numpy as gs
 import torch
 from torch.nn import functional as F
 
 
-# import von mises-fisher distr
+from ..distributions.von_mises_fisher import VonMisesFisher
 
 
 class ToroidalVAE(torch.nn.Module):
@@ -113,7 +113,7 @@ class ToroidalVAE(torch.nn.Module):
         y = (major_radius - minor_radius * cos_theta) * sin_phi
         z = minor_radius * sin_theta
 
-        return gs._backend.stack([x, y, z], axis=-1)
+        return gs.stack([x, y, z], axis=-1)
 
     def reparameterize(self, posterior_params):
         """
