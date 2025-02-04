@@ -1,0 +1,13 @@
+name: manifold-vae-env
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pytorch
+  - torchvision
+  - numpy
+  - scipy
+  - matplotlib
+  - jupyter
+  - geomstats
