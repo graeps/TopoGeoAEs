@@ -2,7 +2,8 @@ import geomstats.backend as gs
 import torch
 from torch.nn import functional as F
 
-## import von mises-fisher distr
+
+# import von mises-fisher distr
 
 
 class ToroidalVAE(torch.nn.Module):
@@ -19,15 +20,15 @@ class ToroidalVAE(torch.nn.Module):
     """
 
     def __init__(
-        self,
-        data_dim,
-        latent_dim,
-        sftbeta,
-        encoder_width,
-        encoder_depth,
-        decoder_width,
-        decoder_depth,
-        posterior_type,
+            self,
+            data_dim,
+            latent_dim,
+            sftbeta,
+            encoder_width,
+            encoder_depth,
+            decoder_width,
+            decoder_depth,
+            posterior_type,
     ):
         super().__init__()
         self.data_dim = data_dim
@@ -112,7 +113,7 @@ class ToroidalVAE(torch.nn.Module):
         y = (major_radius - minor_radius * cos_theta) * sin_phi
         z = minor_radius * sin_theta
 
-        return gs.stack([x, y, z], axis=-1)
+        return gs._backend.stack([x, y, z], axis=-1)
 
     def reparameterize(self, posterior_params):
         """
