@@ -2,7 +2,7 @@ import torch
 import torch.optim as optim
 from ..models.euclidean_vae import EuclideanVAE
 from ..utils.loss_functions import euclid_gaussian_loss
-from ..utils.evaluation import evaluate_model
+from ..utils.evaluation import Evaluation
 
 
 class EuclideanVAETrainer:
@@ -15,7 +15,6 @@ class EuclideanVAETrainer:
             data_loader (tuple): Tuple containing (train_loader, test_loader).
         """
         self.latent_dim = config.get('latent_dim', 20)
-        self.batch_size = config.get('batch_size', 64)
         self.num_epochs = config.get('num_epochs', 10)
         self.learning_rate = config.get('learning_rate', 0.001)
         self.device = config.get('device', torch.device("cuda" if torch.cuda.is_available() else "cpu"))
@@ -41,7 +40,7 @@ class EuclideanVAETrainer:
                 x = x.to(self.device)
                 self.optimizer.zero_grad()
                 reconstructed, mu, logvar = self.model(x)
-                loss, _, _ = loss_function(reconstructed, x, mu, logvar)
+                loss, _, _ = euclid_gaussian_loss(reconstructed, x, mu, logvar)
                 loss.backward()
                 self.optimizer.step()
                 train_loss += loss.item()

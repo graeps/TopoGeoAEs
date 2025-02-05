@@ -1,5 +1,5 @@
 import torch
-from trainer import EuclideanVAETrainer
+from ..trainer import EuclideanVAETrainer
 
 
 class Experiment:

@@ -4,7 +4,7 @@ import torch.nn as nn
 
 class EuclideanVAE(nn.Module):
     def __init__(self, latent_dim=20):
-        super(VAE, self).__init__()
+        super(EuclideanVAE, self).__init__()
         self.encoder = nn.Sequential(
             nn.Flatten(),
             nn.Linear(28 * 28, 400),
@@ -30,7 +30,8 @@ class EuclideanVAE(nn.Module):
         logvar = self.fc_logvar(h)
         return mu, logvar
 
-    def reparameterize(self, mu, logvar):
+    @staticmethod
+    def reparameterize(mu, logvar):
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
         return mu + eps * std

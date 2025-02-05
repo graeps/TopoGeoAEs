@@ -1,9 +1,8 @@
-import torch
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
 
-def load_fashion_mnist(batch_size=64, root="./data"):
+def load_fashion_mnist(batch_size=64, root="../datasets"):
     """
     Loads the Fashion MNIST dataset and returns training and test DataLoaders.
 
