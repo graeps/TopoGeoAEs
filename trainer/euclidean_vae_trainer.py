@@ -2,7 +2,6 @@ import torch
 import torch.optim as optim
 from ..models.euclidean_vae import EuclideanVAE
 from ..utils.loss_functions import euclid_gaussian_loss
-from ..utils.evaluation import Evaluation
 
 
 class EuclideanVAETrainer:
@@ -50,7 +49,7 @@ class EuclideanVAETrainer:
 
             test_loss = self.evaluate()
 
-            print(f"Epoch {epoch+1}/{self.num_epochs}, Train Loss: {avg_train_loss:.4f}, Test Loss: {test_loss:.4f}")
+            print(f"Epoch {epoch + 1}/{self.num_epochs}, Train Loss: {avg_train_loss:.4f}, Test Loss: {test_loss:.4f}")
 
         return self.train_losses, self.test_losses
 
@@ -61,7 +60,17 @@ class EuclideanVAETrainer:
         Returns:
             float: Average test loss.
         """
-        avg_test_loss = evaluate_model(self.model, self.test_loader, self.device)
+        self.model.eval()
+        test_loss = 0
+
+        with torch.no_grad():
+            for x, _ in self.test_loader:
+                x = x.to(self.device)
+                reconstructed, mu, logvar = self.model(x)
+                loss, _, _ = euclid_gaussian_loss(reconstructed, x, mu, logvar)
+                test_loss += loss.item()
+
+        avg_test_loss = test_loss / len(self.test_loader.dataset)
         self.test_losses.append(avg_test_loss)
 
         return avg_test_loss
