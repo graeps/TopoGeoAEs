@@ -6,40 +6,38 @@ from torch.nn import functional as f
 class EuclideanVAE(nn.Module):
     def __init__(
             self,
-            data_dim,
-            latent_dim,
-            sftbeta,
-            encoder_width,
-            encoder_depth,
-            decoder_width,
-            decoder_depth,
+            config
     ):
-        super().__init__(self)
-        super().__init__(self)
-        self.data_dim = data_dim
-        self.sftbeta = sftbeta
-        self.latent_dim = latent_dim
 
-        self.encoder_fc = torch.nn.Linear(self.data_dim, encoder_width)
+        self.data_dim = config.data_dim
+        self.sftbeta = config.sftbeta
+        self.latent_dim = config.latent_dim
+        self.encoder_width = config.encoder_width
+        self.encoder_depth = config.encoder_depth
+        self.decoder_width = config.decoder_width
+        self.decoder_depth = config.decoder_depth
+
+        self.encoder_fc = torch.nn.Linear(self.data_dim, config.encoder_width)
         self.encoder_linears = torch.nn.ModuleList(
             [
-                torch.nn.Linear(encoder_width, encoder_width)
-                for _ in range(encoder_depth)
+                torch.nn.Linear(self.encoder_width, self.encoder_width)
+                for _ in range(self.encoder_depth)
             ]
         )
 
-        self.fc_mu = nn.Linear(encoder_width, latent_dim)
-        self.fc_logvar = nn.Linear(encoder_width, latent_dim)
+        self.fc_mu = nn.Linear(self.encoder_width, self.latent_dim)
+        self.fc_logvar = nn.Linear(self.encoder_width, self.latent_dim)
 
-        self.decoder_fc = torch.nn.Linear(3, decoder_width)
+        self.decoder_fc = torch.nn.Linear(self.latent_dim, self.decoder_width)
         self.decoder_linears = torch.nn.ModuleList(
             [
-                torch.nn.Linear(decoder_width, decoder_width)
-                for _ in range(decoder_depth)
+                torch.nn.Linear(self.decoder_width, self.decoder_width)
+                for _ in range(self.decoder_depth)
             ]
         )
 
-        self.fc_x_recon = torch.nn.Linear(decoder_width, self.data_dim)
+        self.fc_x_recon = torch.nn.Linear(self.decoder_width, self.data_dim)
+        super().__init__()
 
     def encode(self, x):
         h = f.softplus(self.encoder_fc(x), beta=self.sftbeta)
