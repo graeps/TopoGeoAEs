@@ -1,55 +1,28 @@
 import matplotlib.pyplot as plt
-import seaborn as sns
 
-
-def plot_losses(train_losses, test_losses):
+def plot_losses(train_losses, test_losses, num_epochs):
     """
-    Plots training and testing losses over epochs.
+    Plot training and testing losses over epochs.
 
-    Args:
-        train_losses (list): List of training losses per epoch.
-        test_losses (list): List of testing losses per epoch.
+    Parameters
+    ----------
+    train_losses : list of float
+        List of training losses, where each element represents the loss for a specific epoch.
+    test_losses : list of float
+        List of testing losses, where each element represents the loss for a specific epoch.
+    num_epochs : int
+        Total number of epochs for which the losses are recorded.
+
+    Returns
+    -------
+    None
     """
-    plt.figure(figsize=(10, 6))
-    plt.plot(train_losses, label='Train Loss')
-    plt.plot(test_losses, label='Test Loss')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.title('Training and Testing Loss Over Epochs')
+    plt.figure(figsize=(8, 6))
+    plt.plot(range(1, num_epochs + 1), train_losses, label="Train Loss", marker="o")
+    plt.plot(range(1, num_epochs + 1), test_losses, label="Test Loss", marker="o")
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.title("Train Loss vs Test Loss")
     plt.legend()
-    plt.grid(True)
-    plt.show()
-
-
-def plot_reconstruction_errors(errors):
-    """
-    Plots the distribution of reconstruction errors.
-
-    Args:
-        errors (list): List of reconstruction errors.
-    """
-    plt.figure(figsize=(10, 6))
-    sns.histplot(errors, kde=True, bins=30)
-    plt.xlabel('Reconstruction Error')
-    plt.ylabel('Frequency')
-    plt.title('Distribution of Reconstruction Errors')
-    plt.grid(True)
-    plt.show()
-
-
-def compare_models(results):
-    """
-    Compares multiple models' performance based on test loss.
-
-    Args:
-        results (dict): Dictionary with model names as keys and test losses as values.
-    """
-    plt.figure(figsize=(10, 6))
-    models = list(results.keys())
-    losses = list(results.values())
-    sns.barplot(x=models, y=losses)
-    plt.xlabel('Model')
-    plt.ylabel('Test Loss')
-    plt.title('Model Performance Comparison')
     plt.grid(True)
     plt.show()

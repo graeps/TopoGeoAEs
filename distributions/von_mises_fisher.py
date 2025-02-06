@@ -9,6 +9,17 @@ from ..utils.math_utils import ive
 
 
 class VonMisesFisher(torch.distributions.Distribution):
+    def __init__(self, loc, scale, validate_args=None, k=1):
+        self.dtype = loc.dtype
+        self.loc = loc
+        self.scale = scale
+        self.device = loc.device
+        self.__m = loc.shape[-1]
+        self.__e1 = (torch.Tensor([1.0] + [0] * (loc.shape[-1] - 1))).to(self.device)
+        self.k = k
+
+        super().__init__(self.loc.size(), validate_args=validate_args)
+
     arg_constraints = {
         "loc": constraints.real,
         "scale": constraints.positive,
@@ -29,17 +40,6 @@ class VonMisesFisher(torch.distributions.Distribution):
     @property
     def stddev(self):
         return self.scale
-
-    def __init__(self, loc, scale, validate_args=None, k=1):
-        self.dtype = loc.dtype
-        self.loc = loc
-        self.scale = scale
-        self.device = loc.device
-        self.__m = loc.shape[-1]
-        self.__e1 = (torch.Tensor([1.0] + [0] * (loc.shape[-1] - 1))).to(self.device)
-        self.k = k
-
-        super().__init__(self.loc.size(), validate_args=validate_args)
 
     def sample(self, shape=None):
         if shape is None:
@@ -72,6 +72,7 @@ class VonMisesFisher(torch.distributions.Distribution):
 
         return z.type(self.dtype)
 
+    # if dim=3 no rejection sampling needed. Inverse transform sampling of exp(\kappa\omega)1_[-1,1](\omega)
     def __sample_w3(self, shape):
         shape = shape + torch.Size(self.scale.shape)
         u = torch.distributions.Uniform(0, 1).sample(shape).to(self.device)

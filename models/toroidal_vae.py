@@ -1,13 +1,12 @@
-import geomstats._backend.numpy as gs
 import torch
-from torch.nn import functional as F
-
+from torch.nn import functional as f
 
 from ..distributions.von_mises_fisher import VonMisesFisher
 
 
 class ToroidalVAE(torch.nn.Module):
-    """VAE with Linear (fully connected) layers.
+    """VAE with Linear (fully connected) layers, three-dimensional toroidal latent space, uniform prior distribution
+    and von Mises-Fisher likelihood.
 
     Parameters
     ----------
@@ -28,16 +27,11 @@ class ToroidalVAE(torch.nn.Module):
             encoder_depth,
             decoder_width,
             decoder_depth,
-            posterior_type,
     ):
-        super().__init__()
+        super().__init__(self)
         self.data_dim = data_dim
         self.sftbeta = sftbeta
         self.latent_dim = latent_dim
-        self.posterior_type = posterior_type
-
-        # decoder_width = encoder_width
-        # decoder_depth = encoder_depth
 
         self.encoder_fc = torch.nn.Linear(self.data_dim, encoder_width)
         self.encoder_linears = torch.nn.ModuleList(
@@ -61,7 +55,7 @@ class ToroidalVAE(torch.nn.Module):
             ]
         )
 
-        self.fc_x_mu = torch.nn.Linear(decoder_width, self.data_dim)
+        self.fc_x_recon = torch.nn.Linear(decoder_width, self.data_dim)
 
     def encode(self, x):
         """Encode input into mean and log-variance.
@@ -84,16 +78,16 @@ class ToroidalVAE(torch.nn.Module):
             Vector representing the diagonal covariance of the
             multivariate Gaussian in latent space.
         """
-        h = F.softplus(self.encoder_fc(x), beta=self.sftbeta)
+        h = f.softplus(self.encoder_fc(x), beta=self.sftbeta)
 
         for layer in self.encoder_linears:
-            h = F.softplus(layer(h), beta=self.sftbeta)
+            h = f.softplus(layer(h), beta=self.sftbeta)
 
         z_theta_mu = self.fc_z_theta_mu(h)
-        z_theta_kappa = F.softplus(self.fc_z_theta_kappa(h)) + 1
+        z_theta_kappa = f.softplus(self.fc_z_theta_kappa(h)) + 1
 
         z_phi_mu = self.fc_z_phi_mu(h)
-        z_phi_kappa = F.softplus(self.fc_z_phi_kappa(h)) + 1
+        z_phi_kappa = f.softplus(self.fc_z_phi_kappa(h)) + 1
 
         return z_theta_mu, z_theta_kappa, z_phi_mu, z_phi_kappa
 
@@ -113,7 +107,7 @@ class ToroidalVAE(torch.nn.Module):
         y = (major_radius - minor_radius * cos_theta) * sin_phi
         z = minor_radius * sin_theta
 
-        return gs.stack([x, y, z], axis=-1)
+        return torch.stack([x, y, z])
 
     def reparameterize(self, posterior_params):
         """
@@ -160,12 +154,12 @@ class ToroidalVAE(torch.nn.Module):
             Reconstructed data corresponding to z.
         """
 
-        h = F.softplus(self.decoder_fc(z), beta=self.sftbeta)
+        h = f.softplus(self.decoder_fc(z), beta=self.sftbeta)
 
         for layer in self.decoder_linears:
-            h = F.softplus(layer(h), beta=self.sftbeta)
+            h = f.softplus(layer(h), beta=self.sftbeta)
 
-        return self.fc_x_mu(h)
+        return self.fc_x_recon(h)
 
     def forward(self, x):
         """Run VAE: Encode, sample and decode.
@@ -190,6 +184,6 @@ class ToroidalVAE(torch.nn.Module):
 
         z = self.reparameterize(posterior_params)
 
-        x_mu = self.decode(z)
+        x_recon = self.decode(z)
 
-        return z, x_mu, posterior_params
+        return z, x_recon, posterior_params

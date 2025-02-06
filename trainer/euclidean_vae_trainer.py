@@ -1,7 +1,7 @@
 import torch
 import torch.optim as optim
 from ..models.euclidean_vae import EuclideanVAE
-from ..utils.loss_functions import euclid_gaussian_loss
+from ..utils.loss_functions import elbo_gaussian
 
 
 class EuclideanVAETrainer:
@@ -23,6 +23,7 @@ class EuclideanVAETrainer:
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
         self.train_losses = []
         self.test_losses = []
+        print("Trainer successfully initialized.")
 
     def train(self):
         """
@@ -31,18 +32,25 @@ class EuclideanVAETrainer:
         Returns:
             tuple: Training and testing losses per epoch.
         """
+        print("Training the Euclidean VAE model.")
         for epoch in range(self.num_epochs):
             self.model.train()
             train_loss = 0
 
-            for x, _ in self.train_loader:
+            print(f"Starting epoch {epoch + 1}/{self.num_epochs}")
+
+            for batch_idx, (x, _) in enumerate(self.train_loader):
                 x = x.to(self.device)
                 self.optimizer.zero_grad()
                 reconstructed, mu, logvar = self.model(x)
-                loss, _, _ = euclid_gaussian_loss(reconstructed, x, mu, logvar)
+                loss, _, _ = elbo_gaussian(reconstructed, x, mu, logvar)
                 loss.backward()
                 self.optimizer.step()
                 train_loss += loss.item()
+
+                if (batch_idx + 1) % 100 == 0:
+                    print(
+                        f"Epoch [{epoch + 1}/{self.num_epochs}], Step [{batch_idx + 1}/{len(self.train_loader)}], Loss: {loss.item():.4f}")
 
             avg_train_loss = train_loss / len(self.train_loader.dataset)
             self.train_losses.append(avg_train_loss)
@@ -50,6 +58,7 @@ class EuclideanVAETrainer:
             test_loss = self.evaluate()
 
             print(f"Epoch {epoch + 1}/{self.num_epochs}, Train Loss: {avg_train_loss:.4f}, Test Loss: {test_loss:.4f}")
+            print("-" * 50)
 
         return self.train_losses, self.test_losses
 
@@ -67,7 +76,7 @@ class EuclideanVAETrainer:
             for x, _ in self.test_loader:
                 x = x.to(self.device)
                 reconstructed, mu, logvar = self.model(x)
-                loss, _, _ = euclid_gaussian_loss(reconstructed, x, mu, logvar)
+                loss, _, _ = elbo_gaussian(reconstructed, x, mu, logvar)
                 test_loss += loss.item()
 
         avg_test_loss = test_loss / len(self.test_loader.dataset)

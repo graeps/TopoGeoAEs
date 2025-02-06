@@ -1,5 +1,5 @@
 import torch
-from loss_functions import euclid_gaussian_loss
+from .loss_functions import elbo_gaussian
 
 
 class Evaluation:
@@ -30,7 +30,7 @@ class Evaluation:
             for x, _ in self.data_loader:
                 x = x.to(self.device)
                 reconstructed, mu, logvar = self.model(x)
-                loss, _, _ = euclid_gaussian_loss(reconstructed, x, mu, logvar)
+                loss, _, _ = elbo_gaussian(reconstructed, x, mu, logvar)
                 total_loss += loss.item()
 
         avg_loss = total_loss / len(self.data_loader.dataset)

@@ -1,31 +1,52 @@
 import torch
 import torch.nn as nn
+from torch.nn import functional as f
 
 
 class EuclideanVAE(nn.Module):
-    def __init__(self, latent_dim=20):
-        super(EuclideanVAE, self).__init__()
-        self.encoder = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(28 * 28, 400),
-            nn.ReLU(),
-            nn.Linear(400, 128),
-            nn.ReLU(),
-        )
-        self.fc_mu = nn.Linear(128, latent_dim)
-        self.fc_logvar = nn.Linear(128, latent_dim)
+    def __init__(
+            self,
+            data_dim,
+            latent_dim,
+            sftbeta,
+            encoder_width,
+            encoder_depth,
+            decoder_width,
+            decoder_depth,
+    ):
+        super().__init__(self)
+        super().__init__(self)
+        self.data_dim = data_dim
+        self.sftbeta = sftbeta
+        self.latent_dim = latent_dim
 
-        self.decoder = nn.Sequential(
-            nn.Linear(latent_dim, 128),
-            nn.ReLU(),
-            nn.Linear(128, 400),
-            nn.ReLU(),
-            nn.Linear(400, 28 * 28),
-            nn.Sigmoid(),
+        self.encoder_fc = torch.nn.Linear(self.data_dim, encoder_width)
+        self.encoder_linears = torch.nn.ModuleList(
+            [
+                torch.nn.Linear(encoder_width, encoder_width)
+                for _ in range(encoder_depth)
+            ]
         )
+
+        self.fc_mu = nn.Linear(encoder_width, latent_dim)
+        self.fc_logvar = nn.Linear(encoder_width, latent_dim)
+
+        self.decoder_fc = torch.nn.Linear(3, decoder_width)
+        self.decoder_linears = torch.nn.ModuleList(
+            [
+                torch.nn.Linear(decoder_width, decoder_width)
+                for _ in range(decoder_depth)
+            ]
+        )
+
+        self.fc_x_recon = torch.nn.Linear(decoder_width, self.data_dim)
 
     def encode(self, x):
-        h = self.encoder(x)
+        h = f.softplus(self.encoder_fc(x), beta=self.sftbeta)
+
+        for layer in self.encoder_linears:
+            h = f.softplus(layer(h), beta=self.sftbeta)
+
         mu = self.fc_mu(h)
         logvar = self.fc_logvar(h)
         return mu, logvar
@@ -37,10 +58,15 @@ class EuclideanVAE(nn.Module):
         return mu + eps * std
 
     def decode(self, z):
-        return self.decoder(z).view(-1, 1, 28, 28)
+        h = f.softplus(self.decoder_fc(z), beta=self.sftbeta)
+
+        for layer in self.decoder_linears:
+            h = f.softplus(layer(h), beta=self.sftbeta)
+
+        return self.fc_x_recon(h)
 
     def forward(self, x):
         mu, logvar = self.encode(x)
         z = self.reparameterize(mu, logvar)
-        reconstructed = self.decode(z)
-        return reconstructed, mu, logvar
+        x_recon = self.decode(z)
+        return x_recon, mu, logvar
