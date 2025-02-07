@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.nn import functional as f
+from ..utils import is_valid_model_config
 
 
 class EuclideanVAE(nn.Module):
@@ -8,6 +9,7 @@ class EuclideanVAE(nn.Module):
             self,
             config
     ):
+        is_valid_model_config(config)
         super().__init__()
         self.posterior_type = "gaussian"
         self.data_dim = config["data_dim"]

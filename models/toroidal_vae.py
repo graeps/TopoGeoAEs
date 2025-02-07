@@ -1,6 +1,7 @@
 import torch
 from torch.nn import functional as f
 
+from ..utils import is_valid_model_config
 from ..distributions.von_mises_fisher import VonMisesFisher
 
 
@@ -22,6 +23,7 @@ class ToroidalVAE(torch.nn.Module):
             self,
             config
     ):
+        is_valid_model_config(config)
         super().__init__()
         self.posterior_type = "toroidal"
         self.data_dim = config["data_dim"]
