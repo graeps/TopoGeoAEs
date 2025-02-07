@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 from torch.nn import functional as f
-from ..utils import is_valid_model_config
+
+from .utils.valid_config import is_valid_model_config
 
 
 class EuclideanVAE(nn.Module):

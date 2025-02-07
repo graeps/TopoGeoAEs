@@ -5,7 +5,7 @@ from torch.distributions import constraints
 from torch.distributions.kl import register_kl
 
 from . import HypersphericalUniform
-from ..utils.math_utils import ive
+from .math_utils import ive
 
 
 class VonMisesFisher(torch.distributions.Distribution):

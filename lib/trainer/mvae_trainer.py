@@ -21,7 +21,7 @@ class MVAETrainer:
         Returns:
             tuple: Training and testing losses per epoch.
         """
-        print("Training the Euclidean VAE model.")
+        print("Training the" + f'{self.model.posterior_type}' + "VAE model.")
         for epoch in range(self.num_epochs):
             avg_train_loss = self.train_one_epoch(epoch)
 

@@ -1,8 +1,8 @@
 import torch
 from torch.nn import functional as f
 
-from ..utils import is_valid_model_config
-from ..distributions.von_mises_fisher import VonMisesFisher
+from .utils.valid_config import is_valid_model_config
+from ..distributions import VonMisesFisher
 
 
 class ToroidalVAE(torch.nn.Module):

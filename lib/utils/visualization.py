@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 
+
 def plot_losses(train_losses, test_losses, num_epochs):
     """
     Plot training and testing losses over epochs.

@@ -13,7 +13,7 @@ dependencies:
   - geomstats
   - pip
   - pip:
-      - geomstats[opt]
+      - geoopt
 variables:
   GEOMSTATS_BACKEND: numpy
 
