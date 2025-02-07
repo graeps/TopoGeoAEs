@@ -8,16 +8,17 @@ class EuclideanVAE(nn.Module):
             self,
             config
     ):
+        super().__init__()
+        self.posterior_type = "gaussian"
+        self.data_dim = config["data_dim"]
+        self.sftbeta = config["sftbeta"]
+        self.latent_dim = config["latent_dim"]
+        self.encoder_width = config["encoder_width"]
+        self.encoder_depth = config["encoder_depth"]
+        self.decoder_width = config["decoder_width"]
+        self.decoder_depth = config["decoder_depth"]
 
-        self.data_dim = config.data_dim
-        self.sftbeta = config.sftbeta
-        self.latent_dim = config.latent_dim
-        self.encoder_width = config.encoder_width
-        self.encoder_depth = config.encoder_depth
-        self.decoder_width = config.decoder_width
-        self.decoder_depth = config.decoder_depth
-
-        self.encoder_fc = torch.nn.Linear(self.data_dim, config.encoder_width)
+        self.encoder_fc = torch.nn.Linear(self.data_dim, self.encoder_width)
         self.encoder_linears = torch.nn.ModuleList(
             [
                 torch.nn.Linear(self.encoder_width, self.encoder_width)
@@ -37,7 +38,6 @@ class EuclideanVAE(nn.Module):
         )
 
         self.fc_x_recon = torch.nn.Linear(self.decoder_width, self.data_dim)
-        super().__init__()
 
     def encode(self, x):
         h = f.softplus(self.encoder_fc(x), beta=self.sftbeta)
@@ -64,7 +64,8 @@ class EuclideanVAE(nn.Module):
         return self.fc_x_recon(h)
 
     def forward(self, x):
-        mu, logvar = self.encode(x)
+        posterior_params = self.encode(x)
+        mu, logvar = posterior_params
         z = self.reparameterize(mu, logvar)
         x_recon = self.decode(z)
-        return x_recon, mu, logvar
+        return x_recon, posterior_params

@@ -14,7 +14,8 @@ def load_fashion_mnist(batch_size=64, root="../datasets"):
         tuple: (train_loader, test_loader)
     """
     transform = transforms.Compose([
-        transforms.ToTensor()
+        transforms.ToTensor(),
+        transforms.Lambda(lambda x: x.view(-1))  # Flatten the image to a 1D vector
     ])
 
     train_dataset = datasets.FashionMNIST(root=root, train=True, transform=transform, download=True)

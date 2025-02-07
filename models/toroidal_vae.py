@@ -22,17 +22,17 @@ class ToroidalVAE(torch.nn.Module):
             self,
             config
     ):
-        super().__init__(self)
-        super().__init__(self)
-        self.data_dim = config.data_dim
-        self.sftbeta = config.sftbeta
-        self.latent_dim = config.latent_dim
-        self.encoder_width = config.encoder_width
-        self.encoder_depth = config.encoder_depth
-        self.decoder_width = config.decoder_width
-        self.decoder_depth = config.decoder_depth
+        super().__init__()
+        self.posterior_type = "toroidal"
+        self.data_dim = config["data_dim"]
+        self.sftbeta = config["sftbeta"]
+        self.latent_dim = config["latent_dim"]
+        self.encoder_width = config["encoder_width"]
+        self.encoder_depth = config["encoder_depth"]
+        self.decoder_width = config["decoder_width"]
+        self.decoder_depth = config["decoder_depth"]
 
-        self.encoder_fc = torch.nn.Linear(self.data_dim, config.encoder_width)
+        self.encoder_fc = torch.nn.Linear(self.data_dim, self.encoder_width)
         self.encoder_linears = torch.nn.ModuleList(
             [
                 torch.nn.Linear(self.encoder_width, self.encoder_width)
@@ -106,7 +106,7 @@ class ToroidalVAE(torch.nn.Module):
         y = (major_radius - minor_radius * cos_theta) * sin_phi
         z = minor_radius * sin_theta
 
-        return torch.stack([x, y, z])
+        return torch.stack([x, y, z], dim=-1)
 
     def reparameterize(self, posterior_params):
         """
@@ -185,4 +185,4 @@ class ToroidalVAE(torch.nn.Module):
 
         x_recon = self.decode(z)
 
-        return z, x_recon, posterior_params
+        return x_recon, posterior_params

@@ -1,5 +1,5 @@
 import torch
-from ..utils.loss_functions import elbo_gaussian
+from ..utils.loss_functions import elbo
 
 
 class MVAETrainer:
@@ -27,7 +27,7 @@ class MVAETrainer:
 
             self.train_losses.append(avg_train_loss)
 
-            test_loss = self.evaluate_one_epoch()
+            test_loss = self.test_one_epoch()
 
             print(f"Epoch {epoch + 1}/{self.num_epochs}, Train Loss: {avg_train_loss:.4f}, Test Loss: {test_loss:.4f}")
             print("-" * 50)
@@ -43,8 +43,9 @@ class MVAETrainer:
         for batch_idx, (x, _) in enumerate(self.train_loader):
             x = x.to(self.device)
             self.optimizer.zero_grad()
-            reconstructed, mu, logvar = self.model(x)
-            loss, _, _ = elbo_gaussian(reconstructed, x, mu, logvar)
+            x_recon, posterior_params = self.model(x)
+            loss, _, _ = elbo(self.model.posterior_type, x, x_recon, posterior_params, self.model.latent_dim,
+                              self.device)
             loss.backward()
             self.optimizer.step()
             train_loss += loss.item()
@@ -56,7 +57,7 @@ class MVAETrainer:
         train_loss /= len(self.train_loader.dataset)
         return train_loss
 
-    def evaluate_one_epoch(self):
+    def test_one_epoch(self):
         """
         Evaluates the Euclidean VAE model on the test dataset.
 
@@ -69,8 +70,9 @@ class MVAETrainer:
         with torch.no_grad():
             for x, _ in self.test_loader:
                 x = x.to(self.device)
-                reconstructed, mu, logvar = self.model(x)
-                loss, _, _ = elbo_gaussian(reconstructed, x, mu, logvar)
+                x_recon, posterior_params = self.model(x)
+                loss, _, _ = elbo(self.model.posterior_type, x, x_recon, posterior_params, self.model.latent_dim,
+                                  self.device)
                 test_loss += loss.item()
 
         avg_test_loss = test_loss / len(self.test_loader.dataset)
