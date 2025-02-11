@@ -1,2 +1,1 @@
-from .loss_functions import elbo_gaussian
-from .visualization import plot_losses
+from .visualization import plot_losses, show_training_history

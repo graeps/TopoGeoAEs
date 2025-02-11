@@ -13,7 +13,7 @@ dependencies:
   - geomstats
   - pip
   - pip:
-      - geoopt
+      - git+https://github.com/geoopt/geoopt.git
 variables:
   GEOMSTATS_BACKEND: numpy
 

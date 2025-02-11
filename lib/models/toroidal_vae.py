@@ -187,4 +187,4 @@ class ToroidalVAE(torch.nn.Module):
 
         x_recon = self.decode(z)
 
-        return x_recon, posterior_params
+        return z, x_recon, posterior_params

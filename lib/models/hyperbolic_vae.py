@@ -1,0 +1,81 @@
+import torch
+from torch.nn import functional as f
+
+from .utils.valid_config import is_valid_model_config
+from ..distributions import WrappedHyperNormal
+
+
+class HyperbolicVAE(torch.nn.Module):
+    """VAE with Linear (fully connected) layers, hyperbolic latent space, wrapped normal distribution.
+    """
+
+    def __init__(
+            self,
+            config
+    ):
+        is_valid_model_config(config)
+        super().__init__()
+        self.posterior_type = "hyperbolic"
+        self.data_dim = config["data_dim"]
+        self.sftbeta = config["sftbeta"]
+        self.latent_dim = config["latent_dim"]
+        self.encoder_width = config["encoder_width"]
+        self.encoder_depth = config["encoder_depth"]
+        self.decoder_width = config["decoder_width"]
+        self.decoder_depth = config["decoder_depth"]
+
+        self.encoder_fc = torch.nn.Linear(self.data_dim, self.encoder_width)
+        self.encoder_linears = torch.nn.ModuleList(
+            [
+                torch.nn.Linear(self.encoder_width, self.encoder_width)
+                for _ in range(self.encoder_depth)
+            ]
+        )
+
+        self.fc_mu = torch.nn.Linear(self.encoder_width, self.latent_dim - 1)
+        self.fc_logvar = torch.nn.Linear(self.encoder_width, self.latent_dim - 1)  # Diagonal covariance
+
+        self.decoder_fc = torch.nn.Linear(self.latent_dim, self.decoder_width)
+        self.decoder_linears = torch.nn.ModuleList(
+            [
+                torch.nn.Linear(self.decoder_width, self.decoder_width)
+                for _ in range(self.decoder_depth)
+            ]
+        )
+
+        self.fc_x_recon = torch.nn.Linear(self.decoder_width, self.data_dim)
+
+    def encode(self, x):
+        h = f.softplus(self.encoder_fc(x), beta=self.sftbeta)
+
+        for layer in self.encoder_linears:
+            h = f.softplus(layer(h), beta=self.sftbeta)
+
+        mu = self.fc_mu(h)
+        sigma = self.fc_sigma(h)
+
+        return mu, sigma
+
+    @staticmethod
+    def reparameterize(posterior_params):
+        mu, sigma = posterior_params
+        q_z = WrappedHyperNormal(mu, sigma, 1)
+        z_phi = q_z.rsample()
+        return z_phi
+
+    def decode(self, z):
+        h = f.softplus(self.decoder_fc(z), beta=self.sftbeta)
+
+        for layer in self.decoder_linears:
+            h = f.softplus(layer(h), beta=self.sftbeta)
+
+        return self.fc_x_recon(h)
+
+    def forward(self, x):
+        posterior_params = self.encode(x)
+
+        z = self.reparameterize(posterior_params)
+
+        x_recon = self.decode(z)
+
+        return z, x_recon, posterior_params

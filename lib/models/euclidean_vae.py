@@ -30,7 +30,7 @@ class EuclideanVAE(nn.Module):
         )
 
         self.fc_mu = nn.Linear(self.encoder_width, self.latent_dim)
-        self.fc_logvar = nn.Linear(self.encoder_width, self.latent_dim)
+        self.fc_logvar = nn.Linear(self.encoder_width, self.latent_dim)  # Diagonal covariance
 
         self.decoder_fc = torch.nn.Linear(self.latent_dim, self.decoder_width)
         self.decoder_linears = torch.nn.ModuleList(
@@ -71,4 +71,4 @@ class EuclideanVAE(nn.Module):
         mu, logvar = posterior_params
         z = self.reparameterize(mu, logvar)
         x_recon = self.decode(z)
-        return x_recon, posterior_params
+        return z, x_recon, posterior_params
