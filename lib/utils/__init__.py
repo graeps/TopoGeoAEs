@@ -1,1 +1,1 @@
-from .visualization import plot_losses, show_training_history
+from .visualization import plot_losses, show_training_history, plot_test_latents_on_torus

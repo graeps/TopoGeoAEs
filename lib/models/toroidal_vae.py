@@ -1,24 +1,11 @@
 import torch
-from torch.nn import functional as f
+from torch.nn import functional as F
 
 from .utils.valid_config import is_valid_model_config
 from ..distributions import VonMisesFisher
 
 
 class ToroidalVAE(torch.nn.Module):
-    """VAE with Linear (fully connected) layers, three-dimensional toroidal latent space, uniform prior distribution
-    and von Mises-Fisher likelihood.
-
-    Parameters
-    ----------
-    data_dim : int
-        Dimension of input data.
-        Example: 40 for neural recordings of 40 units/clusters.
-    latent_dim : int
-        Dimension of the latent space.
-        Example: 2.
-    """
-
     def __init__(
             self,
             config
@@ -42,13 +29,17 @@ class ToroidalVAE(torch.nn.Module):
             ]
         )
 
-        self.fc_z_theta_mu = torch.nn.Linear(self.encoder_width, self.latent_dim)
-        self.fc_z_theta_kappa = torch.nn.Linear(self.encoder_width, 1)
+        self.fc_z_mu = torch.nn.ModuleList([
+            torch.nn.Linear(self.encoder_width, 2)
+            for _ in range(self.latent_dim)
+        ])
 
-        self.fc_z_phi_mu = torch.nn.Linear(self.encoder_width, self.latent_dim)
-        self.fc_z_phi_kappa = torch.nn.Linear(self.encoder_width, 1)
+        self.fc_z_kappa = torch.nn.ModuleList([
+            torch.nn.Linear(self.encoder_width, 1)
+            for _ in range(self.latent_dim)
+        ])
 
-        self.decoder_fc = torch.nn.Linear(3, self.decoder_width)
+        self.decoder_fc = torch.nn.Linear(self.latent_dim * 2, self.decoder_width)
         self.decoder_linears = torch.nn.ModuleList(
             [
                 torch.nn.Linear(self.decoder_width, self.decoder_width)
@@ -59,38 +50,28 @@ class ToroidalVAE(torch.nn.Module):
         self.fc_x_recon = torch.nn.Linear(self.decoder_width, self.data_dim)
 
     def encode(self, x):
-        """Encode input into mean and log-variance.
-
-        The parameters mean (mu) and variance (computed
-        from logvar) defines a multivariate Gaussian
-        that represents the approximate posterior of the
-        latent variable z given the input x.
-
-        Parameters
-        ----------
-        x : array-like, shape=[batch_size, data_dim]
-            Input data.
-
-        Returns
-        -------
-        mu : array-like, shape=[batch_size, latent_dim]
-            Mean of multivariate Gaussian in latent space.
-        logvar : array-like, shape=[batch_size, latent_dim]
-            Vector representing the diagonal covariance of the
-            multivariate Gaussian in latent space.
-        """
-        h = f.softplus(self.encoder_fc(x), beta=self.sftbeta)
+        h = F.softplus(self.encoder_fc(x), beta=self.sftbeta)
 
         for layer in self.encoder_linears:
-            h = f.softplus(layer(h), beta=self.sftbeta)
+            h = F.softplus(layer(h), beta=self.sftbeta)
 
-        z_theta_mu = self.fc_z_theta_mu(h)
-        z_theta_kappa = f.softplus(self.fc_z_theta_kappa(h)) + 1
+        posterior_params_list = []
+        #print("HHHHHHHHHHHHH",h)
+        for mu_layer, kappa_layer in zip(self.fc_z_mu, self.fc_z_kappa):
+            #print("layer", mu_layer.weight, kappa_layer.weight)
+            mu = mu_layer(h)  # Shape: [batch_size, 2]
+            kappa = F.softplus(kappa_layer(h), beta=self.sftbeta) + 1  # Shape: [batch_size, 1]
 
-        z_phi_mu = self.fc_z_phi_mu(h)
-        z_phi_kappa = f.softplus(self.fc_z_phi_kappa(h)) + 1
+            one_dim_params = torch.cat((mu, kappa), dim=-1)  # Shape: [batch_size, 2, 2]
+            posterior_params_list.append(one_dim_params)
+            # print("1.", mu)
+            # print("2.", kappa)
+            # print("3.", one_dim_params)
 
-        return z_theta_mu, z_theta_kappa, z_phi_mu, z_phi_kappa
+        # Stack across latent dimensions
+        posterior_params = torch.stack(posterior_params_list, dim=1)  # Shape: [batch_size, latent_dim, 2]
+        # print("4.", posterior_params)
+        return posterior_params
 
     def _build_torus(self, z_theta, z_phi):
         # theta = torch.atan2(z_theta[:, 1] / z_theta[:, 0])
@@ -111,80 +92,34 @@ class ToroidalVAE(torch.nn.Module):
         return torch.stack([x, y, z], dim=-1)
 
     def reparameterize(self, posterior_params):
-        """
-        Apply reparameterization trick. We 'eternalize' the
-        randomness in z by re-parameterizing the variable as
-        a deterministic and differentiable function of x,
-        the encoder weights, and a new random variable eps.
+        z_samples = []  # Store samples for each latent dimension
 
-        Parameters
-        ----------
-        posterior_params : tuple
-            Distributional parameters of approximate posterior. ((e.g.), (z_mu,z_logvar) for Gaussian.
+        for i in range(self.latent_dim):
+            # print("posterior_params size", posterior_params.shape)
+            mu = posterior_params[:, i, :2]  # Shape: [batch_size, 2]
+            # print("mu in reparametrization", mu)
+            kappa = posterior_params[:, i, 2].unsqueeze(-1)  # Shape: [batch_size, 1]
+            # print("kappa in reparametrization", kappa)
+            q_z = VonMisesFisher(mu, kappa)  # Create vMF distribution
+            theta = q_z.sample()  # Shape: [batch_size, 2]
+            # print("sample in reparametrization", theta)
+            z_samples.append(theta)  # Append to list
 
-        Returns
-        -------
-
-        z: array-like, shape = [batch_size, latent_dim]
-            Re-parameterized latent variable.
-        """
-
-        z_theta_mu, z_theta_kappa, z_phi_mu, z_phi_kappa = posterior_params
-
-        q_z_theta = VonMisesFisher(z_theta_mu, z_theta_kappa)
-
-        q_z_phi = VonMisesFisher(z_phi_mu, z_phi_kappa)
-
-        z_theta = q_z_theta.rsample()
-
-        z_phi = q_z_phi.rsample()
-
-        return self._build_torus(z_theta, z_phi)
+        z = torch.cat(z_samples, dim=-1)  # Shape: [batch_size, latent_dim * 2]
+        #  print("z in reparametrization", z)
+        return z
 
     def decode(self, z):
-        """Decode latent variable z into data.
-
-        Parameters
-        ----------
-        z : array-like, shape=[batch_size, latent_dim]
-            Input to the decoder.
-
-        Returns
-        -------
-        _ : array-like, shape=[batch_size, data_dim]
-            Reconstructed data corresponding to z.
-        """
-
-        h = f.softplus(self.decoder_fc(z), beta=self.sftbeta)
+        h = F.softplus(self.decoder_fc(z), beta=self.sftbeta)
 
         for layer in self.decoder_linears:
-            h = f.softplus(layer(h), beta=self.sftbeta)
+            h = F.softplus(layer(h), beta=self.sftbeta)
 
         return self.fc_x_recon(h)
 
     def forward(self, x):
-        """Run VAE: Encode, sample and decode.
-
-        Parameters
-        ----------
-        x : array-like, shape=[batch_size, data_dim]
-            Input data.
-
-        Returns
-        -------
-        _ : array-like, shape=[batch_size, data_dim]
-            Reconstructed data corresponding to z.
-        mu : array-like, shape=[batch_size, latent_dim]
-            Mean of multivariate Gaussian in latent space.
-        logvar : array-like, shape=[batch_size, latent_dim]
-            Vector representing the diagonal covariance of the
-            multivariate Gaussian in latent space.
-        """
-
         posterior_params = self.encode(x)
-
         z = self.reparameterize(posterior_params)
-
         x_recon = self.decode(z)
 
         return z, x_recon, posterior_params

@@ -18,7 +18,7 @@ def elbo(posterior_type, x, x_recon, posterior_params, latent_dim, device):
         )
         kl_loss = torch.distributions.kl.kl_divergence(q_z, p_z).mean()
 
-    elif posterior_type == "toroidal":
+    elif posterior_type == "old_toroidal":
         z_theta_mu, z_theta_kappa, z_phi_mu, z_phi_kappa = posterior_params
         q_z_theta = VonMisesFisher(z_theta_mu, z_theta_kappa)
         q_z_phi = VonMisesFisher(z_phi_mu, z_phi_kappa)
@@ -28,6 +28,16 @@ def elbo(posterior_type, x, x_recon, posterior_params, latent_dim, device):
         kld_theta = torch.distributions.kl.kl_divergence(q_z_theta, p_z).mean()
         kld_phi = torch.distributions.kl.kl_divergence(q_z_phi, p_z).mean()
         kl_loss = kld_theta + kld_phi
+
+    elif posterior_type == "toroidal":
+        kl_loss = 0
+        p_z = HypersphericalUniform(latent_dim - 1, device=device)  # Prior distribution
+
+        for i in range(latent_dim):
+            mu = posterior_params[:, i, :2]  # Mean direction for the vMF distribution
+            kappa = posterior_params[:, i, 2].unsqueeze(-1)  # Concentration parameter for the vMF distribution
+            q_z = VonMisesFisher(mu, kappa)  # Posterior distribution
+            kl_loss += torch.distributions.kl.kl_divergence(q_z, p_z).mean()
 
     # TODO
     # elif posterior_type == "wrapped_normal":

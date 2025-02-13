@@ -30,9 +30,9 @@ class MVAETrainer:
             self.history['train_loss'].append(train_loss)
             self.history['train_recon_loss'].append(train_recon_loss)
             self.history['train_kl_loss'].append(train_kl_loss)
-            self.history['test_loss'].append(self.train_one_epoch(epoch))
-            self.history['test_recon_loss'].append(self.train_one_epoch(epoch))
-            self.history['test_kl_loss'].append(self.train_one_epoch(epoch))
+            self.history['test_loss'].append(test_loss)
+            self.history['test_recon_loss'].append(test_recon_loss)
+            self.history['test_kl_loss'].append(test_kl_loss)
 
             print(f"Epoch {epoch + 1}/{self.num_epochs}, Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}")
             print("-" * 50)
