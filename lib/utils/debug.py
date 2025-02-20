@@ -2,10 +2,10 @@ from ..utils.loss_functions import elbo
 
 
 def pass_single_batch(model, train_loader, device="cpu"):
-    model.train()
+    model.eval()
 
     batch = next(iter(train_loader))
-    x = batch[0].to(device) # Assuming train_loader yields (data, labels)
+    x = batch[0].to(device)  # Assuming train_loader yields (data, labels)
 
     # Forward pass
     z, x_recon, posterior_params = model(x)
@@ -31,6 +31,6 @@ def pass_single_batch(model, train_loader, device="cpu"):
         "gradients": gradient_stats,
     }
 
-    print("outputs")
+    print("outputs",outputs)
     for name, grad in outputs["gradients"].items():
         print(f"{name}: Gradient mean={grad.mean().item()}, std={grad.std().item()}")

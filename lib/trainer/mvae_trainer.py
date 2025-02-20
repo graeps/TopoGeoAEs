@@ -1,12 +1,15 @@
 import torch
 from ..utils.loss_functions import elbo
+from .utils.valid_config import is_valid_trainer_config
 
 
 class MVAETrainer:
     def __init__(self, model, data_loader, optimizer, config):
+        is_valid_trainer_config(config)
         self.num_epochs = config.get('num_epochs', 10)
         self.log_interval = config.get('log_interval', 100)
         self.device = config.get('device', torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+        self.recon_loss = config.get('recon_loss', "")
         self.train_loader, self.test_loader = data_loader
         self.model = model
         self.optimizer = optimizer
@@ -52,7 +55,7 @@ class MVAETrainer:
             self.optimizer.zero_grad()
             _, x_recon, posterior_params = self.model(x)
             loss, recon_loss, kl_loss = elbo(self.model.posterior_type, x, x_recon, posterior_params,
-                                             self.model.latent_dim,
+                                             self.model.latent_dim, self.recon_loss,
                                              self.device)
             loss.backward()
             self.optimizer.step()
@@ -86,8 +89,7 @@ class MVAETrainer:
                 x = x.to(self.device)
                 _, x_recon, posterior_params = self.model(x)
                 loss, recon_loss, kl_loss = elbo(self.model.posterior_type, x, x_recon, posterior_params,
-                                                 self.model.latent_dim,
-                                                 self.device)
+                                                 self.model.latent_dim, self.recon_loss, self.device)
                 test_loss += loss.item()
                 test_recon_loss += recon_loss.item()
                 test_kl_loss += kl_loss.item()

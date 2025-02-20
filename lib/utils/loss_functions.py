@@ -4,7 +4,7 @@ import torch.nn as nn
 from ..distributions import VonMisesFisher, HypersphericalUniform
 
 
-def elbo(posterior_type, x, x_recon, posterior_params, latent_dim, device):
+def elbo(posterior_type, x, x_recon, posterior_params, latent_dim, recon_loss, device="cpu"):
     if posterior_type == "gaussian":
         z_mu, z_logvar = posterior_params
         z_var = torch.exp(z_logvar)
@@ -46,11 +46,14 @@ def elbo(posterior_type, x, x_recon, posterior_params, latent_dim, device):
         print(posterior_type, posterior_params)
         raise NotImplementedError
 
-    mse_loss = nn.MSELoss()
-    recon_loss = mse_loss(x_recon, x)
+    if recon_loss == "BCE":
+        recon_loss = nn.functional.binary_cross_entropy(x_recon, x, reduction="sum")
+    else:
+        recon_loss = nn.functional.mse_loss(x_recon, x, reduction="sum")
+
 
     # TODO
-    # implement other reconstruction loss
+    # implement various reconstruction loss
 
     elbo_loss = (recon_loss + kl_loss)
     return elbo_loss, recon_loss, kl_loss

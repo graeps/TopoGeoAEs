@@ -18,11 +18,11 @@ def get_model(posterior_type):
     return model_map.get(posterior_type.lower(), None)  # None if model_type is not found
 
 
-def save_model(model, model_config, save_dir=path_to_pretrained):
+def save_model(model, model_config, name='', save_dir=path_to_pretrained):
     os.makedirs(save_dir, exist_ok=True)
     timestamp = str(int(time.time()))
 
-    model_name = model.posterior_type + "_" + f'{timestamp}.pth'
+    model_name = model.posterior_type + "_" + name + f'{timestamp}.pth'
     model_path = os.path.join(save_dir, model_name)
 
     # save model
@@ -30,7 +30,7 @@ def save_model(model, model_config, save_dir=path_to_pretrained):
     print(f"Model saved as {model_name}")
 
     # save config
-    config_name = model.posterior_type + "_" + f'{timestamp}.json'
+    config_name = model.posterior_type + "_" + name + f'{timestamp}.json'
     config_path = os.path.join(save_dir, config_name)
     with open(config_path, 'w') as file:
         json.dump(model_config, file)

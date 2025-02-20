@@ -51,8 +51,8 @@ class EuclideanVAE(nn.Module):
         h = self.encoder_flatten(x)
         h = self.activation(self.encoder_fc(h))
 
-        # for layer in self.encoder_linears:
-        #     h = self.activation(layer(h))
+        for layer in self.encoder_linears:
+            h = self.activation(layer(h))
 
         mu = self.fc_mu(h)
         logvar = self.fc_logvar(h)
@@ -67,10 +67,11 @@ class EuclideanVAE(nn.Module):
     def decode(self, z):
         h = self.activation(self.decoder_fc(z))
 
-        # for layer in self.decoder_linears:
-        #     h = self.activation(layer(h))
+        for layer in self.decoder_linears:
+            h = self.activation(layer(h))
 
-        return self.fc_x_recon(h).view(-1, 1, 28, 28)
+        h = nn.functional.sigmoid(self.fc_x_recon(h))
+        return h.view(-1, 1, 28, 28)
 
     def forward(self, x):
         posterior_params = self.encode(x)
