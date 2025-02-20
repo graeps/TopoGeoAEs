@@ -1,5 +1,6 @@
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
+import torch
 
 
 def load_fashion_mnist(batch_size=64, root="../datasets"):
@@ -15,7 +16,6 @@ def load_fashion_mnist(batch_size=64, root="../datasets"):
     """
     transform = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Lambda(lambda x: x.view(-1))  # Flatten the image to a 1D vector
     ])
 
     train_dataset = datasets.FashionMNIST(root=root, train=True, transform=transform, download=True)

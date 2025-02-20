@@ -21,6 +21,7 @@ class ToroidalVAE(torch.nn.Module):
         self.decoder_width = config["decoder_width"]
         self.decoder_depth = config["decoder_depth"]
 
+        self.encoder_flatten = torch.nn.Flatten()
         self.encoder_fc = torch.nn.Linear(self.data_dim, self.encoder_width)
         self.encoder_linears = torch.nn.ModuleList(
             [
@@ -50,7 +51,8 @@ class ToroidalVAE(torch.nn.Module):
         self.fc_x_recon = torch.nn.Linear(self.decoder_width, self.data_dim)
 
     def encode(self, x):
-        h = F.softplus(self.encoder_fc(x), beta=self.sftbeta)
+        h = self.encoder_flatten(x)
+        h = F.softplus(self.encoder_fc(h), beta=self.sftbeta)
 
         for layer in self.encoder_linears:
             h = F.softplus(layer(h), beta=self.sftbeta)
@@ -115,7 +117,7 @@ class ToroidalVAE(torch.nn.Module):
         for layer in self.decoder_linears:
             h = F.softplus(layer(h), beta=self.sftbeta)
 
-        return self.fc_x_recon(h)
+        return self.fc_x_recon(h).view(-1, 1, 28, 28)
 
     def forward(self, x):
         posterior_params = self.encode(x)
