@@ -21,6 +21,7 @@ class OldToroidalVAE(torch.nn.Module):
         self.decoder_width = config["decoder_width"]
         self.decoder_depth = config["decoder_depth"]
 
+        self.encoder_flatten = torch.nn.Flatten()
         self.encoder_fc = torch.nn.Linear(self.data_dim, self.encoder_width)
         self.encoder_linears = torch.nn.ModuleList(
             [
@@ -66,22 +67,18 @@ class OldToroidalVAE(torch.nn.Module):
             Vector representing the diagonal covariance of the
             multivariate Gaussian in latent space.
         """
-        h = f.softplus(self.encoder_fc(x), beta=self.sftbeta)
+        h = self.encoder_flatten(x)
+        h = f.softplus(self.encoder_fc(h), beta=self.sftbeta)
 
         for layer in self.encoder_linears:
             h = f.softplus(layer(h), beta=self.sftbeta)
 
-        #print("hHHHHHHH", h)
         z_theta_mu = self.fc_z_theta_mu(h)
         z_theta_kappa = f.softplus(self.fc_z_theta_kappa(h)) + 1
 
         z_phi_mu = self.fc_z_phi_mu(h)
         z_phi_kappa = f.softplus(self.fc_z_phi_kappa(h)) + 1
 
-        #print("layer theta mu", self.fc_z_theta_mu.weight)
-        #print("layer theta kappa", self.fc_z_theta_kappa.weight)
-        #print("layer phi mu", self.fc_z_phi_mu.weight)
-        #print("layer phi kappa", self.fc_z_phi_kappa.weight)
         return z_theta_mu, z_theta_kappa, z_phi_mu, z_phi_kappa
 
     def _build_torus(self, z_theta, z_phi):
@@ -122,12 +119,16 @@ class OldToroidalVAE(torch.nn.Module):
         """
 
         z_theta_mu, z_theta_kappa, z_phi_mu, z_phi_kappa = posterior_params
+        #print("z_theta_mu", z_theta_mu.shape, "z_theta_kappa", z_theta_kappa.shape, "z_phi_mu", z_phi_mu.shape, "z_phi_kappa", z_phi_kappa.shape)
 
         q_z_theta = VonMisesFisher(z_theta_mu, z_theta_kappa)
 
         q_z_phi = VonMisesFisher(z_phi_mu, z_phi_kappa)
 
         z_theta = q_z_theta.rsample()
+
+        #print("z_theta shape", z_theta.shape)
+        #print("z_theta", z_theta)
 
         z_phi = q_z_phi.rsample()
 
@@ -152,7 +153,7 @@ class OldToroidalVAE(torch.nn.Module):
         for layer in self.decoder_linears:
             h = f.softplus(layer(h), beta=self.sftbeta)
 
-        return self.fc_x_recon(h)
+        return self.fc_x_recon(h).view(-1, 1, 28, 28)
 
     def forward(self, x):
         """Run VAE: Encode, sample and decode.

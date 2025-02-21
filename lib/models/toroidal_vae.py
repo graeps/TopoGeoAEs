@@ -1,5 +1,6 @@
 import torch
 from torch.nn import functional as F
+import torch.nn as nn
 
 from .utils.valid_config import is_valid_model_config
 from ..distributions import VonMisesFisher
@@ -21,34 +22,27 @@ class ToroidalVAE(torch.nn.Module):
         self.decoder_width = config["decoder_width"]
         self.decoder_depth = config["decoder_depth"]
 
-        self.encoder_flatten = torch.nn.Flatten()
-        self.encoder_fc = torch.nn.Linear(self.data_dim, self.encoder_width)
-        self.encoder_linears = torch.nn.ModuleList(
+        self.encoder_flatten = nn.Flatten()
+        self.encoder_fc = nn.Linear(self.data_dim, self.encoder_width)
+        self.encoder_linears = nn.ModuleList(
             [
-                torch.nn.Linear(self.encoder_width, self.encoder_width)
+                nn.Linear(self.encoder_width, self.encoder_width)
                 for _ in range(self.encoder_depth)
             ]
         )
 
-        self.fc_z_mu = torch.nn.ModuleList([
-            torch.nn.Linear(self.encoder_width, 2)
-            for _ in range(self.latent_dim)
-        ])
+        self.fc_z_mu = nn.Linear(self.encoder_width, 2 * self.latent_dim)
+        self.fc_z_kappa = nn.Linear(self.encoder_width, self.latent_dim)
 
-        self.fc_z_kappa = torch.nn.ModuleList([
-            torch.nn.Linear(self.encoder_width, 1)
-            for _ in range(self.latent_dim)
-        ])
-
-        self.decoder_fc = torch.nn.Linear(self.latent_dim * 2, self.decoder_width)
-        self.decoder_linears = torch.nn.ModuleList(
+        self.decoder_fc = nn.Linear(self.latent_dim * 2, self.decoder_width)
+        self.decoder_linears = nn.ModuleList(
             [
-                torch.nn.Linear(self.decoder_width, self.decoder_width)
+                nn.Linear(self.decoder_width, self.decoder_width)
                 for _ in range(self.decoder_depth)
             ]
         )
 
-        self.fc_x_recon = torch.nn.Linear(self.decoder_width, self.data_dim)
+        self.fc_x_recon = nn.Linear(self.decoder_width, self.data_dim)
 
     def encode(self, x):
         h = self.encoder_flatten(x)
@@ -57,23 +51,34 @@ class ToroidalVAE(torch.nn.Module):
         for layer in self.encoder_linears:
             h = F.softplus(layer(h), beta=self.sftbeta)
 
-        posterior_params_list = []
-        #print("HHHHHHHHHHHHH",h)
-        for mu_layer, kappa_layer in zip(self.fc_z_mu, self.fc_z_kappa):
-            #print("layer", mu_layer.weight, kappa_layer.weight)
-            mu = mu_layer(h)  # Shape: [batch_size, 2]
-            kappa = F.softplus(kappa_layer(h), beta=self.sftbeta) + 1  # Shape: [batch_size, 1]
+        mu = self.fc_z_mu(h).view(-1, self.latent_dim, 2)  # [batch_size, latent_dim, 2]
+        kappa = F.softplus(self.fc_z_kappa(h), beta=self.sftbeta) + 1  # [batch_size, latent_dim]
 
-            one_dim_params = torch.cat((mu, kappa), dim=-1)  # Shape: [batch_size, 2, 2]
-            posterior_params_list.append(one_dim_params)
-            # print("1.", mu)
-            # print("2.", kappa)
-            # print("3.", one_dim_params)
-
-        # Stack across latent dimensions
-        posterior_params = torch.stack(posterior_params_list, dim=1)  # Shape: [batch_size, latent_dim, 2]
-        # print("4.", posterior_params)
+        posterior_params = torch.cat((mu, kappa.unsqueeze(-1)), dim=-1)  # [batch_size, latent_dim, 3]
         return posterior_params
+
+    def reparameterize(self, posterior_params):
+        mu, kappa = posterior_params[:, :, :2], posterior_params[:, :, 2:]  # Split into mu and kappa
+        q_z = VonMisesFisher(mu, kappa)  # 2D vMF distribution
+        z = q_z.sample().view(-1, self.latent_dim * 2)  # Flatten latent dimensions
+
+        return z
+
+    def decode(self, z):
+        h = F.softplus(self.decoder_fc(z), beta=self.sftbeta)
+
+        for layer in self.decoder_linears:
+            h = F.softplus(layer(h), beta=self.sftbeta)
+
+        x_recon = F.sigmoid(self.fc_x_recon(h))
+        return x_recon.view(-1, 1, 28, 28)
+
+    def forward(self, x):
+        posterior_params = self.encode(x)
+        z = self.reparameterize(posterior_params)
+        x_recon = self.decode(z)
+
+        return z, x_recon, posterior_params
 
     def _build_torus(self, z_theta, z_phi):
         # theta = torch.atan2(z_theta[:, 1] / z_theta[:, 0])
@@ -92,36 +97,3 @@ class ToroidalVAE(torch.nn.Module):
         z = minor_radius * sin_theta
 
         return torch.stack([x, y, z], dim=-1)
-
-    def reparameterize(self, posterior_params):
-        z_samples = []  # Store samples for each latent dimension
-
-        for i in range(self.latent_dim):
-            # print("posterior_params size", posterior_params.shape)
-            mu = posterior_params[:, i, :2]  # Shape: [batch_size, 2]
-            # print("mu in reparametrization", mu)
-            kappa = posterior_params[:, i, 2].unsqueeze(-1)  # Shape: [batch_size, 1]
-            # print("kappa in reparametrization", kappa)
-            q_z = VonMisesFisher(mu, kappa)  # Create vMF distribution
-            theta = q_z.sample()  # Shape: [batch_size, 2]
-            # print("sample in reparametrization", theta)
-            z_samples.append(theta)  # Append to list
-
-        z = torch.cat(z_samples, dim=-1)  # Shape: [batch_size, latent_dim * 2]
-        #  print("z in reparametrization", z)
-        return z
-
-    def decode(self, z):
-        h = F.softplus(self.decoder_fc(z), beta=self.sftbeta)
-
-        for layer in self.decoder_linears:
-            h = F.softplus(layer(h), beta=self.sftbeta)
-
-        return self.fc_x_recon(h).view(-1, 1, 28, 28)
-
-    def forward(self, x):
-        posterior_params = self.encode(x)
-        z = self.reparameterize(posterior_params)
-        x_recon = self.decode(z)
-
-        return z, x_recon, posterior_params

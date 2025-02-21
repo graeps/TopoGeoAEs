@@ -30,16 +30,18 @@ def elbo(posterior_type, x, x_recon, posterior_params, latent_dim, recon_loss, d
         kl_loss = kld_theta + kld_phi
 
     elif posterior_type == "toroidal":
-        kl_loss = 0
-        p_z = HypersphericalUniform(latent_dim - 1, device=device)  # Prior distribution
+        p_z = HypersphericalUniform(1, device=device)  # Prior over S^1 (circle)
+        mu = posterior_params[:, :, :2]  # Shape: [batch_size, latent_dim, 2]
+        kappa = posterior_params[:, :, 2:]  # Shape: [batch_size, latent_dim, 1]
+        #print("shape kappa, shape mu", kappa.shape, mu.shape)
+        #print("\nkappa, mu : ", kappa, mu)
+        q_z = VonMisesFisher(mu, kappa)  # Posterior distribution
+        #print("q_z", q_z)
+        kl_loss = torch.distributions.kl.kl_divergence(q_z, p_z).sum().mean()
+        #print("\nkl loss: ", kl_loss)
+        #print("\nshape kl losse: ", kl_loss.shape)
 
-        for i in range(latent_dim):
-            mu = posterior_params[:, i, :2]  # Mean direction for the vMF distribution
-            kappa = posterior_params[:, i, 2].unsqueeze(-1)  # Concentration parameter for the vMF distribution
-            q_z = VonMisesFisher(mu, kappa)  # Posterior distribution
-            kl_loss += torch.distributions.kl.kl_divergence(q_z, p_z).mean()
-
-    # TODO
+# TODO
     # elif posterior_type == "wrapped_normal":
 
     else:
@@ -51,9 +53,5 @@ def elbo(posterior_type, x, x_recon, posterior_params, latent_dim, recon_loss, d
     else:
         recon_loss = nn.functional.mse_loss(x_recon, x, reduction="sum")
 
-
-    # TODO
-    # implement various reconstruction loss
-
-    elbo_loss = (recon_loss + kl_loss)
+    elbo_loss = (recon_loss + 0.1*kl_loss)
     return elbo_loss, recon_loss, kl_loss
