@@ -44,8 +44,10 @@ class MGVonMises(torch.distributions.Distribution):
             u_sample = uniform_distr.sample(shape)
             log_prob = self._log_unnormalized_prob(proposal_sample)
             accept = torch.log(u_sample) <= log_prob - log_scale
+
             output[accept & ~done] = proposal_sample[accept & ~done]
             done |= accept
+            print(done)
         return output
 
     def rsample(self, shape=None):
