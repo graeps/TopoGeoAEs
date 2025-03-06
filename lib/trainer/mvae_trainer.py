@@ -58,6 +58,13 @@ class MVAETrainer:
                                              self.model.latent_dim, self.recon_loss,
                                              self.device)
             loss.backward()
+
+            # for name, param in self.model.named_parameters():
+            #     if param.grad is not None:
+            #         print(f"Layer: {name}, Gradient: {param.grad}")
+            #     else:
+            #         print(f"Layer: {name}, Gradient: None")
+
             self.optimizer.step()
             train_loss += loss.item()
             train_recon_loss += recon_loss.item()

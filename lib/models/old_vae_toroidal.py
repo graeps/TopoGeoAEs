@@ -69,15 +69,19 @@ class OldToroidalVAE(torch.nn.Module):
         """
         h = self.encoder_flatten(x)
         h = f.softplus(self.encoder_fc(h), beta=self.sftbeta)
+        print("after 1. layer", h[0] - h[1])
 
         for layer in self.encoder_linears:
             h = f.softplus(layer(h), beta=self.sftbeta)
+            print("after layer", layer, h[0] - h[1])
 
         z_theta_mu = self.fc_z_theta_mu(h)
         z_theta_kappa = f.softplus(self.fc_z_theta_kappa(h)) + 1
 
         z_phi_mu = self.fc_z_phi_mu(h)
         z_phi_kappa = f.softplus(self.fc_z_phi_kappa(h)) + 1
+
+        print("z_theta_kappa, z_phi_kappa", z_theta_kappa, z_phi_kappa)
 
         return z_theta_mu, z_theta_kappa, z_phi_mu, z_phi_kappa
 
@@ -120,6 +124,8 @@ class OldToroidalVAE(torch.nn.Module):
 
         z_theta_mu, z_theta_kappa, z_phi_mu, z_phi_kappa = posterior_params
         #print("z_theta_mu", z_theta_mu.shape, "z_theta_kappa", z_theta_kappa.shape, "z_phi_mu", z_phi_mu.shape, "z_phi_kappa", z_phi_kappa.shape)
+        #print("z_theta_kappa , shape", z_theta_kappa, z_theta_kappa.shape)
+        #print("z_phi_kappa, shape", z_phi_kappa, z_phi_kappa.shape)
 
         q_z_theta = VonMisesFisher(z_theta_mu, z_theta_kappa)
 
