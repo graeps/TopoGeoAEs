@@ -60,7 +60,7 @@ class ToroidalVAE(torch.nn.Module):
     def reparameterize(self, posterior_params):
         mu, kappa = posterior_params[:, :, :2], posterior_params[:, :, 2:]  # Split into mu and kappa
         q_z = VonMisesFisher(mu, kappa)  # 2D vMF distribution
-        z = q_z.sample().view(-1, self.latent_dim * 2)  # Flatten latent dimensions
+        z = q_z.rsample().view(-1, self.latent_dim * 2)  # Flatten latent dimensions
 
         return z
 
