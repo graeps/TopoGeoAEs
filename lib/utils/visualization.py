@@ -197,3 +197,4 @@ def show_recon_mnist(model, loader, device="cpu"):
     axes[0, 0].set_title("Original Images")
     axes[1, 0].set_title("Reconstructed Images")
     plt.show()
+

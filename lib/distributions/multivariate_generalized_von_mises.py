@@ -8,6 +8,7 @@ class MGVonMises(torch.distributions.Distribution):
         self.scale = scale
         self.precision = precision
         self.device = loc.device
+        self.d = loc.shape[-1]  # Sample dimension
 
         super().__init__(self.loc.size(), validate_args=validate_args)
 
@@ -26,6 +27,7 @@ class MGVonMises(torch.distributions.Distribution):
     def _log_unnormalized_prob(self, phi):
         phi = phi.unsqueeze(0) if phi.dim() == 1 else phi
         w = self.precision.unsqueeze(0) if self.precision.dim() == 2 else self.precision
+        w = w.expand(phi.shape[0], -1, -1)
         v = torch.cat((torch.cos(phi), torch.sin(phi)), dim=-1)
         v_transp = v.unsqueeze(1)  # [batch, 1, 2d]
         vw = torch.bmm(v_transp, w)  # precision shape: [batch, 2d, 2d]
@@ -47,9 +49,28 @@ class MGVonMises(torch.distributions.Distribution):
 
             output[accept & ~done] = proposal_sample[accept & ~done]
             done |= accept
-            print(done)
         return output
 
+    def _rejection_sample2(self, shape):
+        done = torch.zeros(shape, dtype=torch.bool, device=self.device)
+        output = torch.zeros(shape, device=self.device)
+        proposal_distr = torch.distributions.VonMises(self.loc, self.scale)
+        uniform_distr = torch.distributions.Uniform(0.0, 1.0)
+        l_min = torch.min(torch.linalg.eigvals(self.precision).real, dim=1).values.unsqueeze(1)
+        log_scale = - l_min * self.d / 2
+
+        while not done.all():
+            proposal_sample = proposal_distr.sample(torch.Size([1])).squeeze(0)
+            u_sample = uniform_distr.sample(shape)
+            log_prob = self._log_unnormalized_prob(proposal_sample)
+            accept = torch.log(u_sample) <= log_prob - log_scale
+
+            output[accept & ~done] = proposal_sample[accept & ~done]
+            done |= accept
+        return output % (2 * torch.pi)
+
     def rsample(self, shape=None):
-        shape = shape if isinstance(shape, torch.Size) else torch.Size([shape])
-        return self._rejection_sample(shape)
+        shape = torch.Size(shape) if shape is not None else torch.Size()
+        return self._rejection_sample2(shape)
+
+
