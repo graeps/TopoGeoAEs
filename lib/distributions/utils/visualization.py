@@ -45,11 +45,11 @@ def plot_mgvm_distr_2d(loc, scale, precision, num_samples=20000):
     fig, ax = plt.subplots(figsize=(6, 5))
 
     # Plot density function
-    contour = ax.contour(phi1_np, phi2_np, density_np, levels=20, cmap="viridis", alpha=0.75, norm="linear")
+    contour = ax.contour(phi1_np, phi2_np, density_np, levels=15, cmap="Dark2", alpha=0.8, norm="linear")
     plt.colorbar(contour, label="Density")
 
     # Overlay 2D histogram
-    ax.hist2d(samples_x, samples_y, range=np.array([[0, 2 * np.pi], [0, 2 * np.pi]]), bins=(100, 100), cmap=plt.cm.jet)
+    ax.hist2d(samples_x, samples_y, range=np.array([[0, 2 * np.pi], [0, 2 * np.pi]]), bins=(200, 200), cmap=plt.cm.jet)
 
     # Labels
     ax.set_xlabel(r"$\phi_1$")
