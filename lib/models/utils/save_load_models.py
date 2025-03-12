@@ -3,8 +3,8 @@ import os
 import time
 import torch
 
-from .. import EuclideanVAE
-from .. import ToroidalVAE
+from .. import EuclideanVAE, VMFToroidalVAE, VMToroidalVAE, MGVMToroidalVAE
+
 from .valid_config import is_valid_model_config
 
 path_to_pretrained = "./pretrained_models/"
@@ -13,7 +13,9 @@ path_to_pretrained = "./pretrained_models/"
 def get_model(posterior_type):
     model_map = {
         "gaussian": EuclideanVAE,
-        "toroidal": ToroidalVAE,
+        "vm_toroidal": VMToroidalVAE,
+        "vmf_toroidal": VMFToroidalVAE,
+        "mgvm_toroidal": MGVMToroidalVAE,
     }
     return model_map.get(posterior_type.lower(), None)  # None if model_type is not found
 

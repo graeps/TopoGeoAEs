@@ -62,7 +62,6 @@ class MGVonMises(torch.distributions.Distribution):
 
         self.__sample = output
         return self.__sample
-        return output
 
     def _rejection_sample2(self, shape):
         done = torch.zeros(shape, dtype=torch.bool, device=self.device)
@@ -116,8 +115,10 @@ class MGVonMises(torch.distributions.Distribution):
         sample = self._rejection_sample(shape)
         return sample - self.scale
 
-    def entropy(self) -> torch.Tensor:
-        
+    # TODO
+    def entropy(self):
+        return
+
 
 @register_kl(MGVonMises, CubeUniform)
 def _kl_vmf_uniform(mgvm, cu):
