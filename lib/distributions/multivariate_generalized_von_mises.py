@@ -1,5 +1,6 @@
 import torch
-from torch.distributions import constraints
+from torch.distributions import constraints, register_kl
+from .parallelogram_uniform import CubeUniform
 from . import VonMisesFisher
 
 
@@ -22,7 +23,12 @@ class MGVonMises(torch.distributions.Distribution):
     support = constraints.real
     has_rsample = True
 
+    # TODO
     def log_prob(self, phi):
+        return
+
+    # TODO
+    def log_normalizer(self, phi):
         return
 
     def _log_unnormalized_prob(self, phi):
@@ -43,7 +49,7 @@ class MGVonMises(torch.distributions.Distribution):
         # Compute a better factor (upper bound)
         max_log_prob = self._log_unnormalized_prob(self.loc)  # Peak probability at mode
         factor = torch.exp(max_log_prob).max()
-        #factor = torch.exp(self.scale.sum(-1, keepdim=True))
+        # factor = torch.exp(self.scale.sum(-1, keepdim=True))
         while not done.all():
             proposal_sample = proposal_distr.sample(shape)
             u_sample = uniform_distr.sample(shape)
@@ -77,7 +83,6 @@ class MGVonMises(torch.distributions.Distribution):
             output[accept & ~done] = proposal_sample[accept & ~done]
             done |= accept
 
-
     def _rejection_sample3(self, shape):
         done = torch.zeros(shape, dtype=torch.bool, device=self.device)
         output = torch.zeros(shape, device=self.device)
@@ -110,3 +115,10 @@ class MGVonMises(torch.distributions.Distribution):
         shape = torch.Size(shape) if shape is not None else torch.Size()
         sample = self._rejection_sample(shape)
         return sample - self.scale
+
+    def entropy(self) -> torch.Tensor:
+        
+
+@register_kl(MGVonMises, CubeUniform)
+def _kl_vmf_uniform(mgvm, cu):
+    return -mgvm.entropy() + cu.entropy()

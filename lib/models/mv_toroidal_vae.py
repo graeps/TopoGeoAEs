@@ -6,17 +6,17 @@ from .utils.valid_config import is_valid_model_config
 from ..distributions import VonMisesFisher
 
 
-class ToroidalVAE(torch.nn.Module):
+class VMToroidalVAE(torch.nn.Module):
     def __init__(
             self,
             config
     ):
         is_valid_model_config(config)
         super().__init__()
-        self.posterior_type = "toroidal"
+        self.posterior_type = "vm_toroidal"
         self.data_dim = config["data_dim"]
         self.sftbeta = config["sftbeta"]
-        self.latent_dim = config["latent_dim"]
+        self.latent_dim = config["latent_dim"]  # Here latent_dim = d for T^d latent space (manifold dim)
         self.encoder_width = config["encoder_width"]
         self.encoder_depth = config["encoder_depth"]
         self.decoder_width = config["decoder_width"]

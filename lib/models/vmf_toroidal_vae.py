@@ -5,14 +5,14 @@ from .utils.valid_config import is_valid_model_config
 from ..distributions import VonMisesFisher
 
 
-class OldToroidalVAE(torch.nn.Module):
+class VMFToroidalVAE(torch.nn.Module):
     def __init__(
             self,
             config
     ):
         is_valid_model_config(config)
         super().__init__()
-        self.posterior_type = "old_toroidal"
+        self.posterior_type = "vmf_toroidal"
         self.data_dim = config["data_dim"]
         self.sftbeta = config["sftbeta"]
         self.latent_dim = config["latent_dim"]
