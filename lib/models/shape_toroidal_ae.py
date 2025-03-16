@@ -15,7 +15,6 @@ class ShapeMatrix(nn.Module):
 
         self.mask_triu = torch.triu(torch.ones(latent_dim, latent_dim)).bool()
         self.mask_tril = torch.tril(torch.ones(latent_dim, latent_dim)).bool().fill_diagonal_(False)
-        self.nonlinearity = nn.ReLU()
         self.layer_size = latent_dim
 
         self.upper = nn.Linear(latent_dim, latent_dim, bias=False)
@@ -66,4 +65,4 @@ class ShapeToroidalAE(nn.Module):
         x = self.encoder(x)
         z = self.lu_transform(x)  # Apply LU transformation
         x_recon = self.decoder(z)
-        return z, x_recon  # Decode back
+        return z, x_recon
