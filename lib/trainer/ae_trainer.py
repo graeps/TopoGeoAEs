@@ -16,9 +16,9 @@ class AETrainer:
     def train_epoch(self):
         self.model.train()
         total_loss = 0
-        for batch_idx, (x, _) in enumerate(self.train_loader):
-            x = x.to(self.device)
-            _, x_recon = self.model(x)
+        for batch_idx, x in enumerate(self.train_loader):
+            x = x[0].to(self.device)
+            theta, x_recon, A, A_inv_T = self.model(x)
             loss = self.recon_loss(x_recon, x)
 
             self.optimizer.zero_grad()
@@ -29,7 +29,7 @@ class AETrainer:
 
             if (batch_idx + 1) % self.log_interval == 0:
                 print(
-                    f"Step [{batch_idx + 1}/{len(self.train_loader)}], Loss: {loss.item():.4f}"
+                    f"Step [{batch_idx + 1}/{len(self.train_loader)}], Loss: {loss.item():.4f}, Shape matrix A:{A}, A_inv_T:{A_inv_T}"
                 )
         return total_loss / len(self.train_loader)
 
@@ -37,9 +37,9 @@ class AETrainer:
         self.model.eval()
         total_loss = 0
         with torch.no_grad():
-            for x, _ in self.test_loader:
-                x = x.to(self.device)
-                _, x_recon = self.model(x)
+            for x in self.test_loader:
+                x = x[0].to(self.device)
+                _, x_recon, _, _= self.model(x)
                 loss = self.recon_loss(x_recon, x)
                 total_loss += loss.item()
         return total_loss / len(self.test_loader)
