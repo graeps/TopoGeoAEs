@@ -2,8 +2,8 @@ import torch
 from torch.nn import functional as F
 import torch.nn as nn
 
-from .utils.valid_config import is_valid_model_config
-from ..distributions import VonMisesFisher
+from code.mvae.lib.models.utils.valid_config import is_valid_model_config
+from code.mvae.lib.distributions import VonMisesFisher
 
 
 class VMToroidalVAE(torch.nn.Module):
