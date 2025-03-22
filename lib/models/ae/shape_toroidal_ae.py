@@ -42,57 +42,53 @@ class ShapeMatrix(nn.Module):
 
 
 class ShapeToroidalAE(nn.Module):
-    def __init__(self, data_dim=2, latent_dim=2):
+    def __init__(self, data_dim, hidden_dim1, hidden_dim2, latent_dim=2):
         super().__init__()
+        self.type = "shape_toroidal_ae"
         self.latent_dim = latent_dim
 
         # Encoder with LU transformation
         self.encoder = nn.Sequential(
-            # nn.Flatten(start_dim=1),
-            nn.Linear(data_dim, 5),
+            nn.Linear(data_dim, hidden_dim1),
             nn.ReLU(),
-            nn.Linear(5, 4),
+            nn.Linear(hidden_dim1, hidden_dim2),
             nn.ReLU(),
-            nn.Linear(4, latent_dim),
-            nn.Sigmoid(),
+            nn.Linear(hidden_dim2, latent_dim),
         )
         self.shape_matrix = ShapeMatrix(latent_dim)  # LU decomposition layer
 
         # Decoder
         self.decoder = nn.Sequential(
-            nn.Linear(2 * latent_dim, 5),
+            nn.Linear(2*latent_dim, hidden_dim2),
             nn.ReLU(),
-            nn.Linear(5, 5),
+            nn.Linear(hidden_dim2, hidden_dim1),
             nn.ReLU(),
-            nn.Linear(5, data_dim),
-            # nn.Unflatten(-1, (1, 28, 28))
+            nn.Linear(hidden_dim1, data_dim),
         )
 
     def forward(self, x):
         theta = self.encoder(x)  # theta ∈ [0,1]^d
-        z = project_to_torus(theta)
-        x_recon = self.decoder(z)
-        dummy = 1
 
-        """
-        A_inv_T_theta = self.shape_matrix(theta)  # Apply A = LU
-        z = project_to_torus(A_inv_T_theta)
+        # A_inv_T_theta = self.shape_matrix(theta)  # Apply A = LU
+        # z = project_to_torus(A_inv_T_theta)
+        #
+        # # Compute (1/2π)(A^{-1})^T torus_coords
+        # # Get A matrix
+        # L = torch.tril(self.shape_matrix.lower.weight, diagonal=-1) + torch.eye(self.latent_dim, device=x.device)
+        # U = torch.triu(self.shape_matrix.upper.weight)
+        # A_inv_T_theta = L @ U
+        #
+        # A = torch.inverse(A_inv_T_theta).T  # (A^{-1})^T
+        # z = z.view(-1, 2, self.latent_dim)  # shape [batch, 2, d]
+        #
+        # # Apply (1/2π)(A^{-1})^T to each sin/cos separately and then flatten
+        # scaled_coords = (1 / (2 * torch.pi)) * torch.einsum('bij,jk->bik', z, A)
+        # scaled_coords = scaled_coords.flatten(start_dim=1)  # shape [batch, 2d]
 
-        # Compute (1/2π)(A^{-1})^T torus_coords
-        # Get A matrix
-        L = torch.tril(self.shape_matrix.lower.weight, diagonal=-1) + torch.eye(self.latent_dim, device=x.device)
-        U = torch.triu(self.shape_matrix.upper.weight)
-        A_inv_T_theta = L @ U
-
-        A = torch.inverse(A_inv_T_theta).T  # (A^{-1})^T
-        z = z.view(-1, 2, self.latent_dim)  # shape [batch, 2, d]
-
-        # Apply (1/2π)(A^{-1})^T to each sin/cos separately and then flatten
-        scaled_coords = (1 / (2 * torch.pi)) * torch.einsum('bij,jk->bik', z, A)
-        scaled_coords = scaled_coords.flatten(start_dim=1)  # shape [batch, 2d]
+        A = "1"
+        A_inv_T_theta = "1"
+        scaled_coords = project_to_torus(theta)
 
         x_recon = self.decoder(scaled_coords)
-        
-        return theta, x_recon, A, A_inv_T_theta        
-        """
-        return theta, x_recon, dummy, dummy
+
+        return scaled_coords, x_recon, A, A_inv_T_theta

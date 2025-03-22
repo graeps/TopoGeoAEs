@@ -99,7 +99,7 @@ def plot_on_torus(latent_vars):
     plt.show()
 
 
-def plot_test_latents_on_torus(model, test_loader, device):
+def plot_test_latents_on_torus(model, test_loader, device="cpu"):
     """
     Encodes test dataset samples into the toroidal latent space and plots them.
 
@@ -121,6 +121,73 @@ def plot_test_latents_on_torus(model, test_loader, device):
     latent_vars = torch.cat(latent_vars, dim=0)
     plot_on_torus(latent_vars)
 
+
+def plot_latents_ae_3d(model, test_loader, device="cpu"):
+    model.eval()
+    latent_vars = []
+
+    with torch.no_grad():
+        for x in test_loader:
+            x = x[0].to(device)
+            z, _, _, _ = model(x)
+            if z.shape[1] != 4:
+                raise ValueError("plotting in 3d only for latent space S^1xS^1")
+            latent_vars.append(z)
+
+    latent_vars = torch.cat(latent_vars, dim=0)
+    plot_on_torus(latent_vars)
+
+
+def plot_latent_projections(model, pointcloud, test_loader, device="cpu"):
+    model.eval()
+    latent_vars = []
+
+    with torch.no_grad():
+        for x in test_loader:
+            x = x[0].to(device)
+            if model.type == "euclidean_ae":
+                z, _ = model(x)
+            elif model.type == "shape_toroidal_ae":
+                z, _, _, _ = model(x)
+            else:
+                raise ValueError(f"Unknown model type: {model.type}")
+            latent_vars.append(z)
+
+    d = model.latent_dim
+    d = d//2 if model.type == "euclidean_ae" else d
+
+    latent_vars = torch.cat(latent_vars, dim=0)
+    print("latent_vars", latent_vars, latent_vars.shape)
+
+    latent_x = latent_vars[:, :d]  # First d columns (cos components)
+    latent_y = latent_vars[:, d:]  # Last d columns (sin components)
+
+    pointcloud_x = pointcloud[:, :d]
+    pointcloud_y = pointcloud[:, d:]
+
+    for i in range(d):
+        fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+
+        # Latent projection
+        axes[0].scatter(latent_x[:, i], latent_y[:, i], s=2)
+        axes[0].set_title(f'Latent Projection {i + 1}')
+        axes[0].set_xlabel("cos(θ)")
+        axes[0].set_ylabel("sin(θ)")
+        axes[0].set_aspect('equal', adjustable='datalim')
+        axes[0].autoscale()
+        axes[0].grid(True, linestyle='--', alpha=0.5)
+
+        # Pointcloud projection
+        axes[1].scatter(pointcloud_x[:, i], pointcloud_y[:, i], s=2, color='orange')
+        axes[1].set_title(f'Pointcloud Projection {i + 1}')
+        axes[1].set_xlabel("x")
+        axes[1].set_ylabel("y")
+        axes[1].set_aspect('equal', adjustable='datalim')
+        axes[1].autoscale()
+        axes[1].grid(True, linestyle='--', alpha=0.5)
+
+        plt.tight_layout()
+        plt.show()
 
 def plot_euclidean_latent_space(model, test_loader, device='cpu', n_samples=200):
     """
@@ -198,3 +265,28 @@ def show_recon_mnist(model, loader, device="cpu"):
     axes[1, 0].set_title("Reconstructed Images")
     plt.show()
 
+
+def show_recon_mnist_ae(model, loader, device="cpu"):
+    model.eval()
+    with torch.no_grad():
+        x, _ = next(iter(loader))  # Get a batch of images
+        x = x.to(device)  # Original inputs (flattened 784)
+
+        # Forward pass through the model
+        _, x_recon, _, _ = model(x)  # Extract only the reconstructed images
+
+    # Randomly select 10 indices
+    indices = sample(range(x.size(0)), 10)
+
+    fig, axes = plt.subplots(2, 10, figsize=(15, 4))
+    for i, idx in enumerate(indices):
+        # Reshape and plot the original input images
+        axes[0, i].imshow(x[idx].view(28, 28).cpu().numpy(), cmap="gray")
+        axes[0, i].axis("off")
+        # Reshape and plot the reconstructed images
+        axes[1, i].imshow(x_recon[idx].view(28, 28).cpu().numpy(), cmap="gray")
+        axes[1, i].axis("off")
+
+    axes[0, 0].set_title("Original Images")
+    axes[1, 0].set_title("Reconstructed Images")
+    plt.show()

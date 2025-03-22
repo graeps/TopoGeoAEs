@@ -6,6 +6,7 @@ class AETrainer:
         self.num_epochs = config.get('num_epochs', 10)
         self.log_interval = config.get('log_interval', 100)
         self.device = config.get('device', torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+        self.dataset = config.get("dataset", "MNIST")
         self.train_loader, self.test_loader = data_loader
         self.model = model
         self.optimizer = optimizer
@@ -16,30 +17,73 @@ class AETrainer:
     def train_epoch(self):
         self.model.train()
         total_loss = 0
-        for batch_idx, x in enumerate(self.train_loader):
-            x = x[0].to(self.device)
-            theta, x_recon, A, A_inv_T = self.model(x)
-            loss = self.recon_loss(x_recon, x)
 
-            self.optimizer.zero_grad()
-            loss.backward()
-            self.optimizer.step()
+        if self.dataset == "synthetic":
+            for batch_idx, x in enumerate(self.train_loader):
+                x = x[0].to(self.device)
+                if self.model.type == "euclidean_ae":
+                    z, x_recon = self.model(x)
+                    A = "not defined"
+                    A_inv_T = "not defined"
+                elif self.model.type == "shape_toroidal_ae":
+                    theta, x_recon, A, A_inv_T = self.model(x)
+                else:
+                    raise ValueError(f"Unknown model type: {self.model.type}")
 
-            total_loss += loss.item()
+                loss = self.recon_loss(x_recon, x)
 
-            if (batch_idx + 1) % self.log_interval == 0:
-                print(
-                    f"Step [{batch_idx + 1}/{len(self.train_loader)}], Loss: {loss.item():.4f}, Shape matrix A:{A}, A_inv_T:{A_inv_T}"
-                )
-        return total_loss / len(self.train_loader)
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
+
+                total_loss += loss.item()
+
+                if (batch_idx + 1) % self.log_interval == 0:
+                    print(
+                        f"Step [{batch_idx + 1}/{len(self.train_loader)}], Loss: {loss.item():.4f}, Shape matrix A:{A}, A_inv_T:{A_inv_T}"
+                    )
+            return total_loss / len(self.train_loader)
+
+        else:
+            for batch_idx, (x, _) in enumerate(self.train_loader):
+                x = x.to(self.device)
+                if self.model.type == "euclidean_ae":
+                    z, x_recon = self.model(x)
+                    A = "not defined"
+                    A_inv_T = "not defined"
+                elif self.model.type == "shape_toroidal_ae":
+                    theta, x_recon, A, A_inv_T = self.model(x)
+                else:
+                    raise ValueError(f"Unknown model type: {self.model.type}")
+                loss = self.recon_loss(x_recon, x)
+
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
+
+                total_loss += loss.item()
+
+                if (batch_idx + 1) % self.log_interval == 0:
+                    print(
+                        f"Step [{batch_idx + 1}/{len(self.train_loader)}], Loss: {loss.item():.4f}, Shape matrix A:{A}, A_inv_T:{A_inv_T}"
+                    )
+            return total_loss / len(self.train_loader)
 
     def evaluate(self):
         self.model.eval()
         total_loss = 0
         with torch.no_grad():
             for x in self.test_loader:
-                x = x[0].to(self.device)
-                _, x_recon, _, _= self.model(x)
+                if self.dataset == "synthetic":
+                    x = x[0].to(self.device)
+                else:
+                    x = x.to(self.device)
+                if self.model.type == "euclidean_ae":
+                    z, x_recon = self.model(x)
+                    A = "not defined"
+                    A_inv_T = "not defined"
+                elif self.model.type == "shape_toroidal_ae":
+                    theta, x_recon, A, A_inv_T = self.model(x)
                 loss = self.recon_loss(x_recon, x)
                 total_loss += loss.item()
         return total_loss / len(self.test_loader)
@@ -50,4 +94,4 @@ class AETrainer:
             print(f"Epoch {epoch}")
             train_loss = self.train_epoch()
             test_loss = self.evaluate()
-            print(f"Epoch {epoch+1}/{self.num_epochs}, Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}")
+            print(f"Epoch {epoch + 1}/{self.num_epochs}, Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}")
