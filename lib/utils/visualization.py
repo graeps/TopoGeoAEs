@@ -141,53 +141,131 @@ def plot_latents_ae_3d(model, test_loader, device="cpu"):
 def plot_latent_projections(model, pointcloud, test_loader, device="cpu"):
     model.eval()
     latent_vars = []
+    latent_angles = []
+    x_reconstructions = []
+
+    d = model.latent_dim
+    d = d // 2 if model.type == "euclidean_ae" else d
 
     with torch.no_grad():
         for x in test_loader:
             x = x[0].to(device)
             if model.type == "euclidean_ae":
-                z, _ = model(x)
+                z, x_recon = model(x)
             elif model.type == "shape_toroidal_ae":
-                z, _, _, _ = model(x)
+                z, x_recon, _, theta = model(x)
+                latent_angles.append(theta)
             else:
                 raise ValueError(f"Unknown model type: {model.type}")
+            x_recon = torch.where(x_recon.abs() < 1e-10, torch.zeros_like(x_recon), x_recon)
+            x_reconstructions.append(x_recon[:, :2 * d])
             latent_vars.append(z)
 
-    d = model.latent_dim
-    d = d//2 if model.type == "euclidean_ae" else d
-
     latent_vars = torch.cat(latent_vars, dim=0)
-    print("latent_vars", latent_vars, latent_vars.shape)
+    latent_angles = torch.cat(latent_angles, dim=0) if latent_angles else None
+    x_reconstructions = torch.cat(x_reconstructions, dim=0) if x_reconstructions else None
 
     latent_x = latent_vars[:, :d]  # First d columns (cos components)
     latent_y = latent_vars[:, d:]  # Last d columns (sin components)
 
+    x_recon_x = x_reconstructions[:, :d]
+    x_recon_y = x_reconstructions[:, d:]
+
     pointcloud_x = pointcloud[:, :d]
     pointcloud_y = pointcloud[:, d:]
 
-    for i in range(d):
-        fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+    if d == 1:
+        fig, axes = plt.subplots(1, 4, figsize=(15, 4))
 
-        # Latent projection
-        axes[0].scatter(latent_x[:, i], latent_y[:, i], s=2)
-        axes[0].set_title(f'Latent Projection {i + 1}')
+        # Pointcloud on the circle
+        axes[0].scatter(pointcloud_x, pointcloud_y, s=1, color='orange')
+        axes[0].set_title("Pointcloud on Circle")
         axes[0].set_xlabel("cos(θ)")
         axes[0].set_ylabel("sin(θ)")
-        axes[0].set_aspect('equal', adjustable='datalim')
-        axes[0].autoscale()
+        axes[0].set_xlim([-1.1, 1.1])
+        axes[0].set_ylim([-1.1, 1.1])
+        axes[0].set_aspect('equal')
         axes[0].grid(True, linestyle='--', alpha=0.5)
 
-        # Pointcloud projection
-        axes[1].scatter(pointcloud_x[:, i], pointcloud_y[:, i], s=2, color='orange')
-        axes[1].set_title(f'Pointcloud Projection {i + 1}')
-        axes[1].set_xlabel("x")
-        axes[1].set_ylabel("y")
-        axes[1].set_aspect('equal', adjustable='datalim')
+        # Latent variables
+        axes[1].scatter(latent_x, latent_y, s=1)
+        axes[1].set_title("Latent Coords")
+        axes[1].set_xlabel("cos(θ)")
+        axes[1].set_ylabel("sin(θ)")
+        # axes[1].set_xlim([-1.1, 1.1])
+        # axes[1].set_ylim([-1.1, 1.1])
         axes[1].autoscale()
+        axes[2].set_aspect('equal', adjustable='box')
         axes[1].grid(True, linestyle='--', alpha=0.5)
 
-        plt.tight_layout()
+        # x reconstructed
+        axes[2].scatter(x_recon_x, x_recon_y, s=1, color='orange')
+        axes[2].set_title("x-recon - translation")
+        axes[2].set_xlabel("x")
+        axes[2].set_ylabel("y")
+        axes[2].autoscale()
+        axes[2].set_aspect('equal', adjustable='box')
+        axes[2].grid(True, linestyle='--', alpha=0.5)
+
+        # Latent angles on a line
+        if latent_angles is not None:
+            axes[3].scatter(latent_angles, np.zeros_like(latent_angles), s=1)
+            axes[3].set_title("Latent Angles")
+            axes[3].set_xlabel("θ")
+            axes[3].set_yticks([])
+            axes[3].set_xlim([-np.pi, np.pi])
+            axes[3].grid(True, linestyle='--', alpha=0.5)
+
         plt.show()
+
+    else:
+        for i in range(d):
+            fig, axes = plt.subplots(1, 3, figsize=(10, 4))
+
+            # Pointcloud projection
+            axes[0].scatter(pointcloud_x[:, i], pointcloud_y[:, i], s=1, color='orange')
+            axes[0].set_title(f'Pointcloud Projection {i + 1}')
+            axes[0].set_xlabel("x")
+            axes[0].set_ylabel("y")
+            axes[0].set_xlim([-10, 10])
+            axes[0].set_ylim([-10, 10])
+            axes[0].set_aspect('equal', adjustable='box')
+            axes[0].grid(True, linestyle='--', alpha=0.5)
+
+            # Latent projection
+            axes[1].scatter(latent_x[:, i], latent_y[:, i], s=1)
+            axes[1].set_title(f'Latent Projection {i + 1}')
+            axes[1].set_xlabel("cos(θ)")
+            axes[1].set_ylabel("sin(θ)")
+            axes[1].set_aspect('equal', adjustable='datalim')
+            axes[1].autoscale()
+            axes[1].grid(True, linestyle='--', alpha=0.5)
+
+            # x reconstructed
+            axes[2].scatter(x_recon_x[:, i], x_recon_y[:, i], s=1, color='orange')
+            axes[2].set_title("x-recon - translation")
+            axes[2].set_xlabel("x")
+            axes[2].set_ylabel("y")
+            axes[2].autoscale()
+            axes[2].set_aspect('equal', adjustable='box')
+            axes[2].grid(True, linestyle='--', alpha=0.5)
+
+            plt.show()
+
+    # Latent angles for d=2
+    if model.type == "shape_toroidal_ae" and d == 2 and latent_angles is not None:
+        fig, ax = plt.subplots(figsize=(5, 5))
+        theta1 = latent_angles[:, 0]
+        theta2 = latent_angles[:, 1]
+        ax.scatter(theta1, theta2, s=1)
+        ax.set_title('Latent Angles')
+        ax.set_xlabel("θ_1")
+        ax.set_ylabel("θ_2")
+        ax.set_aspect('equal', adjustable='datalim')
+        ax.autoscale()
+        ax.grid(True, linestyle='--', alpha=0.5)
+        plt.show()
+
 
 def plot_euclidean_latent_space(model, test_loader, device='cpu', n_samples=200):
     """

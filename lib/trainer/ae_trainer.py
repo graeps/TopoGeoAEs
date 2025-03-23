@@ -1,4 +1,5 @@
 import torch
+import matplotlib.pyplot as plt
 
 
 class AETrainer:
@@ -17,6 +18,7 @@ class AETrainer:
     def train_epoch(self):
         self.model.train()
         total_loss = 0
+        latent_angles = []
 
         if self.dataset == "synthetic":
             for batch_idx, x in enumerate(self.train_loader):
@@ -26,7 +28,8 @@ class AETrainer:
                     A = "not defined"
                     A_inv_T = "not defined"
                 elif self.model.type == "shape_toroidal_ae":
-                    theta, x_recon, A, A_inv_T = self.model(x)
+                    theta, x_recon, (A, A_inv_T), theta = self.model(x)
+                    latent_angles.append(theta)
                 else:
                     raise ValueError(f"Unknown model type: {self.model.type}")
 
@@ -42,6 +45,9 @@ class AETrainer:
                     print(
                         f"Step [{batch_idx + 1}/{len(self.train_loader)}], Loss: {loss.item():.4f}, Shape matrix A:{A}, A_inv_T:{A_inv_T}"
                     )
+            if self.model.type == "shape_toroidal_ae":
+                plot_angles(latent_angles)
+
             return total_loss / len(self.train_loader)
 
         else:
@@ -52,7 +58,7 @@ class AETrainer:
                     A = "not defined"
                     A_inv_T = "not defined"
                 elif self.model.type == "shape_toroidal_ae":
-                    theta, x_recon, A, A_inv_T = self.model(x)
+                    theta, x_recon, (A, A_inv_T), theta = self.model(x)
                 else:
                     raise ValueError(f"Unknown model type: {self.model.type}")
                 loss = self.recon_loss(x_recon, x)
@@ -95,3 +101,36 @@ class AETrainer:
             train_loss = self.train_epoch()
             test_loss = self.evaluate()
             print(f"Epoch {epoch + 1}/{self.num_epochs}, Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}")
+
+
+import numpy as np
+
+
+def plot_angles(latent_angles):
+    latent_angles = torch.cat(latent_angles, dim=0).detach().numpy()
+
+    if latent_angles.shape[1] == 1:  # Case d = 1
+        fig, ax = plt.subplots(figsize=(5, 3))
+        theta = latent_angles[:, 0]
+        ax.scatter(theta, np.arange(len(theta)), s=2)
+        ax.set_title("Latent Angles (1D)")
+        ax.set_xlabel("θ")
+        ax.set_ylabel("Index")
+        ax.grid(True, linestyle='--', alpha=0.5)
+
+    elif latent_angles.shape[1] == 2:  # Case d = 2
+        fig, ax = plt.subplots(figsize=(5, 5))
+        theta1 = latent_angles[:, 0]
+        theta2 = latent_angles[:, 1]
+        ax.scatter(theta1, theta2, s=2)
+        ax.set_title("Latent Angles (2D)")
+        ax.set_xlabel("θ_1")
+        ax.set_ylabel("θ_2")
+        ax.set_aspect('equal', adjustable='datalim')
+        ax.autoscale()
+        ax.grid(True, linestyle='--', alpha=0.5)
+
+    else:
+        raise ValueError(f"Unsupported latent dimension: {latent_angles.shape[1]}")
+
+    plt.show()
