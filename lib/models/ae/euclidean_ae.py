@@ -11,14 +11,14 @@ class EuclideanAE(nn.Module):
         self.encoder = nn.Sequential(
             nn.Linear(data_dim, hidden_dim1),
             nn.ReLU(),
-            nn.Linear(hidden_dim1, hidden_dim2),
-            nn.ReLU(),
-            nn.Linear(hidden_dim2, self.latent_dim),
+            nn.Linear(hidden_dim1, self.latent_dim),
         )
 
         # Decoder
         self.decoder = nn.Sequential(
             nn.Linear(self.latent_dim, hidden_dim2),
+            nn.ReLU(),
+            nn.Linear(hidden_dim2, hidden_dim2),
             nn.ReLU(),
             nn.Linear(hidden_dim2, hidden_dim1),
             nn.ReLU(),

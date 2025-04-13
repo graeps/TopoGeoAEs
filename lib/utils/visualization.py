@@ -157,7 +157,7 @@ def plot_latent_projections(model, pointcloud, test_loader, device="cpu"):
                 latent_angles.append(theta)
             else:
                 raise ValueError(f"Unknown model type: {model.type}")
-            x_recon = torch.where(x_recon.abs() < 1e-10, torch.zeros_like(x_recon), x_recon)
+            #x_recon = torch.where(x_recon.abs() < 1e-10, torch.zeros_like(x_recon), x_recon)
             x_reconstructions.append(x_recon[:, :2 * d])
             latent_vars.append(z)
 
@@ -179,11 +179,10 @@ def plot_latent_projections(model, pointcloud, test_loader, device="cpu"):
 
         # Pointcloud on the circle
         axes[0].scatter(pointcloud_x, pointcloud_y, s=1, color='orange')
-        axes[0].set_title("Pointcloud on Circle")
+        axes[0].set_title("Pointcloud, not embedded")
         axes[0].set_xlabel("cos(θ)")
         axes[0].set_ylabel("sin(θ)")
-        axes[0].set_xlim([-1.1, 1.1])
-        axes[0].set_ylim([-1.1, 1.1])
+        axes[0].autoscale()
         axes[0].set_aspect('equal')
         axes[0].grid(True, linestyle='--', alpha=0.5)
 

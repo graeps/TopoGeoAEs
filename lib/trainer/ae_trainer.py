@@ -1,5 +1,6 @@
 import torch
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 class AETrainer:
@@ -8,6 +9,7 @@ class AETrainer:
         self.log_interval = config.get('log_interval', 100)
         self.device = config.get('device', torch.device("cuda" if torch.cuda.is_available() else "cpu"))
         self.dataset = config.get("dataset", "MNIST")
+        self.show_latents = config.get("show_latents", False)
         self.train_loader, self.test_loader = data_loader
         self.model = model
         self.optimizer = optimizer
@@ -45,7 +47,7 @@ class AETrainer:
                     print(
                         f"Step [{batch_idx + 1}/{len(self.train_loader)}], Loss: {loss.item():.4f}, Shape matrix A:{A}, A_inv_T:{A_inv_T}"
                     )
-            if self.model.type == "shape_toroidal_ae":
+            if self.model.type == "shape_toroidal_ae" and self.show_latents:
                 plot_angles(latent_angles)
 
             return total_loss / len(self.train_loader)
@@ -102,8 +104,6 @@ class AETrainer:
             test_loss = self.evaluate()
             print(f"Epoch {epoch + 1}/{self.num_epochs}, Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}")
 
-
-import numpy as np
 
 
 def plot_angles(latent_angles):

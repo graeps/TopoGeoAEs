@@ -4,7 +4,7 @@ from torch.utils.data import TensorDataset, random_split, DataLoader
 
 def generate_toroidal_pointcloud(A, embed_dim, translation, num_points=80000, noise_std=0.00, device='cpu'):
     d = A.shape[0]  # Latent dimension
-    A_inv_T_theta = torch.linalg.inv(A).T
+    A_inv_theta = torch.linalg.inv(A)
 
     # Step 1: Sample θ ∈ [0,1]^d uniformly
     theta = torch.rand(num_points, d, device=device)
