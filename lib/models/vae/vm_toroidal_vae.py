@@ -1,9 +1,10 @@
+# Modified version of Acosta's paper. Latent Space actual n-Torus S^1 x ... x S^1
 import torch
 from torch.nn import functional as F
 import torch.nn as nn
 
-from code.mvae.lib.models.utils.valid_config import is_valid_model_config
-from code.mvae.lib.distributions import VonMisesFisher
+from ..utils.valid_config import is_valid_model_config
+from ...distributions import VonMisesFisher
 
 
 class VMToroidalVAE(torch.nn.Module):
@@ -59,14 +60,10 @@ class VMToroidalVAE(torch.nn.Module):
 
     def reparameterize(self, posterior_params):
         # Split into mu and kappa. mu.shape=[batch_size, latent_dim, 2], kappa.shape=[batch_size, latent_dim, 1]
-        mu, kappa = posterior_params[:, :, :2], posterior_params[:, :,2:]
-        print("mu.shape", mu.shape)
-        print("kappa.shape", kappa.shape)
+        mu, kappa = posterior_params[:, :, :2], posterior_params[:, :, 2:]
         q_z = VonMisesFisher(mu, kappa)  # 2D vMF distribution
         z = q_z.rsample()  # [batch_size,latent_dim,2]
-        print("sample z.shape", z.shape)
         z = z.view(-1, self.latent_dim * 2)  # Flatten latent dimensions [batch_size, latent_dim*2]
-        print("sample flatten z.shape", z.shape)
 
         return z
 
@@ -77,7 +74,7 @@ class VMToroidalVAE(torch.nn.Module):
             h = F.softplus(layer(h), beta=self.sftbeta)
 
         x_recon = F.sigmoid(self.fc_x_recon(h))
-        return x_recon.view(-1, 1, 28, 28)
+        return x_recon
 
     def forward(self, x):
         posterior_params = self.encode(x)

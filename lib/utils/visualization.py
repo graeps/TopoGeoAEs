@@ -157,7 +157,7 @@ def plot_latent_projections(model, pointcloud, test_loader, device="cpu"):
                 latent_angles.append(theta)
             else:
                 raise ValueError(f"Unknown model type: {model.type}")
-            #x_recon = torch.where(x_recon.abs() < 1e-10, torch.zeros_like(x_recon), x_recon)
+            # x_recon = torch.where(x_recon.abs() < 1e-10, torch.zeros_like(x_recon), x_recon)
             x_reconstructions.append(x_recon[:, :2 * d])
             latent_vars.append(z)
 

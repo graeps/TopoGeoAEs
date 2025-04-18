@@ -1,8 +1,9 @@
+# Version from Acosta paper, S^n x S^m as latent space
 import torch
 from torch.nn import functional as f
 
-from code.mvae.lib.models.utils.valid_config import is_valid_model_config
-from code.mvae.lib.distributions import VonMisesFisher
+from ..utils.valid_config import is_valid_model_config
+from ...distributions import VonMisesFisher
 
 
 class VMFToroidalVAE(torch.nn.Module):
@@ -86,8 +87,6 @@ class VMFToroidalVAE(torch.nn.Module):
         return z_theta_mu, z_theta_kappa, z_phi_mu, z_phi_kappa
 
     def _build_torus(self, z_theta, z_phi):
-        # theta = torch.atan2(z_theta[:, 1] / z_theta[:, 0])
-        # phi = torch.atan2(z_phi[:, 1] / z_phi[:, 0])
         cos_theta = z_theta[:, 0]
         sin_theta = z_theta[:, 1]
 
@@ -123,18 +122,12 @@ class VMFToroidalVAE(torch.nn.Module):
         """
 
         z_theta_mu, z_theta_kappa, z_phi_mu, z_phi_kappa = posterior_params
-        #print("z_theta_mu", z_theta_mu.shape, "z_theta_kappa", z_theta_kappa.shape, "z_phi_mu", z_phi_mu.shape, "z_phi_kappa", z_phi_kappa.shape)
-        #print("z_theta_kappa , shape", z_theta_kappa, z_theta_kappa.shape)
-        #print("z_phi_kappa, shape", z_phi_kappa, z_phi_kappa.shape)
 
         q_z_theta = VonMisesFisher(z_theta_mu, z_theta_kappa)
 
         q_z_phi = VonMisesFisher(z_phi_mu, z_phi_kappa)
 
         z_theta = q_z_theta.rsample()
-
-        #print("z_theta shape", z_theta.shape)
-        #print("z_theta", z_theta)
 
         z_phi = q_z_phi.rsample()
 

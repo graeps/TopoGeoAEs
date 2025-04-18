@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-from code.mvae.lib.models.utils.valid_config import is_valid_model_config
+from ..utils.valid_config import is_valid_model_config
 
 
 class EuclideanVAE(nn.Module):
@@ -71,7 +71,7 @@ class EuclideanVAE(nn.Module):
             h = self.activation(layer(h))
 
         h = nn.functional.sigmoid(self.fc_x_recon(h))
-        return h.view(-1, 1, 28, 28)
+        return h
 
     def forward(self, x):
         posterior_params = self.encode(x)

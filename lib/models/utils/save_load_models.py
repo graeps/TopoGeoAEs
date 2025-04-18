@@ -3,7 +3,7 @@ import os
 import time
 import torch
 
-from ../vae import EuclideanVAE, VMFToroidalVAE, VMToroidalVAE, MGVMToroidalVAE
+from ..vae import EuclideanVAE, VMFToroidalVAE, VMToroidalVAE, MGVMToroidalVAE
 
 from .valid_config import is_valid_model_config
 
