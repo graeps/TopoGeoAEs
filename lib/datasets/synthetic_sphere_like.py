@@ -118,12 +118,12 @@ def load_t2_synthetic(
 
 
 def get_s1_synthetic_immersion(
-        geodesic_distortion_func: str,
-        radius: float,
-        n_wiggles: int,
-        geodesic_distortion_amp: float,
-        embedding_dim: int,
-        rot: torch.Tensor,
+        geodesic_distortion_func,
+        radius,
+        n_wiggles,
+        geodesic_distortion_amp,
+        embedding_dim,
+        rot,
 ):
     """Return immersion S¹ → ℝ^N producing a distorted high-dimensional circle.
 
@@ -161,6 +161,7 @@ def get_s1_synthetic_immersion(
             raise NotImplementedError(f"Unknown distortion: {geodesic_distortion_func}")
 
         base_point = amp * gs.array([gs.cos(angle), gs.sin(angle)])
+        base_point = gs.squeeze(base_point, axis=-1)
         if embedding_dim > 2:
             base_point = gs.concatenate([base_point, gs.zeros(embedding_dim - 2)])
 
@@ -185,6 +186,7 @@ def get_s2_synthetic_immersion(radius, geodesic_distortion_amp, embedding_dim, r
         z = gs.cos(theta)
 
         point = amplitude * gs.array([x, y, z])
+        point = gs.squeeze(point, axis=-1)
         if embedding_dim > 3:
             point = gs.concatenate([point, gs.zeros(embedding_dim - 3)])
         return gs.einsum("ij,j->i", rot, point)
@@ -208,6 +210,7 @@ def get_t2_synthetic_immersion(major_radius, minor_radius, geodesic_distortion_a
         z = minor_radius * gs.sin(theta)
 
         point = amplitude * gs.array([x, y, z])
+        point = gs.squeeze(point, axis=-1)
         if embedding_dim > 3:
             point = gs.concatenate([point, gs.zeros(embedding_dim - 3)])
         return gs.einsum("ij,j->i", rot, point)

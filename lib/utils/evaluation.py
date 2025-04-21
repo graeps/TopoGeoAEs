@@ -37,7 +37,7 @@ def get_learned_immersion(model, config):
             z = gs.array([gs.cos(angle[0]), gs.sin(angle[0])])
 
         elif config.dataset_name == "s2_synthetic":
-            theta, phi = angle[0], angle[1]
+            theta, phi = angle
             z = gs.array([
                 gs.sin(theta) * gs.cos(phi),
                 gs.sin(theta) * gs.sin(phi),
@@ -45,7 +45,7 @@ def get_learned_immersion(model, config):
             ])
 
         elif config.dataset_name == "t2_synthetic":
-            theta, phi = angle[0], angle[1]
+            theta, phi = angle
             z = gs.array([
                 (config.major_radius - config.minor_radius * gs.cos(theta)) * gs.cos(phi),
                 (config.major_radius - config.minor_radius * gs.cos(theta)) * gs.sin(phi),
@@ -55,8 +55,6 @@ def get_learned_immersion(model, config):
             raise InvalidConfigError(f"Unknown dataset: {config.dataset_name}")
 
         z = z.to(config.device)
-        if z.ndim == 1:
-            z = z.unsqueeze(0)
         return model.decode(z)
 
     return immersion
@@ -149,8 +147,8 @@ def compute_curvature_true(config, n_grid_points=2000):
 def _compute_curvature_error_s1(thetas, learned, true):
     learned = np.array(learned)
     true = np.array(true)
-    diff = np.trapezoid((learned - true) ** 2, thetas)
-    norm = np.trapezoid(learned ** 2 + true ** 2, thetas)
+    diff = np.trapz((learned - true) ** 2, thetas)
+    norm = np.trapz(learned ** 2 + true ** 2, thetas)
     return diff / norm
 
 
@@ -159,7 +157,7 @@ def _integrate_s2(thetas, phis, h):
     phis = torch.unique(phis)
     sum_phis = torch.zeros_like(thetas)
     for t, theta in enumerate(thetas):
-        sum_phis[t] = torch.trapz(h[t*len(phis):(t+1)*len(phis)], phis) * np.sin(theta)
+        sum_phis[t] = torch.trapz(h[t * len(phis):(t + 1) * len(phis)], phis) * np.sin(theta)
     return torch.trapz(sum_phis, thetas)
 
 
