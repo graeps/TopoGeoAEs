@@ -11,6 +11,8 @@ dependencies:
   - matplotlib
   - jupyter
   - geomstats
+  - wandb
+  - plotly
   - pip
   - pip:
       - git+https://github.com/geoopt/geoopt.git

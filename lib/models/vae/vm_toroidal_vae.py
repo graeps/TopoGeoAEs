@@ -64,7 +64,6 @@ class VMToroidalVAE(torch.nn.Module):
         q_z = VonMisesFisher(mu, kappa)  # 2D vMF distribution
         z = q_z.rsample()  # [batch_size,latent_dim,2]
         z = z.view(-1, self.latent_dim * 2)  # Flatten latent dimensions [batch_size, latent_dim*2]
-
         return z
 
     def decode(self, z):
@@ -82,6 +81,11 @@ class VMToroidalVAE(torch.nn.Module):
         x_recon = self.decode(z)
 
         return z, x_recon, posterior_params
+
+    def _build_1_sphere(self, z_theta):
+        cos_theta = z_theta[:0]
+        sind_theta = z_theta[:1]
+        return torch.stack([cos_theta, sind_theta], dim=-1)
 
     def _build_torus(self, z_theta, z_phi):
         # theta = torch.atan2(z_theta[:, 1] / z_theta[:, 0])

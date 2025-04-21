@@ -2,10 +2,7 @@ import os
 import time
 import numpy as np
 import torch
-import matplotlib.pyplot as plt
 
-from torch import tensor
-from torch.distributions.multivariate_normal import MultivariateNormal
 from geomstats.geometry.base import ImmersedSet
 from geomstats.geometry.euclidean import Euclidean
 from geomstats.geometry.pullback_metric import PullbackMetric
@@ -55,9 +52,12 @@ def get_learned_immersion(model, config):
                 config.minor_radius * gs.sin(theta),
             ])
         else:
-            raise InvalidConfigError(f"Unknown dataset: {config['dataset_name']}")
+            raise InvalidConfigError(f"Unknown dataset: {config.dataset_name}")
 
-        return model.decode(z.to(config.device).T)
+        z = z.to(config.device)
+        if z.ndim == 1:
+            z = z.unsqueeze(0)
+        return model.decode(z)
 
     return immersion
 
@@ -92,7 +92,7 @@ def get_true_immersion(config):
             rot,
         )
     else:
-        raise InvalidConfigError(f"Unknown dataset: {config['dataset_name']}")
+        raise InvalidConfigError(f"Unknown dataset: {config.dataset_name}")
 
 
 def get_z_grid(config, n_grid_points=2000):
@@ -103,7 +103,7 @@ def get_z_grid(config, n_grid_points=2000):
         phis = gs.linspace(0, 2 * gs.pi, int(np.sqrt(n_grid_points)))
         return torch.cartesian_prod(thetas, phis)
     else:
-        raise InvalidConfigError(f"Unknown dataset: {config['dataset_name']}")
+        raise InvalidConfigError(f"Unknown dataset: {config.dataset_name}")
 
 
 def _compute_curvature(z_grid, immersion, dim, embedding_dim):
@@ -175,7 +175,7 @@ def compute_curvature_error(z_grid, learned, true, config):
     elif config.dataset_name in ("s2_synthetic", "t2_synthetic"):
         return _compute_curvature_error_s2(z_grid[:, 0], z_grid[:, 1], learned, true)
     else:
-        raise InvalidConfigError(f"Unknown dataset: {config['dataset_name']}")
+        raise InvalidConfigError(f"Unknown dataset: {config.dataset_name}")
 
 
 class InvalidConfigError(Exception):

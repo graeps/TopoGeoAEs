@@ -12,6 +12,7 @@ from torch.distributions.multivariate_normal import MultivariateNormal  # noqa: 
 import geomstats.backend as gs  # noqa: E402
 from geomstats.geometry.special_orthogonal import SpecialOrthogonal  # noqa: E402
 
+
 def load_s1_synthetic(
         synthetic_rotation,
         n_times=1500,
