@@ -4,7 +4,11 @@ import torch.nn as nn
 from ..distributions import VonMisesFisher, HypersphericalUniform
 
 
-def elbo(posterior_type, x, x_recon, posterior_params, latent_dim, recon_loss, device="cpu"):
+def elbo(posterior_type, x, x_recon, posterior_params, config):
+    latent_dim = config.latent_dim
+    recon_loss = config.recon_loss
+    beta = config.beta
+    device = config.device
     if posterior_type == "gaussian":
         z_mu, z_logvar = posterior_params
         z_var = torch.exp(z_logvar)
@@ -57,5 +61,5 @@ def elbo(posterior_type, x, x_recon, posterior_params, latent_dim, recon_loss, d
     else:
         recon_loss = nn.functional.mse_loss(x_recon, x, reduction="sum")
 
-    elbo_loss = (recon_loss + 0.1 * kl_loss)
+    elbo_loss = (recon_loss + beta * kl_loss)
     return elbo_loss, recon_loss, kl_loss

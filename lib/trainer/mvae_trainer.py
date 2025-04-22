@@ -5,11 +5,11 @@ from .utils.valid_config import is_valid_trainer_config
 
 class MVAETrainer:
     def __init__(self, model, data_loader, optimizer, config):
-        is_valid_trainer_config(config)
-        self.num_epochs = config.get('num_epochs', 10)
-        self.log_interval = config.get('log_interval', 100)
-        self.device = config.get('device', torch.device("cuda" if torch.cuda.is_available() else "cpu"))
-        self.recon_loss = config.get('recon_loss', "")
+        self.config = config
+        self.num_epochs = config.num_epochs
+        self.log_interval = config.log_interval
+        self.device = config.device
+        self.recon_loss = config.recon_loss
         self.train_loader, self.test_loader = data_loader
         self.model = model
         self.optimizer = optimizer
@@ -54,9 +54,7 @@ class MVAETrainer:
             x = x.to(self.device)
             self.optimizer.zero_grad()
             _, x_recon, posterior_params = self.model(x)
-            loss, recon_loss, kl_loss = elbo(self.model.posterior_type, x, x_recon, posterior_params,
-                                             self.model.latent_dim, self.recon_loss,
-                                             self.device)
+            loss, recon_loss, kl_loss = elbo(self.model.posterior_type, x, x_recon, posterior_params, self.config)
             loss.backward()
 
             # for name, param in self.model.named_parameters():
@@ -95,8 +93,7 @@ class MVAETrainer:
             for x, _ in self.test_loader:
                 x = x.to(self.device)
                 _, x_recon, posterior_params = self.model(x)
-                loss, recon_loss, kl_loss = elbo(self.model.posterior_type, x, x_recon, posterior_params,
-                                                 self.model.latent_dim, self.recon_loss, self.device)
+                loss, recon_loss, kl_loss = elbo(self.model.posterior_type, x, x_recon, posterior_params, self.config)
                 test_loss += loss.item()
                 test_recon_loss += recon_loss.item()
                 test_kl_loss += kl_loss.item()

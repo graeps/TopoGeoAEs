@@ -312,13 +312,58 @@ def plot_euclidean_latent_space(model, test_loader, device='cpu', n_samples=200)
     # Plot the latent space
     plt.figure(figsize=(10, 7))
     scatter = plt.scatter(
-        latent_vectors[:, 0], latent_vectors[:, 1], c=labels, cmap='tab10', alpha=0.7
+        latent_vectors[:, 0], latent_vectors[:, 1], c=labels, cmap='hsv', alpha=0.7
     )
     plt.colorbar(scatter, label="Class Label")
     plt.title("Latent Space Visualization")
     plt.xlabel("Dimension 1")
     plt.ylabel("Dimension 2")
     plt.show()
+
+
+def plot_recon_manifold(model, test_loader, device='cpu', n_samples=200):
+    model.eval()
+    model.to(device)
+
+    recon_dataset = []
+    labels = []
+
+    with torch.no_grad():
+        for x, y in test_loader:
+            x = x.to(device)
+            _, x_recon, _ = model(x)
+            recon_dataset.append(x_recon.cpu())
+            labels.extend(y.numpy())
+
+    recon_dataset = np.concatenate(recon_dataset)
+    labels = torch.tensor(labels).numpy()
+
+    if len(recon_dataset) > n_samples:
+        indices = sample(range(len(recon_dataset)), n_samples)
+        recon_dataset = recon_dataset[indices]
+        labels = labels[indices]
+
+    if recon_dataset.shape[1] == 2:
+        plt.scatter(recon_dataset[:, 0], recon_dataset[:, 1], c=labels, cmap='hsv')
+        plt.axis('equal')
+        plt.title("Reconstructed Manifold ℝ²")
+        plt.colorbar(label='Angle [0, 2π]')
+        plt.show()
+    elif recon_dataset.shape[1] == 3:
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        p = ax.scatter(recon_dataset[:, 0], recon_dataset[:, 1], recon_dataset[:, 2],
+                       c=labels, cmap='hsv')
+        fig.colorbar(p, ax=ax, label='Angle [0, 2π]')
+        ax.set_title("Reconstructed Manifold in ℝ³")
+        plt.show()
+    else:
+        proj = PCA(n_components=2).fit_transform(recon_dataset)
+        plt.scatter(proj[:, 0], proj[:, 1], c=labels, cmap='hsv')
+        plt.axis('equal')
+        plt.title("Reconstructed Manifold projected to ℝ² via PCA")
+        plt.colorbar(label='Angle [0, 2π]')
+        plt.show()
 
 
 def curvature_compute_plot(config, dataset, labels, model):

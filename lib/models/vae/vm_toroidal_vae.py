@@ -3,7 +3,6 @@ import torch
 from torch.nn import functional as F
 import torch.nn as nn
 
-from ..utils.valid_config import is_valid_model_config
 from ...distributions import VonMisesFisher
 
 
@@ -12,43 +11,33 @@ class VMToroidalVAE(torch.nn.Module):
             self,
             config
     ):
-        is_valid_model_config(config)
         super().__init__()
         self.posterior_type = "vm_toroidal"
         self.data_dim = config["data_dim"]
         self.sftbeta = config["sftbeta"]
         self.latent_dim = config["latent_dim"]  # Here latent_dim = d for T^d latent space (manifold dim)
-        self.encoder_width = config["encoder_width"]
-        self.encoder_depth = config["encoder_depth"]
-        self.decoder_width = config["decoder_width"]
-        self.decoder_depth = config["decoder_depth"]
+        encoder_widths = config["encoder_widths"]
+        decoder_widths = config["decoder_widths"]
 
-        self.encoder_flatten = nn.Flatten()
-        self.encoder_fc = nn.Linear(self.data_dim, self.encoder_width)
-        self.encoder_linears = nn.ModuleList(
-            [
-                nn.Linear(self.encoder_width, self.encoder_width)
-                for _ in range(self.encoder_depth)
-            ]
-        )
+        self.encoder_linears = nn.ModuleList()
+        in_dim = self.data_dim
+        for out_dim in encoder_widths:
+            self.encoder_linears.append(nn.Linear(in_dim, out_dim))
+            in_dim = out_dim
 
-        self.fc_z_mu = nn.Linear(self.encoder_width, 2 * self.latent_dim)
-        self.fc_z_kappa = nn.Linear(self.encoder_width, self.latent_dim)
+        self.fc_z_mu = nn.Linear(in_dim, 2 * self.latent_dim)
+        self.fc_z_kappa = nn.Linear(in_dim, self.latent_dim)
 
-        self.decoder_fc = nn.Linear(self.latent_dim * 2, self.decoder_width)
-        self.decoder_linears = nn.ModuleList(
-            [
-                nn.Linear(self.decoder_width, self.decoder_width)
-                for _ in range(self.decoder_depth)
-            ]
-        )
+        self.decoder_linears = nn.ModuleList()
+        in_dim = self.latent_dim * 2
+        for out_dim in decoder_widths:
+            self.decoder_linears.append(nn.Linear(in_dim, out_dim))
+            in_dim = out_dim
 
-        self.fc_x_recon = nn.Linear(self.decoder_width, self.data_dim)
+        self.fc_x_recon = nn.Linear(in_dim, self.data_dim)
 
     def encode(self, x):
-        h = self.encoder_flatten(x)
-        h = F.softplus(self.encoder_fc(h), beta=self.sftbeta)
-
+        h = x
         for layer in self.encoder_linears:
             h = F.softplus(layer(h), beta=self.sftbeta)
 
@@ -67,7 +56,7 @@ class VMToroidalVAE(torch.nn.Module):
         return z
 
     def decode(self, z):
-        h = F.softplus(self.decoder_fc(z), beta=self.sftbeta)
+        h = z
 
         for layer in self.decoder_linears:
             h = F.softplus(layer(h), beta=self.sftbeta)
@@ -81,11 +70,6 @@ class VMToroidalVAE(torch.nn.Module):
         x_recon = self.decode(z)
 
         return z, x_recon, posterior_params
-
-    def _build_1_sphere(self, z_theta):
-        cos_theta = z_theta[:0]
-        sind_theta = z_theta[:1]
-        return torch.stack([cos_theta, sind_theta], dim=-1)
 
     def _build_torus(self, z_theta, z_phi):
         # theta = torch.atan2(z_theta[:, 1] / z_theta[:, 0])

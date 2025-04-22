@@ -3,7 +3,7 @@ channels:
   - defaults
   - conda-forge
 dependencies:
-  - python=3.12
+  - python=3.9
   - pytorch
   - torchvision
   - numpy
@@ -13,9 +13,11 @@ dependencies:
   - geomstats
   - wandb
   - plotly
+  - tqdm
   - pip
   - pip:
       - git+https://github.com/geoopt/geoopt.git
+      - torch-topological
 variables:
   GEOMSTATS_BACKEND: numpy
 
