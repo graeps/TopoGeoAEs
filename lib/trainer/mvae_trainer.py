@@ -1,6 +1,5 @@
 import torch
 from ..utils.loss_functions import elbo
-from .utils.valid_config import is_valid_trainer_config
 
 
 class MVAETrainer:
@@ -53,15 +52,9 @@ class MVAETrainer:
         for batch_idx, (x, _) in enumerate(self.train_loader):
             x = x.to(self.device)
             self.optimizer.zero_grad()
-            _, x_recon, posterior_params = self.model(x)
-            loss, recon_loss, kl_loss = elbo(self.model.posterior_type, x, x_recon, posterior_params, self.config)
+            z, x_recon, posterior_params = self.model(x)
+            loss, recon_loss, kl_loss = elbo(self.model.posterior_type, x, z, x_recon, posterior_params, self.config)
             loss.backward()
-
-            # for name, param in self.model.named_parameters():
-            #     if param.grad is not None:
-            #         print(f"Layer: {name}, Gradient: {param.grad}")
-            #     else:
-            #         print(f"Layer: {name}, Gradient: None")
 
             self.optimizer.step()
             train_loss += loss.item()
@@ -92,8 +85,9 @@ class MVAETrainer:
         with torch.no_grad():
             for x, _ in self.test_loader:
                 x = x.to(self.device)
-                _, x_recon, posterior_params = self.model(x)
-                loss, recon_loss, kl_loss = elbo(self.model.posterior_type, x, x_recon, posterior_params, self.config)
+                z, x_recon, posterior_params = self.model(x)
+                loss, recon_loss, kl_loss = elbo(self.model.posterior_type, x, z, x_recon, posterior_params,
+                                                 self.config)
                 test_loss += loss.item()
                 test_recon_loss += recon_loss.item()
                 test_kl_loss += kl_loss.item()

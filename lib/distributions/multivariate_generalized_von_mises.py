@@ -1,6 +1,6 @@
 import torch
 from torch.distributions import constraints, register_kl
-from .parallelogram_uniform import CubeUniform
+from .flat_torus_uniform import CubeUniform
 from . import VonMisesFisher
 
 

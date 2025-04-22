@@ -3,12 +3,19 @@ import torch.nn as nn
 
 from ..distributions import VonMisesFisher, HypersphericalUniform
 
+from torch_topological.nn import SignatureLoss
+from torch_topological.nn import VietorisRipsComplex
 
-def elbo(posterior_type, x, x_recon, posterior_params, config):
+
+def elbo(posterior_type, x, z, x_recon, posterior_params, config):
     latent_dim = config.latent_dim
     recon_loss = config.recon_loss
+    topo_loss = config.topo_loss
+    alpha = config.alpha
     beta = config.beta
+    gamma = config.gamma
     device = config.device
+
     if posterior_type == "gaussian":
         z_mu, z_logvar = posterior_params
         z_var = torch.exp(z_logvar)
@@ -61,5 +68,13 @@ def elbo(posterior_type, x, x_recon, posterior_params, config):
     else:
         recon_loss = nn.functional.mse_loss(x_recon, x, reduction="sum")
 
-    elbo_loss = (recon_loss + beta * kl_loss)
+    if topo_loss:
+        vr = VietorisRipsComplex(dim=0)
+        pi_x = vr(x)
+        pi_z = vr(z)
+        topo_loss = SignatureLoss(p=2)([x, pi_x], [z, pi_z])
+    else:
+        topo_loss = 0
+
+    elbo_loss = (alpha * recon_loss + beta * kl_loss + gamma * topo_loss)
     return elbo_loss, recon_loss, kl_loss

@@ -13,11 +13,13 @@ class VMToroidalVAE(torch.nn.Module):
     ):
         super().__init__()
         self.posterior_type = "vm_toroidal"
-        self.data_dim = config["data_dim"]
-        self.sftbeta = config["sftbeta"]
-        self.latent_dim = config["latent_dim"]  # Here latent_dim = d for T^d latent space (manifold dim)
-        encoder_widths = config["encoder_widths"]
-        decoder_widths = config["decoder_widths"]
+        self.data_dim = config.data_dim
+        self.latent_dim = config.latent_dim  # Here latent_dim = d for T^d latent space (manifold dim)
+        self.sftbeta = config.sftbeta
+        self.activation = F.softplus  # TODO: chose activation as parameter in config
+
+        encoder_widths = config.encoder_widths
+        decoder_widths = config.decoder_widths
 
         self.encoder_linears = nn.ModuleList()
         in_dim = self.data_dim
@@ -39,10 +41,10 @@ class VMToroidalVAE(torch.nn.Module):
     def encode(self, x):
         h = x
         for layer in self.encoder_linears:
-            h = F.softplus(layer(h), beta=self.sftbeta)
+            h = self.activation(layer(h), beta=self.sftbeta)
 
         mu = self.fc_z_mu(h).view(-1, self.latent_dim, 2)  # [batch_size, latent_dim, 2]
-        kappa = F.softplus(self.fc_z_kappa(h), beta=self.sftbeta) + 1  # [batch_size, latent_dim]
+        kappa = self.activation(self.fc_z_kappa(h), beta=self.sftbeta) + 1  # [batch_size, latent_dim]
 
         posterior_params = torch.cat((mu, kappa.unsqueeze(-1)), dim=-1)  # [batch_size, latent_dim, 3]
         return posterior_params
@@ -57,9 +59,8 @@ class VMToroidalVAE(torch.nn.Module):
 
     def decode(self, z):
         h = z
-
         for layer in self.decoder_linears:
-            h = F.softplus(layer(h), beta=self.sftbeta)
+            h = self.activation(layer(h), beta=self.sftbeta)
 
         x_recon = F.sigmoid(self.fc_x_recon(h))
         return x_recon
