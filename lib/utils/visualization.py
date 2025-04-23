@@ -453,7 +453,7 @@ def plot_curvature_norms(angles, curvature_norms, config, norm_val, profile_type
         color_norm = mpl.colors.Normalize(0.0, norm_val)
     else:
         color_norm = mpl.colors.Normalize(0.0, max(curvature_norms))
-    if config.dataset_name in ("s1_synthetic", "experimental"):
+    if config.dataset_name == "s1_synthetic":
         ax1 = fig.add_subplot(121)
         ax1.plot(angles, curvature_norms, linewidth=10)
         ax1.set_xlabel("angle", fontsize=30)
@@ -517,7 +517,7 @@ def plot_curvature_norms(angles, curvature_norms, config, norm_val, profile_type
         )
         plt.axis("off")
 
-    if config.dataset_name in ["s2_synthetic", "t2_synthetic", "grid_cells"]:
+    if config.dataset_name in ["s2_synthetic", "t2_synthetic"]:
         if norm_val is not None:
             plotly_fig = go.Figure(
                 data=[

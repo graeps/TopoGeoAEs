@@ -62,7 +62,7 @@ class VMToroidalVAE(torch.nn.Module):
         for layer in self.decoder_linears:
             h = self.activation(layer(h), beta=self.sftbeta)
 
-        x_recon = F.sigmoid(self.fc_x_recon(h))
+        x_recon = self.fc_x_recon(h)
         return x_recon
 
     def forward(self, x):

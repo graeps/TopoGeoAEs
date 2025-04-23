@@ -4,10 +4,7 @@ from torch.nn import functional as F
 
 
 class EuclideanVAE(nn.Module):
-    def __init__(
-            self,
-            config
-    ):
+    def __init__(self, config):
         super().__init__()
         self.posterior_type = "gaussian"
         self.data_dim = config.data_dim
@@ -55,7 +52,7 @@ class EuclideanVAE(nn.Module):
         for layer in self.decoder_linears:
             h = self.activation(layer(h))
 
-        h = nn.functional.sigmoid(self.fc_x_recon(h))
+        h = self.fc_x_recon(h)
         return h
 
     def forward(self, x):
