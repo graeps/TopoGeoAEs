@@ -2,6 +2,7 @@ from torch.utils.data import TensorDataset, DataLoader, random_split
 import torch
 
 from ..datasets.synthetic_sphere_like import load_s1_synthetic
+from ..datasets.synthetic_sphere_like import load_s1_in_s1_synthetic
 from ..datasets.synthetic_sphere_like import load_s2_synthetic
 
 from ..datasets.synthetic_sphere_like import load_t2_synthetic
@@ -13,7 +14,7 @@ from sklearn.decomposition import PCA
 def load_synthetic_ds(config):
     if config.dataset_name == "s1_synthetic":
         dataset, labels = load_s1_synthetic(
-            synthetic_rotation=config.synthetic_rotation,
+            rotation=config.rotation,
             n_times=config.n_times,
             radius=config.radius,
             n_wiggles=config.n_wiggles,
@@ -22,9 +23,21 @@ def load_synthetic_ds(config):
             noise_var=config.noise_var,
             geodesic_distortion_func=config.geodesic_distortion_func,
         )
+    elif config.dataset_name == "s1_in_s1_synthetic":
+        dataset, labels = load_s1_in_s1_synthetic(
+            rotation=config.rotation,
+            n_times=config.n_times,
+            radius_inner=config.radius_inner,
+            radius_outer=config.radius_outer,
+            n_wiggles=config.n_wiggles,
+            geodesic_distortion_amp=config.geodesic_distortion_amp,
+            embedding_dim=config.embedding_dim,
+            noise_var=config.noise_var,
+            geodesic_distortion_func=config.geodesic_distortion_func,
+        )
     elif config.dataset_name == "s2_synthetic":
         dataset, labels = load_s2_synthetic(
-            synthetic_rotation=config.synthetic_rotation,
+            rotation=config.rotation,
             n_times=config.n_times,
             radius=config.radius,
             geodesic_distortion_amp=config.geodesic_distortion_amp,
@@ -33,7 +46,7 @@ def load_synthetic_ds(config):
         )
     elif config.dataset_name == "t2_synthetic":
         dataset, labels = load_t2_synthetic(
-            synthetic_rotation=config.synthetic_rotation,
+            rotation=config.rotation,
             n_times=config.n_times,
             major_radius=config.major_radius,
             minor_radius=config.minor_radius,

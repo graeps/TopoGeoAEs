@@ -12,8 +12,9 @@ class MVAETrainer:
         self.train_loader, self.test_loader = data_loader
         self.model = model
         self.optimizer = optimizer
-        self.history = {'train_loss': [], 'train_recon_loss': [], 'train_kl_loss': [], 'test_loss': [],
-                        'test_recon_loss': [], 'test_kl_loss': []}
+        self.history = {'train_loss': [], 'train_recon_loss': [], 'train_kl_loss': [], 'train_topo_loss': [],
+                        'test_loss': [],
+                        'test_recon_loss': [], 'test_kl_loss': [], 'test_topo_loss': []}
         print("Trainer successfully initialized.")
 
     def train(self):
@@ -26,15 +27,17 @@ class MVAETrainer:
         print("Training the " + f'{self.model.posterior_type}' + "VAE model.")
 
         for epoch in range(self.num_epochs):
-            train_loss, train_recon_loss, train_kl_loss = self.train_one_epoch(epoch)
-            test_loss, test_recon_loss, test_kl_loss = self.test_one_epoch()
+            train_loss, train_recon_loss, train_kl_loss, train_topo_loss = self.train_one_epoch(epoch)
+            test_loss, test_recon_loss, test_kl_loss, test_topo_loss = self.test_one_epoch()
 
             self.history['train_loss'].append(train_loss)
             self.history['train_recon_loss'].append(train_recon_loss)
             self.history['train_kl_loss'].append(train_kl_loss)
+            self.history['train_topo_loss'].append(train_topo_loss)
             self.history['test_loss'].append(test_loss)
             self.history['test_recon_loss'].append(test_recon_loss)
             self.history['test_kl_loss'].append(test_kl_loss)
+            self.history['test_topo_loss'].append(test_topo_loss)
 
             print(f"Epoch {epoch + 1}/{self.num_epochs}, Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}")
             print("-" * 50)
@@ -46,6 +49,7 @@ class MVAETrainer:
         train_loss = 0
         train_recon_loss = 0
         train_kl_loss = 0
+        train_topo_loss = 0
 
         print(f"Starting epoch {epoch + 1}/{self.num_epochs}")
 
@@ -53,13 +57,15 @@ class MVAETrainer:
             x = x.to(self.device)
             self.optimizer.zero_grad()
             z, x_recon, posterior_params = self.model(x)
-            loss, recon_loss, kl_loss = elbo(self.model.posterior_type, x, z, x_recon, posterior_params, self.config)
+            loss, recon_loss, kl_loss, topo_loss = elbo(self.model.posterior_type, x, z, x_recon, posterior_params,
+                                                        self.config)
             loss.backward()
 
             self.optimizer.step()
             train_loss += loss.item()
             train_recon_loss += recon_loss.item()
             train_kl_loss += kl_loss.item()
+            train_topo_loss += topo_loss.item() if hasattr(topo_loss, 'item') else topo_loss
 
             if (batch_idx + 1) % self.log_interval == 0:
                 print(
@@ -68,7 +74,8 @@ class MVAETrainer:
         avg_train_loss = train_loss / len(self.train_loader.dataset)
         avg_train_recon_loss = train_recon_loss / len(self.train_loader.dataset)
         avg_train_kl_loss = train_kl_loss / len(self.train_loader.dataset)
-        return avg_train_loss, avg_train_recon_loss, avg_train_kl_loss
+        avg_train_topo_loss = train_topo_loss / len(self.train_loader.dataset)
+        return avg_train_loss, avg_train_recon_loss, avg_train_kl_loss, avg_train_topo_loss
 
     def test_one_epoch(self):
         """
@@ -81,19 +88,22 @@ class MVAETrainer:
         test_loss = 0
         test_recon_loss = 0
         test_kl_loss = 0
+        test_topo_loss = 0
 
         with torch.no_grad():
             for x, _ in self.test_loader:
                 x = x.to(self.device)
                 z, x_recon, posterior_params = self.model(x)
-                loss, recon_loss, kl_loss = elbo(self.model.posterior_type, x, z, x_recon, posterior_params,
+                loss, recon_loss, kl_loss, topo_loss = elbo(self.model.posterior_type, x, z, x_recon, posterior_params,
                                                  self.config)
                 test_loss += loss.item()
                 test_recon_loss += recon_loss.item()
                 test_kl_loss += kl_loss.item()
+                test_topo_loss += topo_loss.item() if hasattr(topo_loss, 'item') else topo_loss
 
         avg_test_loss = test_loss / len(self.test_loader.dataset)
         avg_test_recon_loss = test_recon_loss / len(self.test_loader.dataset)
         avg_test_kl_loss = test_kl_loss / len(self.test_loader.dataset)
+        avg_test_topo_loss = test_topo_loss / len(self.test_loader.dataset)
 
-        return avg_test_loss, avg_test_recon_loss, avg_test_kl_loss
+        return avg_test_loss, avg_test_recon_loss, avg_test_kl_loss, avg_test_topo_loss

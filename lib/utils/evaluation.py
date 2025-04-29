@@ -32,7 +32,7 @@ class NeuralManifoldIntrinsic(ImmersedSet):
 
 
 def get_learned_immersion(model, config):
-    def immersion(angle):
+    def immersion_vm(angle):
         if config.dataset_name == "s1_synthetic":
             z = gs.array([gs.cos(angle[0]), gs.sin(angle[0])])
 
@@ -57,12 +57,21 @@ def get_learned_immersion(model, config):
         z = z.to(config.device)
         return model.decode(z)
 
-    return immersion
+    def immersion_euclidean(z):
+        z = z.to(config.device)
+        return model.decode(z)
+
+    if config.model_type == 'EuclideanVAE':
+        return immersion_euclidean
+    if config.model_type == 'VonMisesVAE':
+        return immersion_vm
+    else:
+        raise InvalidConfigError(f"Unknown model type: {config.model_type}")
 
 
 def get_true_immersion(config):
     rot = torch.eye(n=config.embedding_dim)
-    if config.synthetic_rotation == "random":
+    if config.rotation == "random":
         rot = SpecialOrthogonal(n=config.embedding_dim).random_point()
 
     if config.dataset_name == "s1_synthetic":
@@ -100,48 +109,98 @@ def get_z_grid(config, n_grid_points=2000):
         thetas = gs.linspace(0.01, gs.pi, int(np.sqrt(n_grid_points)))
         phis = gs.linspace(0, 2 * gs.pi, int(np.sqrt(n_grid_points)))
         return torch.cartesian_prod(thetas, phis)
+    elif config.dataset_name == "t2_synthetic":
+        thetas = gs.linspace(0, 2 * gs.pi, int(np.sqrt(n_grid_points)))
+        phis = gs.linspace(0, 2 * gs.pi, int(np.sqrt(n_grid_points)))
+        z_grid = torch.cartesian_prod(thetas, phis)
     else:
         raise InvalidConfigError(f"Unknown dataset: {config.dataset_name}")
+    return z_grid
+
+
+def get_latent_vectors(config, model, test_loader, n_grid_points=2000):
+    model.eval()
+    latent_vectors = []
+    labels = []
+    device = config.device
+    with torch.no_grad():
+        for x, label in test_loader:
+            x = x.to(device)
+            z, _, _ = model.forward(x)
+            latent_vectors.append(z.cpu())
+            labels.append(label)
+
+    labels = torch.cat(labels)
+    latent_vectors = torch.cat(latent_vectors, dim=0)
+    return latent_vectors, labels
 
 
 def _compute_curvature(z_grid, immersion, dim, embedding_dim):
-    manifold = NeuralManifoldIntrinsic(dim, embedding_dim, immersion, equip=False)
-    manifold.equip_with_metric(PullbackMetric)
-
+    """Compute mean curvature vector and its norm at each point."""
+    # neural_metric = PullbackMetric(
+    #     dim=dim, embedding_dim=embedding_dim, immersion=immersion
+    # )
+    neural_manifold = NeuralManifoldIntrinsic(
+        dim, embedding_dim, immersion, equip=False
+    )
+    neural_manifold.equip_with_metric(PullbackMetric)
+    torch.unsqueeze(z_grid[0], dim=0)
     if dim == 1:
         curv = gs.zeros(len(z_grid), embedding_dim)
         for i_z, z in enumerate(z_grid):
-            curv[i_z, :] = manifold.metric.mean_curvature_vector(torch.unsqueeze(z, dim=0))
-        geodesic_dist = gs.zeros(len(z_grid))
+            z = torch.unsqueeze(z, dim=0)
+            curv[i_z, :] = neural_manifold.metric.mean_curvature_vector(z)
     else:
         curv = torch.full((len(z_grid), embedding_dim), torch.nan)
         for i, z_i in enumerate(z_grid):
             try:
-                curv[i, :] = manifold.metric.mean_curvature_vector(z_i)
+                curv[i, :] = neural_manifold.metric.mean_curvature_vector(z_i)
             except Exception as e:
-                print(f"Error at i={i}: {e}")
-        geodesic_dist = gs.zeros(len(z_grid))
+                print(f"An error occurred for i={i}: {e}")
+                print(neural_manifold.metric.metric_matrix(z_i))
+    curv_norm = torch.linalg.norm(curv, dim=1, keepdim=True).squeeze()
 
-    curv_norm = torch.linalg.norm(curv, dim=1)
-    return geodesic_dist, curv, curv_norm
+    return curv, curv_norm
 
 
-def compute_curvature_learned(model, config, embedding_dim, n_grid_points=2000):
-    z_grid = get_z_grid(config, n_grid_points)
+def compute_curvature_learned(model, test_loader, config, n_grid_points=2000):
+    if config.model_type == 'EuclideanVAE':
+        z_grid, labels = get_latent_vectors(config, model, test_loader, n_grid_points)
+    elif config.model_type == 'VonMisesVAE':
+        z_grid = get_z_grid(config, n_grid_points)
+        labels = None
+    else:
+        raise InvalidConfigError(f"Unknown model type: {config.model_type}")
     immersion = get_learned_immersion(model, config)
-    start = time.time()
-    result = _compute_curvature(z_grid, immersion, config.manifold_dim, embedding_dim)
-    print(f"Computation time: {time.time() - start:.3f} s")
-    return z_grid, *result
+    result = _compute_curvature(z_grid, immersion, z_grid.shape[1], config.embedding_dim)
+    return z_grid, labels, *result  # *result = curv, curv_norm
 
 
 def compute_curvature_true(config, n_grid_points=2000):
     z_grid = get_z_grid(config, n_grid_points)
     immersion = get_true_immersion(config)
+    if config.dataset_name == "s1_synthetic":
+        manifold_dim = 1
+    elif config.dataset_name == "s2_synthetic" or config.dataset_name == "t2_synthetic":
+        manifold_dim = 2
+    else:
+        raise InvalidConfigError(f"Unknown dataset: {config.dataset_name}")
     start = time.time()
-    result = _compute_curvature(z_grid, immersion, config.manifold_dim, config.embedding_dim)
+    result = _compute_curvature(z_grid, immersion, manifold_dim, config.embedding_dim)
     print(f"Computation time: {time.time() - start:.3f} s")
     return z_grid, *result
+
+
+def compute_curvature_true_latents(config, angles):
+    immersion = get_true_immersion(config)
+    if config.dataset_name == "s1_synthetic":
+        manifold_dim = 1
+    elif config.dataset_name == "s2_synthetic" or config.dataset_name == "t2_synthetic":
+        manifold_dim = 2
+    else:
+        raise InvalidConfigError(f"Unknown dataset: {config.dataset_name}")
+    result = _compute_curvature(angles, immersion, manifold_dim, config.embedding_dim)
+    return angles, *result
 
 
 def _compute_curvature_error_s1(thetas, learned, true):

@@ -1,12 +1,12 @@
-import torch
-import numpy as np
 import matplotlib as mpl
-import matplotlib.pyplot as plt
-from sklearn.decomposition import PCA
 from random import sample
-from .evaluation import compute_curvature_learned, compute_curvature_true, compute_curvature_error
+from .evaluation import compute_curvature_learned, compute_curvature_true, compute_curvature_error, compute_curvature_true_latents
 import pandas as pd
 import plotly.graph_objects as go
+import torch
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.decomposition import PCA
 
 
 def show_training_history(history: dict) -> None:
@@ -17,7 +17,7 @@ def show_training_history(history: dict) -> None:
         history: A dictionary containing the training history.
     """
 
-    _, axs = plt.subplots(figsize=(14, 4), ncols=3)
+    _, axs = plt.subplots(figsize=(14, 4), ncols=4)
 
     axs[0].plot(history['train_loss'], color='orange', label='train')
     axs[0].plot(history['test_loss'], color='blue', label='val')
@@ -30,7 +30,7 @@ def show_training_history(history: dict) -> None:
     axs[1].plot(history['test_recon_loss'], color='blue', label='val')
     axs[1].set_xlabel('epoch')
     axs[1].set_ylabel('loss')
-    axs[1].set_title('Likelihood Loss History')
+    axs[1].set_title('Recon Loss History')
     axs[1].legend()
 
     axs[2].plot(history['train_kl_loss'], color='orange', label='train')
@@ -39,6 +39,13 @@ def show_training_history(history: dict) -> None:
     axs[2].set_ylabel('loss')
     axs[2].set_title('KL Loss History')
     axs[2].legend()
+
+    axs[3].plot(history['train_topo_loss'], color='orange', label='train')
+    axs[3].plot(history['test_topo_loss'], color='blue', label='val')
+    axs[3].set_xlabel('epoch')
+    axs[3].set_ylabel('loss')
+    axs[3].set_title('Topo Loss History')
+    axs[3].legend()
 
     plt.show()
 
@@ -291,34 +298,80 @@ def plot_euclidean_latent_space(model, test_loader, device='cpu', n_samples=200)
         for x, y in test_loader:
             x = x.to(device)
             z, _, _ = model.forward(x)
-
             latent_vectors.append(z.cpu())
-            labels.extend(y.numpy())
+            labels.append(y)
 
-    latent_vectors = torch.cat(latent_vectors, dim=0).numpy()
-    labels = np.array(labels)
+    latent_vectors = torch.cat(latent_vectors, dim=0)
+    labels = torch.cat(labels, dim=0)
 
-    # Randomly select n_samples points
-    if len(latent_vectors) > n_samples:
-        indices = sample(range(len(latent_vectors)), n_samples)
-        latent_vectors = latent_vectors[indices]
-        labels = labels[indices]
+    latent_vectors = latent_vectors.numpy()
+    labels = labels.numpy()
 
-    # Apply PCA if latent space has more than 2 dimensions
-    if latent_vectors.shape[1] > 2:
+    assert latent_vectors.shape[0] == labels.shape[0], \
+        f"Mismatch: {latent_vectors.shape[0]} latent vectors vs {labels.shape[0]} labels"
+
+    n_total = latent_vectors.shape[0]
+    if n_samples > n_total:
+        print(f"Warning: n_samples ({n_samples}) > total samples ({n_total}). Using all samples.")
+        n_samples = n_total
+
+    indices = np.random.choice(n_total, size=n_samples, replace=False)
+    latent_vectors = latent_vectors[indices]
+    labels = labels[indices]
+
+    if labels.ndim > 1 and labels.shape[1] == 2:
+        colors = (labels[:, 0] + labels[:, 1]) % 360
+    else:
+        colors = labels.squeeze()
+
+    dim = latent_vectors.shape[1]
+
+    if dim == 1:
+        # 1D scatter plot
+        plt.figure(figsize=(10, 2))
+        plt.scatter(latent_vectors[:, 0], np.zeros_like(latent_vectors[:, 0]),
+                    c=colors, cmap='hsv', alpha=0.7)
+        plt.xlabel("Latent Dimension 1")
+        plt.title("1D Latent Space Visualization")
+        plt.yticks([])
+        plt.colorbar(label="Class Label")
+        plt.show()
+    elif dim == 2:
+        plt.figure(figsize=(10, 7))
+        scatter = plt.scatter(
+            latent_vectors[:, 0], latent_vectors[:, 1], c=colors, cmap='hsv', alpha=0.7
+        )
+        plt.colorbar(scatter, label="Class Label")
+        plt.title("2D Latent Space Visualization")
+        plt.xlabel("Dimension 1")
+        plt.ylabel("Dimension 2")
+        plt.show()
+    elif dim == 3:
+        fig = plt.figure(figsize=(10, 7))
+        ax = fig.add_subplot(111, projection='3d')
+        scatter = ax.scatter(
+            latent_vectors[:, 0], latent_vectors[:, 1], latent_vectors[:, 2],
+            c=colors, cmap='hsv', alpha=0.7
+        )
+        ax.set_title("3D Latent Space Visualization")
+        ax.set_xlabel("Dimension 1")
+        ax.set_ylabel("Dimension 2")
+        ax.set_zlabel("Dimension 3")
+        fig.colorbar(scatter, label="Class Label")
+        plt.show()
+    else:
+        # PCA to 2D
         pca = PCA(n_components=2)
-        latent_vectors = pca.fit_transform(latent_vectors)
-
-    # Plot the latent space
-    plt.figure(figsize=(10, 7))
-    scatter = plt.scatter(
-        latent_vectors[:, 0], latent_vectors[:, 1], c=labels, cmap='hsv', alpha=0.7
-    )
-    plt.colorbar(scatter, label="Class Label")
-    plt.title("Latent Space Visualization")
-    plt.xlabel("Dimension 1")
-    plt.ylabel("Dimension 2")
-    plt.show()
+        reduced = pca.fit_transform(latent_vectors)
+        plt.figure(figsize=(10, 7))
+        scatter = plt.scatter(
+            reduced[:, 0], reduced[:, 1], c=colors, cmap='hsv', alpha=0.7
+        )
+        plt.colorbar(scatter, label="Class Label")
+        plt.title("PCA Projection of Latent Space")
+        plt.xlabel("PC 1")
+        plt.ylabel("PC 2")
+        plt.show()
 
 
 def plot_recon_manifold(model, test_loader, device='cpu', n_samples=200):
@@ -336,15 +389,20 @@ def plot_recon_manifold(model, test_loader, device='cpu', n_samples=200):
             labels.extend(y.numpy())
 
     recon_dataset = np.concatenate(recon_dataset)
-    labels = torch.tensor(labels).numpy()
+    labels = np.array(labels)
 
     if len(recon_dataset) > n_samples:
         indices = sample(range(len(recon_dataset)), n_samples)
         recon_dataset = recon_dataset[indices]
         labels = labels[indices]
 
+    if labels.shape[1] == 2:
+        colors = (labels[:, 0] + labels[:, 1]) % 360
+    else:
+        colors = labels
+
     if recon_dataset.shape[1] == 2:
-        plt.scatter(recon_dataset[:, 0], recon_dataset[:, 1], c=labels, cmap='hsv')
+        plt.scatter(recon_dataset[:, 0], recon_dataset[:, 1], c=colors, cmap='hsv')
         plt.axis('equal')
         plt.title("Reconstructed Manifold ℝ²")
         plt.colorbar(label='Angle [0, 2π]')
@@ -353,33 +411,41 @@ def plot_recon_manifold(model, test_loader, device='cpu', n_samples=200):
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
         p = ax.scatter(recon_dataset[:, 0], recon_dataset[:, 1], recon_dataset[:, 2],
-                       c=labels, cmap='hsv')
+                       c=colors, cmap='hsv')
         fig.colorbar(p, ax=ax, label='Angle [0, 2π]')
         ax.set_title("Reconstructed Manifold in ℝ³")
         plt.show()
     else:
         proj = PCA(n_components=2).fit_transform(recon_dataset)
-        plt.scatter(proj[:, 0], proj[:, 1], c=labels, cmap='hsv')
+        plt.scatter(proj[:, 0], proj[:, 1], c=colors, cmap='hsv')
         plt.axis('equal')
         plt.title("Reconstructed Manifold projected to ℝ² via PCA")
         plt.colorbar(label='Angle [0, 2π]')
         plt.show()
 
 
-def curvature_compute_plot(config, dataset, labels, model):
+def curvature_compute_plot_vm(config, model, test_loader):
     """Compute and plot curvature results."""
+    all_data = []
+    all_labels = []
+
+    for data, labels in test_loader:
+        all_data.append(data)
+        all_labels.append(labels)
+
+    all_data = torch.cat(all_data)
+    all_labels = torch.cat(all_labels)
     # Compute
     print("Computing learned curvature...")
-    z_grid, geodesic_dist, _, curv_norms_learned = compute_curvature_learned(
+    z_grid, _, curv_norms_learned = compute_curvature_learned(
         model=model,
+        test_loader=test_loader,
         config=config,
-        embedding_dim=dataset.shape[1],
         n_grid_points=config.n_grid_points,
     )
 
     curv_norm_learned_profile = pd.DataFrame(
         {
-            "geodesic_dist": geodesic_dist,
             "curv_norm_learned": curv_norms_learned,
         }
     )
@@ -394,9 +460,7 @@ def curvature_compute_plot(config, dataset, labels, model):
     norm_val = None
     if config.dataset_name in ("s1_synthetic", "s2_synthetic", "t2_synthetic"):
         print("Computing true curvature for synthetic data...")
-        z_grid, geodesic_dist, _, curv_norms_true = compute_curvature_true(
-            config, n_grid_points=config.n_grid_points
-        )
+        z_grid, _, curv_norms_true = compute_curvature_true(config, n_grid_points=config.n_grid_points)
         print("Computing curvature error for synthetic data...")
 
         curvature_error = compute_curvature_error(
@@ -406,7 +470,6 @@ def curvature_compute_plot(config, dataset, labels, model):
 
         curv_norm_true_profile = pd.DataFrame(
             {
-                "geodesic_dist": geodesic_dist,
                 "curv_norm_true": curv_norms_true,
             }
         )
@@ -434,16 +497,61 @@ def curvature_compute_plot(config, dataset, labels, model):
             profile_type="true",
         )
 
-    if config.dataset_name in (
-            "s1_synthetic",
-            "experimental",
-            "three_place_cells_synthetic",
-    ):
+    if config.dataset_name in ("s1_synthetic", "experimental", "three_place_cells_synthetic",):
         fig_neural_manifold_learned = plot_neural_manifold_learned(
             curv_norm_learned_profile=curv_norm_learned_profile,
             config=config,
-            labels=labels,
+            labels=all_labels,
         )
+
+
+def curvature_compute_plot_euclidean(config, model, test_loader):
+    latent_vectors, labels, _, curv_norms_learned = compute_curvature_learned(
+        model=model,
+        test_loader=test_loader,
+        config=config,
+        n_grid_points=config.n_grid_points,
+    )
+    z_grid, _, curv_norms_true_grid = compute_curvature_true(config, n_grid_points=config.n_grid_points)
+    labels, _, curv_norms_true_latents = compute_curvature_true_latents(config, labels.squeeze())
+
+    fig, axs = plt.subplots(2, 2, figsize=(20, 12))
+
+    # Top-left: learned curvature
+    sc1 = axs[0, 0].scatter(latent_vectors[:, 0], latent_vectors[:, 1], c=curv_norms_learned, cmap='hsv')
+    fig.colorbar(sc1, ax=axs[0, 0], label='Curvature')
+    axs[0, 0].set_title("Learned curvature heatmap")
+    axs[0, 0].set_xlabel("z₁")
+    axs[0, 0].set_ylabel("z₂")
+
+    # Top-right: true curvature on latent points
+    sc2 = axs[0, 1].scatter(latent_vectors[:, 0], latent_vectors[:, 1], c=curv_norms_true_latents, cmap='hsv')
+    fig.colorbar(sc2, ax=axs[0, 1], label='Curvature')
+    axs[0, 1].set_title("True curvature heatmap")
+    axs[0, 1].set_xlabel("z₁")
+    axs[0, 1].set_ylabel("z₂")
+
+    # Bottom-left: curvature over angle
+    axs[1, 0].plot(z_grid, curv_norms_true_grid, linewidth=2)
+    axs[1, 0].set_xlabel("angle", fontsize=14)
+    axs[1, 0].set_ylabel("mean curvature norm", fontsize=14)
+    axs[1, 0].set_title("Curvature vs angle")
+
+    # Bottom-right: polar plot
+    polar_ax = fig.add_subplot(2, 2, 4, projection="polar")
+    polar_ax.scatter(
+        z_grid,
+        np.ones_like(z_grid),
+        c=curv_norms_true_grid,
+        s=100,
+        cmap="hsv",
+        linewidths=0,
+    )
+    polar_ax.set_yticks([])
+    polar_ax.set_title("Polar curvature")
+
+    plt.tight_layout()
+    plt.show()
 
 
 def plot_curvature_norms(angles, curvature_norms, config, norm_val, profile_type):

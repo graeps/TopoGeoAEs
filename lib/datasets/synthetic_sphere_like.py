@@ -14,7 +14,7 @@ from geomstats.geometry.special_orthogonal import SpecialOrthogonal  # noqa: E40
 
 
 def load_s1_synthetic(
-        synthetic_rotation,
+        rotation,
         n_times=1500,
         radius=1.0,
         n_wiggles=6,
@@ -25,7 +25,7 @@ def load_s1_synthetic(
 ):
     """Generate noisy S¹-immersed data in R^embedding_dim."""
     rot = torch.eye(embedding_dim)
-    if synthetic_rotation == "random":
+    if rotation == "random":
         rot = SpecialOrthogonal(n=embedding_dim).random_point()
 
     immersion = get_s1_synthetic_immersion(
@@ -50,8 +50,65 @@ def load_s1_synthetic(
     return noisy_data, labels
 
 
+def load_s1_in_s1_synthetic(
+        rotation,
+        n_times=1500,
+        radius_outer=3.0,
+        radius_inner=1.0,
+        n_wiggles=6,
+        geodesic_distortion_amp=0.4,
+        embedding_dim=10,
+        noise_var=0.01,
+        geodesic_distortion_func="wiggles",
+):
+    """Generate noisy S¹-immersed data in R^embedding_dim."""
+    rot = torch.eye(embedding_dim)
+    if rotation == "random":
+        rot = SpecialOrthogonal(n=embedding_dim).random_point()
+
+    immersion_outer = get_s1_synthetic_immersion(
+        geodesic_distortion_func=geodesic_distortion_func,
+        radius=radius_outer,
+        n_wiggles=n_wiggles,
+        geodesic_distortion_amp=geodesic_distortion_amp,
+        embedding_dim=embedding_dim,
+        rot=rot,
+    )
+
+    immersion_inner = get_s1_synthetic_immersion(
+        geodesic_distortion_func=geodesic_distortion_func,
+        radius=radius_inner,
+        n_wiggles=n_wiggles,
+        geodesic_distortion_amp=geodesic_distortion_amp,
+        embedding_dim=embedding_dim,
+        rot=rot,
+    )
+
+    angles_outer = gs.linspace(0, 2 * gs.pi, n_times)
+    angles_inner = gs.linspace(0, 2 * gs.pi, n_times)
+    data_outer = torch.stack([immersion_outer(angle) for angle in angles_outer])
+    data_inner = torch.stack([immersion_inner(angle) for angle in angles_inner])
+
+    noise = MultivariateNormal(
+        loc=torch.zeros(embedding_dim),
+        covariance_matrix=noise_var * torch.eye(embedding_dim),
+    ).sample((n_times,))
+
+    noisy_data_outer = data_outer + radius_outer * noise
+    noisy_data_inner = data_inner + radius_inner * noise
+
+    noisy_data = torch.cat([noisy_data_outer, noisy_data_inner], dim=0)
+
+    labels = pd.DataFrame({
+        "circle_id": [0] * n_times + [1] * n_times,
+        "angles": torch.cat([angles_outer, angles_inner]).numpy()
+    })
+
+    return noisy_data, labels
+
+
 def load_s2_synthetic(
-        synthetic_rotation,
+        rotation,
         n_times,
         radius,
         geodesic_distortion_amp,
@@ -60,7 +117,7 @@ def load_s2_synthetic(
 ):
     """Generate noisy S²-immersed data in R^embedding_dim."""
     rot = torch.eye(embedding_dim)
-    if synthetic_rotation == "random":
+    if rotation == "random":
         rot = SpecialOrthogonal(n=embedding_dim).random_point()
 
     immersion = get_s2_synthetic_immersion(radius, geodesic_distortion_amp, embedding_dim, rot)
@@ -83,7 +140,7 @@ def load_s2_synthetic(
 
 
 def load_t2_synthetic(
-        synthetic_rotation,
+        rotation,
         n_times,
         major_radius,
         minor_radius,
@@ -93,7 +150,7 @@ def load_t2_synthetic(
 ):
     """Generate noisy T²-immersed data in R^embedding_dim."""
     rot = torch.eye(embedding_dim)
-    if synthetic_rotation == "random":
+    if rotation == "random":
         rot = SpecialOrthogonal(n=embedding_dim).random_point()
 
     immersion = get_t2_synthetic_immersion(
@@ -148,7 +205,7 @@ def get_s1_synthetic_immersion(
         Function mapping angle ∈ [0, 2π] to ℝ^embedding_dim.
     """
 
-    def synth_immersion(angle: float) -> torch.Tensor:
+    def immersion(angle: float) -> torch.Tensor:
         if geodesic_distortion_func == "wiggles":
             amp = radius * (1 + geodesic_distortion_amp * gs.cos(n_wiggles * angle))
         elif geodesic_distortion_func == "bump":
@@ -167,7 +224,7 @@ def get_s1_synthetic_immersion(
 
         return gs.einsum("ij,j->i", rot, base_point)
 
-    return synth_immersion
+    return immersion
 
 
 def get_s2_synthetic_immersion(radius, geodesic_distortion_amp, embedding_dim, rot):
