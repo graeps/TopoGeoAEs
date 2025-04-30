@@ -57,9 +57,6 @@ def load_synthetic_ds(config):
     else:
         raise InvalidConfigError(f"Unknown dataset: {config['dataset_name']}")
 
-    if config.plot_dataset:
-        plot_dataset(dataset)
-
     dataset = TensorDataset(dataset, torch.tensor(labels.values).float())
 
     train_size = int(0.9 * len(dataset))
@@ -70,26 +67,6 @@ def load_synthetic_ds(config):
     test_loader = DataLoader(test_dataset, batch_size=config.batch_size, shuffle=False)
 
     return train_loader, test_loader
-
-
-def plot_dataset(dataset):
-    if dataset.shape[1] == 2:
-        plt.plot(dataset[:, 0], dataset[:, 1])
-        plt.axis('equal')
-        plt.title("Noisy S¹ in ℝ²")
-        plt.show()
-    elif dataset.shape[1] == 3:
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        ax.plot(dataset[:, 0], dataset[:, 1], dataset[:, 2])
-        ax.set_title("Noisy S¹ in ℝ³")
-        plt.show()
-    else:
-        proj = PCA(n_components=2).fit_transform(dataset.numpy())
-        plt.plot(proj[:, 0], proj[:, 1])
-        plt.axis('equal')
-        plt.title("Noisy S¹ projected to ℝ² via PCA")
-        plt.show()
 
 
 class InvalidConfigError(Exception):

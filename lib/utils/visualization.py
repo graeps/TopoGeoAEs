@@ -1,6 +1,7 @@
 import matplotlib as mpl
 from random import sample
-from .evaluation import compute_curvature_learned, compute_curvature_true, compute_curvature_error, compute_curvature_true_latents
+from .evaluation import compute_curvature_learned, compute_curvature_true, compute_curvature_error, \
+    compute_curvature_true_latents
 import pandas as pd
 import plotly.graph_objects as go
 import torch
@@ -408,7 +409,7 @@ def plot_recon_manifold(model, test_loader, device='cpu', n_samples=200):
         plt.colorbar(label='Angle [0, 2π]')
         plt.show()
     elif recon_dataset.shape[1] == 3:
-        fig = plt.figure()
+        fig = plt.figure(figsize=(10, 7))
         ax = fig.add_subplot(111, projection='3d')
         p = ax.scatter(recon_dataset[:, 0], recon_dataset[:, 1], recon_dataset[:, 2],
                        c=colors, cmap='hsv')
@@ -424,6 +425,129 @@ def plot_recon_manifold(model, test_loader, device='cpu', n_samples=200):
         plt.show()
 
 
+def plot_dataset(test_loader, device='cpu'):
+    dataset = []
+    for x, _ in test_loader:
+        dataset.append(x.to(device))
+    dataset = torch.cat(dataset, dim=0)
+
+    if dataset.shape[1] == 2:
+        plt.scatter(dataset[:, 0].cpu(), dataset[:, 1].cpu(), s=1)
+        plt.axis('equal')
+        plt.title("Noisy S¹ in ℝ²")
+        plt.show()
+    elif dataset.shape[1] == 3:
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        ax.scatter(dataset[:, 0].cpu(), dataset[:, 1].cpu(), dataset[:, 2].cpu(), s=1)
+        ax.set_title("Noisy S¹ in ℝ³")
+        plt.show()
+    else:
+        proj = PCA(n_components=2).fit_transform(dataset.cpu().numpy())
+        plt.scatter(proj[:, 0], proj[:, 1], s=1)
+        plt.axis('equal')
+        plt.title("Noisy S¹ projected to ℝ² via PCA")
+        plt.show()
+
+
+def plot_data_latents_recon(model, test_loader, device='cpu', n_samples=200):
+    model.eval()
+    model.to(device)
+
+    # Gather original data, latent vectors, reconstructions, and labels
+    dataset = []
+    latent_vectors = []
+    recon_dataset = []
+    labels = []
+
+    with torch.no_grad():
+        for x, y in test_loader:
+            x = x.to(device)
+            z, x_recon, _ = model(x)
+
+            dataset.append(x.cpu())
+            latent_vectors.append(z.cpu())
+            recon_dataset.append(x_recon.cpu())
+            labels.append(y)
+
+    dataset = torch.cat(dataset, dim=0).numpy()
+    latent_vectors = torch.cat(latent_vectors, dim=0).numpy()
+    recon_dataset = torch.cat(recon_dataset, dim=0).numpy()
+    labels = torch.cat(labels, dim=0).numpy()
+
+    # Downsample
+    n_total = latent_vectors.shape[0]
+    if n_samples > n_total:
+        n_samples = n_total
+    indices = np.random.choice(n_total, size=n_samples, replace=False)
+
+    dataset = dataset[indices]
+    latent_vectors = latent_vectors[indices]
+    recon_dataset = recon_dataset[indices]
+    labels = labels[indices]
+
+    if labels.ndim > 1 and labels.shape[1] == 2:
+        colors = (labels[:, 0] + labels[:, 1]) % 360
+    else:
+        colors = labels.squeeze()
+
+    fig = plt.figure(figsize=(18, 5))
+
+    # Dataset plot
+    ax1 = fig.add_subplot(1, 3, 1, projection='3d' if dataset.shape[1] == 3 else None)
+    if dataset.shape[1] == 2:
+        ax1.scatter(dataset[:, 0], dataset[:, 1], s=1)
+        ax1.set_title("Noisy S¹ in ℝ²")
+    elif dataset.shape[1] == 3:
+        ax1.scatter(dataset[:, 0], dataset[:, 1], dataset[:, 2], s=1)
+        ax1.set_title("Noisy S¹ in ℝ³")
+    else:
+        proj = PCA(n_components=2).fit_transform(dataset)
+        ax1.scatter(proj[:, 0], proj[:, 1], s=1)
+        ax1.set_title("Noisy S¹ projected to ℝ² via PCA")
+    ax1.axis('equal')
+
+    # Latent space plot
+    ax2 = fig.add_subplot(1, 3, 2, projection='3d' if latent_vectors.shape[1] == 3 else None)
+    if latent_vectors.shape[1] == 1:
+        ax2 = fig.add_subplot(1, 3, 2)
+        ax2.scatter(latent_vectors[:, 0], np.zeros_like(latent_vectors[:, 0]), c=colors, cmap='hsv', alpha=0.7)
+        ax2.set_title("1D Latent Space")
+        ax2.set_yticks([])
+    elif latent_vectors.shape[1] == 2:
+        ax2.scatter(latent_vectors[:, 0], latent_vectors[:, 1], c=colors, cmap='hsv', alpha=0.7)
+        ax2.set_title("2D Latent Space")
+    elif latent_vectors.shape[1] == 3:
+        ax2.scatter(latent_vectors[:, 0], latent_vectors[:, 1], latent_vectors[:, 2], c=colors, cmap='hsv', alpha=0.7)
+        ax2.set_title("3D Latent Space")
+    else:
+        reduced = PCA(n_components=2).fit_transform(latent_vectors)
+        ax2 = fig.add_subplot(1, 3, 2)
+        ax2.scatter(reduced[:, 0], reduced[:, 1], c=colors, cmap='hsv', alpha=0.7)
+        ax2.set_title("Latent Space (PCA)")
+    if hasattr(ax2, 'axis'):
+        ax2.axis('equal')
+
+    # Recon manifold plot
+    ax3 = fig.add_subplot(1, 3, 3, projection='3d' if recon_dataset.shape[1] == 3 else None)
+    if recon_dataset.shape[1] == 2:
+        ax3.scatter(recon_dataset[:, 0], recon_dataset[:, 1], c=colors, cmap='hsv')
+        ax3.set_title("Reconstructed Manifold ℝ²")
+    elif recon_dataset.shape[1] == 3:
+        ax3.scatter(recon_dataset[:, 0], recon_dataset[:, 1], recon_dataset[:, 2], c=colors, cmap='hsv')
+        ax3.set_title("Reconstructed Manifold ℝ³")
+    else:
+        proj = PCA(n_components=2).fit_transform(recon_dataset)
+        ax3 = fig.add_subplot(1, 3, 3)
+        ax3.scatter(proj[:, 0], proj[:, 1], c=colors, cmap='hsv')
+        ax3.set_title("Reconstructed Manifold (PCA)")
+    if hasattr(ax3, 'axis'):
+        ax3.axis('equal')
+
+    plt.tight_layout()
+    plt.show()
+
+
 def curvature_compute_plot_vm(config, model, test_loader):
     """Compute and plot curvature results."""
     all_data = []
@@ -437,7 +561,7 @@ def curvature_compute_plot_vm(config, model, test_loader):
     all_labels = torch.cat(all_labels)
     # Compute
     print("Computing learned curvature...")
-    z_grid, _, curv_norms_learned = compute_curvature_learned(
+    z_grid, _, _, curv_norms_learned = compute_curvature_learned(
         model=model,
         test_loader=test_loader,
         config=config,
@@ -515,7 +639,7 @@ def curvature_compute_plot_euclidean(config, model, test_loader):
     z_grid, _, curv_norms_true_grid = compute_curvature_true(config, n_grid_points=config.n_grid_points)
     labels, _, curv_norms_true_latents = compute_curvature_true_latents(config, labels.squeeze())
 
-    fig, axs = plt.subplots(2, 2, figsize=(20, 12))
+    fig, axs = plt.subplots(2, 2, figsize=(10, 7))
 
     # Top-left: learned curvature
     sc1 = axs[0, 0].scatter(latent_vectors[:, 0], latent_vectors[:, 1], c=curv_norms_learned, cmap='hsv')
@@ -553,129 +677,63 @@ def curvature_compute_plot_euclidean(config, model, test_loader):
     plt.tight_layout()
     plt.show()
 
-
 def plot_curvature_norms(angles, curvature_norms, config, norm_val, profile_type):
-    fig = plt.figure(figsize=(24, 12))
+    fig = plt.figure(figsize=(8, 4))  # smaller figure
     colormap = plt.get_cmap("hsv")
+
     if norm_val is not None:
         color_norm = mpl.colors.Normalize(0.0, norm_val)
     else:
         color_norm = mpl.colors.Normalize(0.0, max(curvature_norms))
+
     if config.dataset_name == "s1_synthetic":
         ax1 = fig.add_subplot(121)
-        ax1.plot(angles, curvature_norms, linewidth=10)
-        ax1.set_xlabel("angle", fontsize=30)
-        ax1.set_ylabel("mean curvature norm", fontsize=30)
+        ax1.plot(angles, curvature_norms, linewidth=2)
+        ax1.set_xlabel("angle", fontsize=12)
+        ax1.set_ylabel("mean curvature norm", fontsize=12)
 
         ax2 = fig.add_subplot(122, projection="polar")
         sc = ax2.scatter(
             angles,
             np.ones_like(angles),
             c=curvature_norms,
-            s=400,
+            s=50,  # smaller markers
             cmap=colormap,
             norm=color_norm,
             linewidths=0,
         )
         ax2.set_yticks([])
-        ax2.set_xlabel("angle", fontsize=30)
+        ax2.set_xlabel("angle", fontsize=12)
 
-        ax1.set_title(f"{profile_type} mean curvature norm profile", fontsize=30)
-        ax2.set_title(f"{profile_type} mean curvature norm profile", fontsize=30)
+        ax1.set_title(f"{profile_type} profile", fontsize=14)
+        ax2.set_title(f"{profile_type} profile", fontsize=14)
 
-    elif config.dataset_name == "s2_synthetic":
+    elif config.dataset_name in {"s2_synthetic", "t2_synthetic"}:
         ax = fig.add_subplot(111, projection="3d")
-        x = config.radius * [np.sin(angle[0]) * np.cos(angle[1]) for angle in angles]
-        y = config.radius * [np.sin(angle[0]) * np.sin(angle[1]) for angle in angles]
-        z = config.radius * [np.cos(angle[0]) for angle in angles]
-        sc = ax.scatter3D(
-            x, y, z, s=400, c=curvature_norms, cmap="Spectral", norm=color_norm
-        )
-        plt.colorbar(sc)
-        ax.set_title(f"{profile_type} mean curvature norm profile", fontsize=30)
-    elif config.dataset_name == "t2_synthetic":
-        ax = fig.add_subplot(111, projection="3d")
-        x = [
-            (config.major_radius - config.minor_radius * np.cos(angle[0]))
-            * np.cos(angle[1])
-            for angle in angles
-        ]
-        y = [
-            (config.major_radius - config.minor_radius * np.cos(angle[0]))
-            * np.sin(angle[1])
-            for angle in angles
-        ]
-        z = [config.minor_radius * np.sin(angle[0]) for angle in angles]
-        sc = ax.scatter3D(
-            x, y, z, s=400, c=curvature_norms, cmap="Spectral", norm=color_norm
-        )
-        plt.colorbar(sc)
-        ax.set_title(f"{profile_type} mean curvature norm profile", fontsize=30)
-        ax.set_xlim(
-            -(config.major_radius + config.minor_radius),
-            (config.major_radius + config.minor_radius),
-        )
-        ax.set_ylim(
-            -(config.major_radius + config.minor_radius),
-            (config.major_radius + config.minor_radius),
-        )
-        ax.set_zlim(
-            -(config.major_radius + config.minor_radius),
-            (config.major_radius + config.minor_radius),
-        )
-        plt.axis("off")
 
-    if config.dataset_name in ["s2_synthetic", "t2_synthetic"]:
-        if norm_val is not None:
-            plotly_fig = go.Figure(
-                data=[
-                    go.Scatter3d(
-                        x=x,
-                        y=y,
-                        z=z,
-                        mode="markers",
-                        marker=dict(
-                            size=10,
-                            color=curvature_norms,  # set color to an array/list of desired values
-                            colorscale="plasma",  # choose a colorscale
-                            opacity=0.8,
-                            cmin=0,
-                            cmax=float(norm_val),
-                            colorbar=dict(title="Norm of curvature", tickmode="auto"),
-                        ),
-                    )
-                ]
-            )
-        else:
-            plotly_fig = go.Figure(
-                data=[
-                    go.Scatter3d(
-                        x=x,
-                        y=y,
-                        z=z,
-                        mode="markers",
-                        marker=dict(
-                            size=10,
-                            color=curvature_norms,  # set color to an array/list of desired values
-                            colorscale="plasma",  # choose a colorscale
-                            opacity=0.8,
-                            colorbar=dict(title="Norm of curvature", tickmode="auto"),
-                        ),
-                    )
-                ]
-            )
+        if config.dataset_name == "s2_synthetic":
+            x = config.radius * [np.sin(a[0]) * np.cos(a[1]) for a in angles]
+            y = config.radius * [np.sin(a[0]) * np.sin(a[1]) for a in angles]
+            z = config.radius * [np.cos(a[0]) for a in angles]
+        else:  # t2_synthetic
+            x = [(config.major_radius - config.minor_radius * np.cos(a[0])) * np.cos(a[1]) for a in angles]
+            y = [(config.major_radius - config.minor_radius * np.cos(a[0])) * np.sin(a[1]) for a in angles]
+            z = [config.minor_radius * np.sin(a[0]) for a in angles]
 
-        plotly_fig.update_layout(
-            scene=dict(xaxis_title="X", yaxis_title="Y", zaxis_title="Z"),
-            title=dict(text="Profile of Curvature Norm", font=dict(size=24), x=0.5),
-        )
+        sc = ax.scatter3D(x, y, z, s=50, c=curvature_norms, cmap="Spectral", norm=color_norm)
+        plt.colorbar(sc, ax=ax, shrink=0.6)
+        ax.set_title(f"{profile_type} profile", fontsize=14)
 
-        plotly_fig.update_layout(
-            scene=dict(xaxis_title="X", yaxis_title="Y", zaxis_title="Z"),
-            title=dict(text="Profile of Curvature Norm", font=dict(size=24), x=0.5),
-        )
+        if config.dataset_name == "t2_synthetic":
+            r = config.major_radius + config.minor_radius
+            ax.set_xlim(-r, r)
+            ax.set_ylim(-r, r)
+            ax.set_zlim(-r, r)
+            plt.axis("off")
 
+    plt.tight_layout()
     return fig
+
 
 
 def plot_neural_manifold_learned(curv_norm_learned_profile, config, labels):
@@ -692,7 +750,7 @@ def plot_neural_manifold_learned(curv_norm_learned_profile, config, labels):
         fig, axes = plt.subplots(
             nrows=1,
             ncols=len(stats),
-            figsize=(20, 4),
+            figsize=(10, 7),
             subplot_kw={"projection": "polar"},
         )
         for i_stat, stat_velocities in enumerate(stats):

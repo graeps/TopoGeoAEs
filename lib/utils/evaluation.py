@@ -172,7 +172,8 @@ def compute_curvature_learned(model, test_loader, config, n_grid_points=2000):
     else:
         raise InvalidConfigError(f"Unknown model type: {config.model_type}")
     immersion = get_learned_immersion(model, config)
-    result = _compute_curvature(z_grid, immersion, z_grid.shape[1], config.embedding_dim)
+    manifold_dim = z_grid.shape[1] if z_grid.ndim > 1 else 1
+    result = _compute_curvature(z_grid, immersion, manifold_dim, config.embedding_dim)
     return z_grid, labels, *result  # *result = curv, curv_norm
 
 
