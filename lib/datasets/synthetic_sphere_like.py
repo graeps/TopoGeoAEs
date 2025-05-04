@@ -174,6 +174,65 @@ def load_t2_synthetic(
     return noisy_data, labels
 
 
+def load_scrunchy_synthetic(rotation,
+                            n_times=1500,
+                            radius=1.0,
+                            n_wiggles=6,
+                            geodesic_distortion_amp=0.4,
+                            embedding_dim=10,
+                            noise_var=0.01,
+                            ):
+    rot = torch.eye(embedding_dim)
+    if rotation == "random":
+        rot = SpecialOrthogonal(n=embedding_dim).random_point()
+
+    immersion = get_scrunchy_immersion(
+        radius=radius,
+        n_wiggles=n_wiggles,
+        distortion_amp=geodesic_distortion_amp,
+        embedding_dim=embedding_dim,
+        rot=rot,
+    )
+    angles = gs.linspace(0, 2 * gs.pi, n_times)
+    data = torch.stack([immersion(angle) for angle in angles])
+
+    noise = MultivariateNormal(
+        loc=torch.zeros(embedding_dim),
+        covariance_matrix=noise_var * torch.eye(embedding_dim),
+    ).sample((n_times,))
+
+    noisy_data = data + radius * noise
+    labels = pd.DataFrame({"angles": angles})
+    return noisy_data, labels
+
+
+def load_interlocking_rings_synthetic(rotation,
+                                      n_times=1500,
+                                      radius=1.0,
+                                      embedding_dim=10,
+                                      noise_var=0.01,
+                                      ):
+    rot = torch.eye(embedding_dim)
+    if rotation == "random":
+        rot = SpecialOrthogonal(n=embedding_dim).random_point()
+    immersion = get_interlocking_rings_immersion(
+        radius=radius,
+        embedding_dim=embedding_dim,
+        rot=rot,
+    )
+    angles = gs.linspace(0, 4 * gs.pi, n_times)
+    data = torch.stack([immersion(angle) for angle in angles])
+
+    noise = MultivariateNormal(
+        loc=torch.zeros(embedding_dim),
+        covariance_matrix=noise_var * torch.eye(embedding_dim),
+    ).sample((n_times,))
+
+    noisy_data = data + radius * noise
+    labels = pd.DataFrame({"angles": angles})
+    return noisy_data, labels
+
+
 def get_s1_synthetic_immersion(
         geodesic_distortion_func,
         radius,
@@ -270,6 +329,44 @@ def get_t2_synthetic_immersion(major_radius, minor_radius, geodesic_distortion_a
         point = gs.squeeze(point, axis=-1)
         if embedding_dim > 3:
             point = gs.concatenate([point, gs.zeros(embedding_dim - 3)])
+        return gs.einsum("ij,j->i", rot, point)
+
+    return immersion
+
+
+def get_scrunchy_immersion(radius, n_wiggles, distortion_amp, embedding_dim, rot):
+    def immersion(angle):
+        x = radius * gs.cos(angle)
+        y = radius * gs.sin(angle)
+        z = distortion_amp * gs.cos(n_wiggles * angle)
+        point = gs.squeeze(gs.array([x, y, z]), axis=-1)
+        if embedding_dim > 3:
+            point = gs.concatenate([point, gs.zeros(embedding_dim - 3)])
+        return gs.einsum("ij,j->i", rot, point)
+
+    return immersion
+
+
+def get_interlocking_rings_immersion(radius, embedding_dim, rot):
+    def immersion(angle: float) -> torch.Tensor:
+        assert 0 <= angle <= 4 * gs.pi
+        if angle < 2 * gs.pi:
+            # First Ring
+            x = radius * gs.cos(angle)
+            y = radius * gs.sin(angle)
+            z = 0
+            point = gs.squeeze(gs.array([x, y, z]), axis=-1)
+
+        else:
+            # Second Ring
+            x = radius * gs.sin(angle) + radius
+            y = 0
+            z = radius * gs.cos(angle)
+            point = gs.squeeze(gs.array([x, y, z]), axis=-1)
+
+        if embedding_dim > 3:
+            point = gs.concatenate([point, gs.zeros(embedding_dim - 3)])
+
         return gs.einsum("ij,j->i", rot, point)
 
     return immersion

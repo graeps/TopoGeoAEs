@@ -3,12 +3,11 @@ import torch
 
 from ..datasets.synthetic_sphere_like import load_s1_synthetic
 from ..datasets.synthetic_sphere_like import load_s1_in_s1_synthetic
+from ..datasets.synthetic_sphere_like import load_scrunchy_synthetic
+from ..datasets.synthetic_sphere_like import load_interlocking_rings_synthetic
 from ..datasets.synthetic_sphere_like import load_s2_synthetic
 
 from ..datasets.synthetic_sphere_like import load_t2_synthetic
-
-import matplotlib.pyplot as plt
-from sklearn.decomposition import PCA
 
 
 def load_synthetic_ds(config):
@@ -34,6 +33,22 @@ def load_synthetic_ds(config):
             embedding_dim=config.embedding_dim,
             noise_var=config.noise_var,
             geodesic_distortion_func=config.geodesic_distortion_func,
+        )
+    elif config.dataset_name == "scrunchy_synthetic":
+        dataset, labels = load_scrunchy_synthetic(
+            rotation=config.rotation,
+            n_times=config.n_times,
+            radius=config.radius,
+            n_wiggles=config.n_wiggles,
+            geodesic_distortion_amp=config.geodesic_distortion_amp,
+            embedding_dim=config.embedding_dim,
+            noise_var=config.noise_var,
+        )
+    elif config.dataset_name == "interlocking_rings_synthetic":
+        dataset, labels = load_interlocking_rings_synthetic(
+            rotation=config.rotation,
+            embedding_dim=config.embedding_dim,
+            noise_var=config.noise_var,
         )
     elif config.dataset_name == "s2_synthetic":
         dataset, labels = load_s2_synthetic(

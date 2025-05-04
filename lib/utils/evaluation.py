@@ -3,6 +3,10 @@ import time
 import numpy as np
 import torch
 
+from sklearn.neighbors import NearestNeighbors
+from sklearn.decomposition import PCA
+from numpy.linalg import lstsq
+
 from geomstats.geometry.base import ImmersedSet
 from geomstats.geometry.euclidean import Euclidean
 from geomstats.geometry.pullback_metric import PullbackMetric
@@ -12,6 +16,8 @@ from ..datasets.synthetic_sphere_like import (
     get_s1_synthetic_immersion,
     get_s2_synthetic_immersion,
     get_t2_synthetic_immersion,
+    get_scrunchy_immersion,
+    get_interlocking_rings_immersion
 )
 
 os.environ["GEOMSTATS_BACKEND"] = "pytorch"
@@ -83,6 +89,20 @@ def get_true_immersion(config):
             config.embedding_dim,
             rot,
         )
+    if config.dataset_name == "scrunchy_synthetic":
+        return get_scrunchy_immersion(
+            config.radius,
+            config.n_wiggles,
+            config.geodesic_distortion_amp,
+            config.embedding_dim,
+            rot,
+        )
+    if config.dataset_name == "interlocking_rings_synthetic":
+        return get_interlocking_rings_immersion(
+            config.radius,
+            config.embedding_dim,
+            rot,
+        )
     elif config.dataset_name == "s2_synthetic":
         return get_s2_synthetic_immersion(
             config.radius,
@@ -103,8 +123,10 @@ def get_true_immersion(config):
 
 
 def get_z_grid(config, n_grid_points=2000):
-    if config.dataset_name == "s1_synthetic":
+    if config.dataset_name in {"s1_synthetic", "scrunchy_synthetic"}:
         return torch.linspace(0, 2 * gs.pi, n_grid_points)
+    elif config.dataset_name == "interlocking_rings_synthetic":
+        return torch.linspace(0, 4 * gs.pi, n_grid_points)
     elif config.dataset_name == "s2_synthetic":
         thetas = gs.linspace(0.01, gs.pi, int(np.sqrt(n_grid_points)))
         phis = gs.linspace(0, 2 * gs.pi, int(np.sqrt(n_grid_points)))
@@ -180,7 +202,7 @@ def compute_curvature_learned(model, test_loader, config, n_grid_points=2000):
 def compute_curvature_true(config, n_grid_points=2000):
     z_grid = get_z_grid(config, n_grid_points)
     immersion = get_true_immersion(config)
-    if config.dataset_name == "s1_synthetic":
+    if config.dataset_name in {"s1_synthetic", "interlocking_rings_synthetic", "scrunchy_synthetic"}:
         manifold_dim = 1
     elif config.dataset_name == "s2_synthetic" or config.dataset_name == "t2_synthetic":
         manifold_dim = 2
@@ -194,7 +216,7 @@ def compute_curvature_true(config, n_grid_points=2000):
 
 def compute_curvature_true_latents(config, angles):
     immersion = get_true_immersion(config)
-    if config.dataset_name == "s1_synthetic":
+    if config.dataset_name in {"s1_synthetic", "interlocking_rings_synthetic", "scrunchy_synthetic"}:
         manifold_dim = 1
     elif config.dataset_name == "s2_synthetic" or config.dataset_name == "t2_synthetic":
         manifold_dim = 2
@@ -234,6 +256,52 @@ def compute_curvature_error(z_grid, learned, true, config):
         return _compute_curvature_error_s2(z_grid[:, 0], z_grid[:, 1], learned, true)
     else:
         raise InvalidConfigError(f"Unknown dataset: {config.dataset_name}")
+
+
+# Empiric curvature estimate
+def estimate_curvature_1d_quadric(points, k=20):
+    n, d = points.shape
+    nbrs = NearestNeighbors(n_neighbors=k).fit(points)
+    _, indices = nbrs.kneighbors(points)
+    curvatures = []
+    for i in range(n):
+        neighbors = points[indices[i]]
+        centroid = neighbors.mean(axis=0)
+        centered = neighbors - centroid
+        pca = PCA(n_components=2).fit(centered)
+        tangent = pca.components_[0]
+        normal = pca.components_[1]
+        coords = centered @ tangent
+        heights = centered @ normal
+        A = np.column_stack([coords ** 2, coords, np.ones_like(coords)])
+        coeffs, _, _, _ = lstsq(A, heights, rcond=None)
+        curvature = abs(2 * coeffs[0])
+        curvatures.append(curvature)
+    return np.array(curvatures)
+
+
+def estimate_curvature_2d_quadric(points, k=30):
+    n, d = points.shape
+    nbrs = NearestNeighbors(n_neighbors=k).fit(points)
+    _, indices = nbrs.kneighbors(points)
+    curvatures = []
+    for i in range(n):
+        neighbors = points[indices[i]]
+        centroid = neighbors.mean(axis=0)
+        centered = neighbors - centroid
+        pca = PCA(n_components=3).fit(centered)
+        normal = pca.components_[-1]
+        tangent = pca.components_[:2]
+        local_coords = centered @ tangent.T
+        heights = centered @ normal
+        X, Y = local_coords[:, 0], local_coords[:, 1]
+        A = np.column_stack([X ** 2, Y ** 2, X * Y, X, Y, np.ones_like(X)])
+        coeffs, _, _, _ = lstsq(A, heights, rcond=None)
+        a, b, c = coeffs[0], coeffs[1], coeffs[2]
+        II = np.array([[2 * a, c], [c, 2 * b]])
+        H = 0.5 * np.trace(II)
+        curvatures.append(abs(H))
+    return np.array(curvatures)
 
 
 class InvalidConfigError(Exception):
