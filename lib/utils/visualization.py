@@ -849,8 +849,8 @@ def plot_empiric_curvature(config, model):
 
     plt.plot(angles, curvature_inputs, label='Input Curvature', color='tab:blue', linewidth=1.5, alpha=0.7)
     plt.plot(angles, curvature_true, label='True Curvature', color='tab:green', linewidth=1.5, alpha=0.5)
-    #plt.plot(angles, curvature_latents, label='Latent Curvature', color='tab:orange', linewidth=1, alpha=0.7)
-    #plt.plot(angles, curvature_recons, label='Reconstructed Curvature', color='tab:red', linewidth=1, alpha=0.7)
+    plt.plot(angles, curvature_latents, label='Latent Curvature', color='tab:orange', linewidth=1, alpha=0.7)
+    plt.plot(angles, curvature_recons, label='Reconstructed Curvature', color='tab:red', linewidth=1, alpha=0.7)
 
     plt.xlabel('Angle (radians)')
     plt.ylabel('Curvature')

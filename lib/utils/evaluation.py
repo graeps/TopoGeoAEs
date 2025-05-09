@@ -325,7 +325,7 @@ def compute_curvature_error(z_grid, learned, true, config):
 
 
 # Empiric curvature estimate
-def compute_empiric_curvature(config, model, k=30):
+def compute_empiric_curvature(config, model, k=160):
     recons, latent_vectors, true_data, labels = get_vectors(config, model)
     curvature_inputs = estimate_curvature_1d_quadric(true_data, k)
     curvature_latents = estimate_curvature_1d_quadric(latent_vectors, k)
