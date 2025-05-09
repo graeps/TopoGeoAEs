@@ -1,13 +1,16 @@
 import matplotlib as mpl
 from random import sample
-from .evaluation import compute_curvature_learned, compute_curvature_true, compute_curvature_error, \
-    compute_curvature_true_latents, estimate_curvature_1d_quadric, estimate_curvature_2d_quadric
 import pandas as pd
-import plotly.graph_objects as go
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
+
+from .evaluation import compute_curvature_learned, compute_curvature_true, compute_curvature_error, \
+    compute_curvature_true_latents, estimate_curvature_1d_quadric, estimate_curvature_2d_quadric, \
+    compute_empiric_curvature
+from ..datasets.synthetic_sphere_like import get_s1_synthetic_immersion, get_scrunchy_immersion, \
+    get_interlocking_rings_immersion
 
 
 def show_training_history(history: dict) -> None:
@@ -511,19 +514,20 @@ def plot_data_latents_recon(model, test_loader, device='cpu', n_samples=200):
     ax2 = fig.add_subplot(1, 3, 2, projection='3d' if latent_vectors.shape[1] == 3 else None)
     if latent_vectors.shape[1] == 1:
         ax2 = fig.add_subplot(1, 3, 2)
-        ax2.scatter(latent_vectors[:, 0], np.zeros_like(latent_vectors[:, 0]), c=colors, cmap='hsv', alpha=0.7)
+        ax2.scatter(latent_vectors[:, 0], np.zeros_like(latent_vectors[:, 0]), c=colors, cmap='hsv', alpha=0.7, s=1)
         ax2.set_title("1D Latent Space")
         ax2.set_yticks([])
     elif latent_vectors.shape[1] == 2:
-        ax2.scatter(latent_vectors[:, 0], latent_vectors[:, 1], c=colors, cmap='hsv', alpha=0.7)
+        ax2.scatter(latent_vectors[:, 0], latent_vectors[:, 1], c=colors, cmap='hsv', alpha=0.7, s=1)
         ax2.set_title("2D Latent Space")
     elif latent_vectors.shape[1] == 3:
-        ax2.scatter(latent_vectors[:, 0], latent_vectors[:, 1], latent_vectors[:, 2], c=colors, cmap='hsv', alpha=0.7)
+        ax2.scatter(latent_vectors[:, 0], latent_vectors[:, 1], latent_vectors[:, 2], c=colors, cmap='hsv', alpha=0.7,
+                    s=1)
         ax2.set_title("3D Latent Space")
     else:
         reduced = PCA(n_components=2).fit_transform(latent_vectors)
         ax2 = fig.add_subplot(1, 3, 2)
-        ax2.scatter(reduced[:, 0], reduced[:, 1], c=colors, cmap='hsv', alpha=0.7)
+        ax2.scatter(reduced[:, 0], reduced[:, 1], c=colors, cmap='hsv', alpha=0.7, s=1)
         ax2.set_title("Latent Space (PCA)")
     if hasattr(ax2, 'axis'):
         ax2.axis('equal')
@@ -531,15 +535,15 @@ def plot_data_latents_recon(model, test_loader, device='cpu', n_samples=200):
     # Recon manifold plot
     ax3 = fig.add_subplot(1, 3, 3, projection='3d' if recon_dataset.shape[1] == 3 else None)
     if recon_dataset.shape[1] == 2:
-        ax3.scatter(recon_dataset[:, 0], recon_dataset[:, 1], c=colors, cmap='hsv')
+        ax3.scatter(recon_dataset[:, 0], recon_dataset[:, 1], c=colors, cmap='hsv', s=1)
         ax3.set_title("Reconstructed Manifold ℝ²")
     elif recon_dataset.shape[1] == 3:
-        ax3.scatter(recon_dataset[:, 0], recon_dataset[:, 1], recon_dataset[:, 2], c=colors, cmap='hsv')
+        ax3.scatter(recon_dataset[:, 0], recon_dataset[:, 1], recon_dataset[:, 2], c=colors, cmap='hsv', s=1)
         ax3.set_title("Reconstructed Manifold ℝ³")
     else:
         proj = PCA(n_components=2).fit_transform(recon_dataset)
         ax3 = fig.add_subplot(1, 3, 3)
-        ax3.scatter(proj[:, 0], proj[:, 1], c=colors, cmap='hsv')
+        ax3.scatter(proj[:, 0], proj[:, 1], c=colors, cmap='hsv', s=1)
         ax3.set_title("Reconstructed Manifold (PCA)")
     if hasattr(ax3, 'axis'):
         ax3.axis('equal')
@@ -629,10 +633,9 @@ def curvature_compute_plot_vm(config, model, test_loader):
         )
 
 
-def curvature_compute_plot_euclidean(config, model, test_loader):
+def curvature_compute_plot_euclidean(config, model):
     latent_vectors, labels, _, curv_norms_learned = compute_curvature_learned(
         model=model,
-        test_loader=test_loader,
         config=config,
         n_grid_points=config.n_grid_points,
     )
@@ -642,14 +645,14 @@ def curvature_compute_plot_euclidean(config, model, test_loader):
     fig, axs = plt.subplots(2, 2, figsize=(10, 7))
 
     # Top-left: learned curvature
-    sc1 = axs[0, 0].scatter(latent_vectors[:, 0], latent_vectors[:, 1], c=curv_norms_learned, cmap='hsv')
+    sc1 = axs[0, 0].scatter(latent_vectors[:, 0], latent_vectors[:, 1], c=curv_norms_learned, cmap='hsv', s=2)
     fig.colorbar(sc1, ax=axs[0, 0], label='Curvature')
     axs[0, 0].set_title("Learned curvature heatmap")
     axs[0, 0].set_xlabel("z₁")
     axs[0, 0].set_ylabel("z₂")
 
     # Top-right: true curvature on latent points
-    sc2 = axs[0, 1].scatter(latent_vectors[:, 0], latent_vectors[:, 1], c=curv_norms_true_latents, cmap='hsv')
+    sc2 = axs[0, 1].scatter(latent_vectors[:, 0], latent_vectors[:, 1], c=curv_norms_true_latents, cmap='hsv', s=2)
     fig.colorbar(sc2, ax=axs[0, 1], label='Curvature')
     axs[0, 1].set_title("True curvature heatmap")
     axs[0, 1].set_xlabel("z₁")
@@ -736,7 +739,7 @@ def plot_curvature_norms(angles, curvature_norms, config, norm_val, profile_type
     return fig
 
 
-def plot_empiric_curvature(config, model, test_loader, n_samples=2000):
+def scatter_empiric_curvature(config, model, test_loader, n_samples=2000):
     model.eval()
     model.to(config.device)
 
@@ -777,10 +780,10 @@ def plot_empiric_curvature(config, model, test_loader, n_samples=2000):
     # Dataset plot
     ax1 = fig.add_subplot(1, 3, 1, projection='3d' if dataset.shape[1] == 3 else None)
     if dataset.shape[1] == 2:
-        sc1 = ax1.scatter(dataset[:, 0], dataset[:, 1], c=true_curvature,cmap='hsv', s=1)
+        sc1 = ax1.scatter(dataset[:, 0], dataset[:, 1], c=true_curvature, cmap='hsv', s=1)
         ax1.set_title("Noisy S¹ in ℝ²")
     elif dataset.shape[1] == 3:
-        sc1 = ax1.scatter(dataset[:, 0], dataset[:, 1], dataset[:, 2], c=true_curvature, cmap='hsv',s=1)
+        sc1 = ax1.scatter(dataset[:, 0], dataset[:, 1], dataset[:, 2], c=true_curvature, cmap='hsv', s=1)
         ax1.set_title("Noisy S¹ in ℝ³")
     else:
         proj = PCA(n_components=2).fit_transform(dataset)
@@ -793,19 +796,21 @@ def plot_empiric_curvature(config, model, test_loader, n_samples=2000):
     ax2 = fig.add_subplot(1, 3, 2, projection='3d' if latent_vectors.shape[1] == 3 else None)
     if latent_vectors.shape[1] == 1:
         ax2 = fig.add_subplot(1, 3, 2)
-        sc2 = ax2.scatter(latent_vectors[:, 0], np.zeros_like(latent_vectors[:, 0]), c=latent_curvature, cmap='hsv', alpha=0.7)
+        sc2 = ax2.scatter(latent_vectors[:, 0], np.zeros_like(latent_vectors[:, 0]), c=latent_curvature, cmap='hsv',
+                          alpha=0.7, s=1)
         ax2.set_title("1D Latent Space")
         ax2.set_yticks([])
     elif latent_vectors.shape[1] == 2:
-        sc2 = ax2.scatter(latent_vectors[:, 0], latent_vectors[:, 1], c=latent_curvature, cmap='hsv', alpha=0.7)
+        sc2 = ax2.scatter(latent_vectors[:, 0], latent_vectors[:, 1], c=latent_curvature, cmap='hsv', alpha=0.7, s=1)
         ax2.set_title("2D Latent Space")
     elif latent_vectors.shape[1] == 3:
-        sc2 = ax2.scatter(latent_vectors[:, 0], latent_vectors[:, 1], latent_vectors[:, 2], c=latent_curvature, cmap='hsv', alpha=0.7)
+        sc2 = ax2.scatter(latent_vectors[:, 0], latent_vectors[:, 1], latent_vectors[:, 2], c=latent_curvature,
+                          cmap='hsv', alpha=0.7)
         ax2.set_title("3D Latent Space")
     else:
         reduced = PCA(n_components=2).fit_transform(latent_vectors)
         ax2 = fig.add_subplot(1, 3, 2)
-        sc2 = ax2.scatter(reduced[:, 0], reduced[:, 1], c=latent_curvature, cmap='hsv', alpha=0.7)
+        sc2 = ax2.scatter(reduced[:, 0], reduced[:, 1], c=latent_curvature, cmap='hsv', alpha=0.7, s=1)
         ax2.set_title("Latent Space (PCA)")
     if hasattr(ax2, 'axis'):
         ax2.axis('equal')
@@ -814,15 +819,16 @@ def plot_empiric_curvature(config, model, test_loader, n_samples=2000):
     # Recon manifold plot
     ax3 = fig.add_subplot(1, 3, 3, projection='3d' if recon_dataset.shape[1] == 3 else None)
     if recon_dataset.shape[1] == 2:
-        sc3 = ax3.scatter(recon_dataset[:, 0], recon_dataset[:, 1], c=recon_curvature, cmap='hsv')
+        sc3 = ax3.scatter(recon_dataset[:, 0], recon_dataset[:, 1], c=recon_curvature, cmap='hsv', s=1)
         ax3.set_title("Reconstructed Manifold ℝ²")
     elif recon_dataset.shape[1] == 3:
-        sc3 = ax3.scatter(recon_dataset[:, 0], recon_dataset[:, 1], recon_dataset[:, 2], c=recon_curvature, cmap='hsv')
+        sc3 = ax3.scatter(recon_dataset[:, 0], recon_dataset[:, 1], recon_dataset[:, 2], c=recon_curvature, cmap='hsv',
+                          s=1)
         ax3.set_title("Reconstructed Manifold ℝ³")
     else:
         proj = PCA(n_components=2).fit_transform(recon_dataset)
         ax3 = fig.add_subplot(1, 3, 3)
-        sc3 = ax3.scatter(proj[:, 0], proj[:, 1], c=recon_curvature, cmap='hsv')
+        sc3 = ax3.scatter(proj[:, 0], proj[:, 1], c=recon_curvature, cmap='hsv', s=1)
         ax3.set_title("Reconstructed Manifold (PCA)")
     if hasattr(ax3, 'axis'):
         ax3.axis('equal')
@@ -830,6 +836,33 @@ def plot_empiric_curvature(config, model, test_loader, n_samples=2000):
 
     plt.tight_layout()
     plt.show()
+
+
+def plot_empiric_curvature(config, model):
+    # Compute empiric curvature
+    curvature_inputs, curvature_latents, curvature_recons, labels = compute_empiric_curvature(config, model)
+    angles = labels["angles"]
+    # Compute true curvature
+    _, _, curvature_true = compute_curvature_true_latents(config, angles)
+
+    plt.figure(figsize=(10, 6))
+
+    plt.plot(angles, curvature_inputs, label='Input Curvature', color='tab:blue', linewidth=1.5, alpha=0.7)
+    plt.plot(angles, curvature_true, label='True Curvature', color='tab:green', linewidth=1.5, alpha=0.5)
+    #plt.plot(angles, curvature_latents, label='Latent Curvature', color='tab:orange', linewidth=1, alpha=0.7)
+    #plt.plot(angles, curvature_recons, label='Reconstructed Curvature', color='tab:red', linewidth=1, alpha=0.7)
+
+    plt.xlabel('Angle (radians)')
+    plt.ylabel('Curvature')
+    plt.title('Curvature Comparison Across Representations')
+    plt.legend()
+    plt.grid(True, linestyle='--', alpha=0.5)
+    plt.tight_layout()
+    plt.show()
+
+
+def normalize(arr):
+    return (arr - np.min(arr)) / (np.max(arr) - np.min(arr) + 1e-8)
 
 
 def plot_neural_manifold_learned(curv_norm_learned_profile, config, labels):

@@ -2,6 +2,7 @@ import os
 import time
 import numpy as np
 import torch
+import pandas as pd
 
 from sklearn.neighbors import NearestNeighbors
 from sklearn.decomposition import PCA
@@ -17,7 +18,13 @@ from ..datasets.synthetic_sphere_like import (
     get_s2_synthetic_immersion,
     get_t2_synthetic_immersion,
     get_scrunchy_immersion,
-    get_interlocking_rings_immersion
+    get_interlocking_rings_immersion,
+    load_s1_synthetic,
+    load_s1_in_s1_synthetic,
+    load_scrunchy_synthetic,
+    load_interlocking_rings_synthetic,
+    load_s2_synthetic,
+    load_t2_synthetic,
 )
 
 os.environ["GEOMSTATS_BACKEND"] = "pytorch"
@@ -122,7 +129,7 @@ def get_true_immersion(config):
         raise InvalidConfigError(f"Unknown dataset: {config.dataset_name}")
 
 
-def get_z_grid(config, n_grid_points=2000):
+def get_z_grid(config, n_grid_points=200):
     if config.dataset_name in {"s1_synthetic", "scrunchy_synthetic"}:
         return torch.linspace(0, 2 * gs.pi, n_grid_points)
     elif config.dataset_name == "interlocking_rings_synthetic":
@@ -140,36 +147,92 @@ def get_z_grid(config, n_grid_points=2000):
     return z_grid
 
 
-def get_latent_vectors(config, model, test_loader, n_grid_points=2000):
+def get_vectors(config, model):
+    print("Forwarding data through model...")
     model.eval()
-    latent_vectors = []
-    labels = []
     device = config.device
-    with torch.no_grad():
-        for x, label in test_loader:
-            x = x.to(device)
-            z, _, _ = model.forward(x)
-            latent_vectors.append(z.cpu())
-            labels.append(label)
+    if config.dataset_name == "s1_synthetic":
+        dataset, labels = load_s1_synthetic(
+            rotation=config.rotation,
+            n_times=config.n_grid_points,
+            radius=config.radius,
+            n_wiggles=config.n_wiggles,
+            geodesic_distortion_amp=config.geodesic_distortion_amp,
+            embedding_dim=config.embedding_dim,
+            noise_var=config.noise_var,
+            geodesic_distortion_func=config.geodesic_distortion_func,
+        )
+    elif config.dataset_name == "s1_in_s1_synthetic":
+        dataset, labels = load_s1_in_s1_synthetic(
+            rotation=config.rotation,
+            n_times=config.n_grid_points,
+            radius_inner=config.radius_inner,
+            radius_outer=config.radius_outer,
+            n_wiggles=config.n_wiggles,
+            geodesic_distortion_amp=config.geodesic_distortion_amp,
+            embedding_dim=config.embedding_dim,
+            noise_var=config.noise_var,
+            geodesic_distortion_func=config.geodesic_distortion_func,
+        )
+    elif config.dataset_name == "scrunchy_synthetic":
+        dataset, labels = load_scrunchy_synthetic(
+            rotation=config.rotation,
+            n_times=config.n_grid_points,
+            radius=config.radius,
+            n_wiggles=config.n_wiggles,
+            geodesic_distortion_amp=config.geodesic_distortion_amp,
+            embedding_dim=config.embedding_dim,
+            noise_var=config.noise_var,
+        )
+    elif config.dataset_name == "interlocking_rings_synthetic":
+        dataset, labels = load_interlocking_rings_synthetic(
+            rotation=config.rotation,
+            embedding_dim=config.embedding_dim,
+            noise_var=config.noise_var,
+        )
+    elif config.dataset_name == "s2_synthetic":
+        dataset, labels = load_s2_synthetic(
+            rotation=config.rotation,
+            n_times=config.n_grid_points,
+            radius=config.radius,
+            geodesic_distortion_amp=config.geodesic_distortion_amp,
+            embedding_dim=config.embedding_dim,
+            noise_var=config.noise_var,
+        )
+    elif config.dataset_name == "t2_synthetic":
+        dataset, labels = load_t2_synthetic(
+            rotation=config.rotation,
+            n_times=config.n_grid_points,
+            major_radius=config.major_radius,
+            minor_radius=config.minor_radius,
+            geodesic_distortion_amp=config.geodesic_distortion_amp,
+            embedding_dim=config.embedding_dim,
+            noise_var=config.noise_var,
+        )
+    else:
+        raise InvalidConfigError(f"Unknown dataset: {config['dataset_name']}")
 
-    labels = torch.cat(labels)
-    latent_vectors = torch.cat(latent_vectors, dim=0)
-    return latent_vectors, labels
+    with torch.no_grad():
+        dataset = dataset.to(device)
+        z, x_recon, _ = model.forward(dataset)
+        recons = x_recon
+        latent_vectors = z
+
+    return recons, latent_vectors, dataset, labels
 
 
 def _compute_curvature(z_grid, immersion, dim, embedding_dim):
     """Compute mean curvature vector and its norm at each point."""
-    # neural_metric = PullbackMetric(
-    #     dim=dim, embedding_dim=embedding_dim, immersion=immersion
-    # )
+    print("Starting actual computation...")
     neural_manifold = NeuralManifoldIntrinsic(
         dim, embedding_dim, immersion, equip=False
     )
     neural_manifold.equip_with_metric(PullbackMetric)
-    torch.unsqueeze(z_grid[0], dim=0)
     if dim == 1:
         curv = gs.zeros(len(z_grid), embedding_dim)
         for i_z, z in enumerate(z_grid):
+            if not torch.is_tensor(z):
+                z = torch.tensor(z)
             z = torch.unsqueeze(z, dim=0)
             curv[i_z, :] = neural_manifold.metric.mean_curvature_vector(z)
     else:
@@ -181,13 +244,14 @@ def _compute_curvature(z_grid, immersion, dim, embedding_dim):
                 print(f"An error occurred for i={i}: {e}")
                 print(neural_manifold.metric.metric_matrix(z_i))
     curv_norm = torch.linalg.norm(curv, dim=1, keepdim=True).squeeze()
-
+    print("Curvature computation finished.")
     return curv, curv_norm
 
 
-def compute_curvature_learned(model, test_loader, config, n_grid_points=2000):
+def compute_curvature_learned(model, config, n_grid_points=2000):
+    print("Computing learned curvature...")
     if config.model_type == 'EuclideanVAE':
-        z_grid, labels = get_latent_vectors(config, model, test_loader, n_grid_points)
+        _, z_grid, _, labels = get_vectors(config, model)
     elif config.model_type == 'VonMisesVAE':
         z_grid = get_z_grid(config, n_grid_points)
         labels = None
@@ -200,6 +264,7 @@ def compute_curvature_learned(model, test_loader, config, n_grid_points=2000):
 
 
 def compute_curvature_true(config, n_grid_points=2000):
+    print("Computing true curvature of immersion...")
     z_grid = get_z_grid(config, n_grid_points)
     immersion = get_true_immersion(config)
     if config.dataset_name in {"s1_synthetic", "interlocking_rings_synthetic", "scrunchy_synthetic"}:
@@ -215,6 +280,7 @@ def compute_curvature_true(config, n_grid_points=2000):
 
 
 def compute_curvature_true_latents(config, angles):
+    print("Computing true curvature on latent vectors...")
     immersion = get_true_immersion(config)
     if config.dataset_name in {"s1_synthetic", "interlocking_rings_synthetic", "scrunchy_synthetic"}:
         manifold_dim = 1
@@ -259,7 +325,15 @@ def compute_curvature_error(z_grid, learned, true, config):
 
 
 # Empiric curvature estimate
-def estimate_curvature_1d_quadric(points, k=20):
+def compute_empiric_curvature(config, model, k=30):
+    recons, latent_vectors, true_data, labels = get_vectors(config, model)
+    curvature_inputs = estimate_curvature_1d_quadric(true_data, k)
+    curvature_latents = estimate_curvature_1d_quadric(latent_vectors, k)
+    curvature_recons = estimate_curvature_1d_quadric(recons, k)
+    return curvature_inputs, curvature_latents, curvature_recons, labels
+
+
+def estimate_curvature_1d_quadric(points, k=30):
     n, d = points.shape
     nbrs = NearestNeighbors(n_neighbors=k).fit(points)
     _, indices = nbrs.kneighbors(points)

@@ -40,14 +40,15 @@ def load_s1_synthetic(
     angles = gs.linspace(0, 2 * gs.pi, n_times)
     data = torch.stack([immersion(angle) for angle in angles])
 
-    noise = MultivariateNormal(
-        loc=torch.zeros(embedding_dim),
-        covariance_matrix=noise_var * torch.eye(embedding_dim),
-    ).sample((n_times,))
+    if noise_var != 0:
+        noise = MultivariateNormal(
+            loc=torch.zeros(embedding_dim),
+            covariance_matrix=noise_var * torch.eye(embedding_dim),
+        ).sample((n_times,))
+        data = data + radius * noise
 
-    noisy_data = data + radius * noise
     labels = pd.DataFrame({"angles": angles})
-    return noisy_data, labels
+    return data, labels
 
 
 def load_s1_in_s1_synthetic(
