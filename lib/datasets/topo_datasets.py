@@ -253,6 +253,8 @@ def generate_clelia_curve(n_points=5000, r=3.0, c=3.0, embedding_dim=3, translat
 def _rotate_translate(points, embedding_dim, translation=None, rotation=None):
     if embedding_dim > 3:
         points = torch.cat([points, torch.zeros(embedding_dim - 3)])
+    if rotation == "random":
+        rotation = SpecialOrthogonal(n=embedding_dim).random_point()
     if rotation is not None:
         points = points @ rotation.T
     if translation is not None:
