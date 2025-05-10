@@ -1,13 +1,11 @@
 from torch.utils.data import TensorDataset, DataLoader, random_split
 import torch
 
-from ..datasets.synthetic_sphere_like import load_s1_synthetic
-from ..datasets.synthetic_sphere_like import load_s1_in_s1_synthetic
-from ..datasets.synthetic_sphere_like import load_scrunchy_synthetic
-from ..datasets.synthetic_sphere_like import load_interlocking_rings_synthetic
-from ..datasets.synthetic_sphere_like import load_s2_synthetic
+from ..datasets.synthetic_sphere_like import load_s1_synthetic, load_s1_in_s1_synthetic, load_scrunchy_synthetic, \
+    load_interlocking_rings_synthetic, load_s2_synthetic, load_t2_synthetic
 
-from ..datasets.synthetic_sphere_like import load_t2_synthetic
+from ..datasets.topo_datasets import generate_torus, generate_sphere, generate_genus3, generate_three_manifolds, \
+    generate_nested_spheres, generate_clelia_curve, generate_entangled_tori
 
 
 def load_synthetic_ds(config):
@@ -69,6 +67,46 @@ def load_synthetic_ds(config):
             embedding_dim=config.embedding_dim,
             noise_var=config.noise_var,
         )
+    elif config.dataset_name == "tours_filled":
+        dataset, labels = generate_torus(n_points=config.n_times, R=config.major_radius, r=config.minor_radius,
+                                         filled=True, noise_var=config.noise_var, embedding_dim=config.embedding_dim,
+                                         translation=config.transloation, rotation=config.rotation)
+    elif config.dataset_name == "torus_hollowed":
+        dataset, labels = generate_torus(n_points=config.n_times, R=config.major_radius, r=config.minor_radius,
+                                         filled=False, noise_var=config.noise_var,
+                                         embedding_dim=config.embedding_dim,
+                                         translation=config.transloation, rotation=config.rotation)
+    elif config.dataset_name == "entangled_tori":
+        dataset, labels = generate_entangled_tori(n_points=config.n_times, R=config.major_radius, r=config.minor_radius,
+                                                  filled1=config.filled1, filled2=config.filled2,
+                                                  noise_var=config.noise_var, embedding_dim=config.embedding_dim,
+                                                  translation=config.translation, rotation=config.rotation)
+    elif config.dataset_name == "genus_3":
+        dataset, labels = generate_genus3(n_points=config.n_times, noise_var=config.noise_var,
+                                          embedding_dim=config.embedding_dim, translation=config.translation,
+                                          rotation=config.rotation)
+    elif config.dataset_name == "sphere_filled":
+        dataset, labels = generate_sphere(n_points=config.n_times, radius=config.radius, filled=True,
+                                          noise_var=config.noise_var, embedding_dim=config.embedding_dim,
+                                          translation=config.translation, rotation=config.rotation)
+    elif config.dataset_name == "sphere_hollowed":
+        dataset, labels = generate_sphere(n_points=config.n_times, radius=config.radius, filled=False,
+                                          noise_var=config.noise_var, embedding_dim=config.embedding_dim,
+                                          translation=config.translation, rotation=config.rotation)
+    elif config.dataset_name == "nested_spheres":
+        dataset, labels = generate_nested_spheres(n_points=config.n_times, radii=config.radii,
+                                                  noise_var=config.noise_var, embedding_dim=config.embedding_dim,
+                                                  translation=config.translation, rotation=config.rotation)
+    elif config.dataset_name == "clelia_curve":
+        dataset, labels = generate_clelia_curve(n_points=config.n_times, r=config.radius, c=config.clelia_c,
+                                                embedding_dim=config.embedding_dim, translation=config.rotation,
+                                                rotation=config.rotation)
+    elif config.dataset_name == "three_entangled_tori":
+        dataset, labels = generate_three_manifolds("entangled_tori")
+    elif config.dataset_name == "three_nested_spheres":
+        dataset, labels = generate_three_manifolds("three_nested_spheres")
+    elif config.dataset_name == "spheres":
+        dataset, labels = generate_three_manifolds("spheres")
     else:
         raise InvalidConfigError(f"Unknown dataset: {config['dataset_name']}")
 

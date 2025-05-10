@@ -1,170 +1,262 @@
 import torch
+from skimage.measure import marching_cubes
 import numpy as np
 import matplotlib.pyplot as plt
-from torch.distributions import MultivariateNormal
+from geomstats.geometry.special_orthogonal import SpecialOrthogonal  # noqa: E402
 
 
-def generate_five_blobs(n_points_per_blob=1000, centers=None, std=0.2):
-    if centers is None:
-        centers = [
-            torch.tensor([1.0, 1.0, 1.0]),
-            torch.tensor([-1.0, -1.0, 1.0]),
-            torch.tensor([1.0, -1.0, -1.0]),
-            torch.tensor([-1.0, 1.0, -1.0]),
-            torch.tensor([0.0, 0.0, 0.0])
+def generate_three_manifolds(manifold, n_points_per_manifold=1000, noise_var=0.2, embedding_dim=3, translations=None,
+                             rotations=None):
+    if translations is None:
+        translations = [
+            15 * torch.ones(embedding_dim),
+            -15 * torch.ones(embedding_dim),
+            torch.zeros(embedding_dim),
         ]
 
-    data = []
-    labels = []
+    if rotations is None:
+        rotations = [
+            SpecialOrthogonal(n=embedding_dim).random_point(),
+            SpecialOrthogonal(n=embedding_dim).random_point(),
+            SpecialOrthogonal(n=embedding_dim).random_point(),
+        ]
+    if manifold == "entangled_tori":
+        points1, labels1 = generate_entangled_tori(n_points_per_manifold, filled1=True, filled2=True,
+                                                   noise_var=noise_var,
+                                                   embedding_dim=embedding_dim, translation=translations[0],
+                                                   rotation=rotations[0])
+        points2, labels2 = generate_entangled_tori(n_points_per_manifold, filled1=True, filled2=False,
+                                                   noise_var=noise_var,
+                                                   embedding_dim=embedding_dim, translation=translations[1],
+                                                   rotation=rotations[1])
+        points3, labels3 = generate_entangled_tori(n_points_per_manifold, filled1=True, filled2=False,
+                                                   noise_var=noise_var,
+                                                   embedding_dim=embedding_dim,
+                                                   translation=translations[2], rotation=rotations[2])
 
-    for i, center in enumerate(centers):
-        # Create multivariate normal distribution
-        cov_matrix = std * torch.eye(3)
-        distribution = MultivariateNormal(loc=center, covariance_matrix=cov_matrix)
+    elif manifold == "nested_spheres":
+        points1, labels1 = generate_nested_spheres(n_points_per_manifold, noise_var=noise_var,
+                                                   embedding_dim=embedding_dim,
+                                                   translation=translations[0], rotation=rotations[0])
+        points2, labels2 = generate_nested_spheres(n_points_per_manifold, noise_var=noise_var,
+                                                   embedding_dim=embedding_dim,
+                                                   translation=translations[1], rotation=rotations[1])
+        points3, labels3 = generate_nested_spheres(n_points_per_manifold, noise_var=noise_var,
+                                                   embedding_dim=embedding_dim,
+                                                   translation=translations[2], rotation=rotations[2])
 
-        # Sample points
-        blob_points = distribution.sample((n_points_per_blob,))
+    elif manifold == "sphere":
+        points1, labels1 = generate_sphere(n_points_per_manifold, noise_var=noise_var, embedding_dim=embedding_dim,
+                                           translation=translations[0], rotation=rotations[0])
+        points2, labels2 = generate_sphere(n_points_per_manifold, noise_var=noise_var, embedding_dim=embedding_dim,
+                                           translation=translations[1], rotation=rotations[1])
+        points3, labels3 = generate_sphere(n_points_per_manifold, noise_var=noise_var, embedding_dim=embedding_dim,
+                                           translation=translations[2], rotation=rotations[2])
 
-        data.append(blob_points)
-        labels.append(torch.full((n_points_per_blob,), i))
+    else:
+        raise NotImplementedError(manifold)
 
-    data = torch.cat(data, dim=0)
-    labels = torch.cat(labels, dim=0)
+    data = torch.cat((points1, points2, points3), dim=0)
+    labels = torch.cat((labels1, labels2, labels3), dim=0)
 
     return data, labels
 
 
-def generate_filled_torus(n_points=5000, R=3.0, r=1.0):
-    # Generate random points inside a filled torus
-    points = torch.zeros((n_points, 3))
+def generate_torus(n_points=5000, R=5.0, r=1.0, filled=False, noise_var=0.01, embedding_dim=3, translation=None,
+                   rotation=None):
+    if filled:
+        theta = 2 * torch.pi * torch.rand(n_points)
+        phi = 2 * torch.pi * torch.rand(n_points)
+        rho = r * torch.sqrt(torch.rand(n_points))
 
-    # Random angle around the ring
-    theta = torch.linspace(0, 2 * np.pi, n_points)
+        x = (R + rho * torch.cos(phi)) * torch.cos(theta)
+        y = (R + rho * torch.cos(phi)) * torch.sin(theta)
+        z = rho * torch.sin(phi)
+        angles = torch.stack((theta, phi, rho), dim=1)
 
-    # Random radius inside the tube (using square root for uniform distribution in area)
-    rho = torch.linspace(0, 1, n_points) * r
+    else:
+        theta = 2 * torch.pi * torch.rand(n_points)
+        phi = 2 * torch.pi * torch.rand(n_points)
 
-    # Random angle within the tube cross-section
-    phi = torch.linspace(0, 2 * np.pi, n_points)
+        x = (R + r * torch.cos(phi)) * torch.cos(theta)
+        y = (R + r * torch.cos(phi)) * torch.sin(theta)
+        z = r * torch.sin(phi)
+        angles = torch.stack((theta, phi), dim=1)
 
-    # Convert to cartesian coordinates
-    points[i, 0] = (R + rho * torch.cos(phi)) * torch.cos(theta)
-    points[i, 1] = (R + rho * torch.cos(phi)) * torch.sin(theta)
-    points[i, 2] = rho * torch.sin(phi)
+    points = torch.stack((x, y, z), dim=1)
+    points = _rotate_translate(points, embedding_dim, translation, rotation)
+    noise = noise_var * torch.randn_like(points) * r
+    points += noise
 
-    return points
+    return points, angles
 
 
-def generate_nested_spheres(n_points=5000, radii=[1.0, 2.0, 3.0], thicknesses=[0.1, 0.1, 0.1]):
-    num_spheres = len(radii)
-    points_per_sphere = n_points // num_spheres
+def generate_entangled_tori(n_points=5000, R=5.0, r=1.0, filled1=False, filled2=False, noise_var=0.01, embedding_dim=3,
+                            translation=None, rotation=None):
+    n1 = n_points // 2
+    n2 = n_points - n1
 
-    all_points = []
-    all_labels = []
+    torus1, _ = generate_torus(n1, R, r, filled=filled1, noise_var=noise_var)
+    torus2, _ = generate_torus(n2, R, r, filled=filled2, noise_var=noise_var)
 
-    for i, (radius, thickness) in enumerate(zip(radii, thicknesses)):
-        # Generate uniform points on a unit sphere
-        x = torch.randn(points_per_sphere, 3)
-        x_norm = x / torch.norm(x, dim=1, keepdim=True)
+    R_x90 = torch.tensor([
+        [1.0, 0.0, 0.0],
+        [0.0, 0.0, -1.0],
+        [0.0, 1.0, 0.0]
+    ])
 
-        # Add random radius to create a shell with thickness
-        random_radii = radius + thickness * (torch.rand(points_per_sphere, 1) - 0.5)
-        sphere_points = x_norm * random_radii
+    torus2 = torus2 @ R_x90.T
+    torus2 += torch.tensor([-R, 0.0, 0.0])
+    points = torch.cat([torus1, torus2], dim=0)
 
-        all_points.append(sphere_points)
-        all_labels.append(torch.full((points_per_sphere,), i))
+    points = _rotate_translate(points, embedding_dim, translation, rotation)
 
-    points = torch.cat(all_points, dim=0)
-    labels = torch.cat(all_labels, dim=0)
+    labels = torch.cat([
+        torch.zeros(n1, dtype=torch.long),
+        torch.ones(n2, dtype=torch.long)
+    ])
 
     return points, labels
 
 
-def generate_entangled_tori(n_points=5000, R1=3.0, r1=1.0, R2=3.0, r2=1.0,
-                            hollow1=False, hollow2=False, shell_thickness=0.2):
-    points1 = torch.zeros((n_points, 3))
-    points2 = torch.zeros((n_points, 3))
-
-    # First torus along xz-plane, centered at origin
-    for i in range(n_points):
-        theta = 2 * np.pi * torch.rand(1)
-
-        if hollow1:
-            # For hollow torus, sample points near the surface
-            rho = r1 - shell_thickness / 2 + shell_thickness * torch.rand(1)
-        else:
-            # For filled torus, sample points throughout the tube
-            rho = torch.sqrt(torch.rand(1)) * r1
-
-        phi = 2 * np.pi * torch.rand(1)
-
-        points1[i, 0] = (R1 + rho * torch.cos(phi)) * torch.cos(theta)
-        points1[i, 1] = (R1 + rho * torch.cos(phi)) * torch.sin(theta)
-        points1[i, 2] = rho * torch.sin(phi)
-
-    # Second torus along xy-plane but shifted and rotated to create entanglement
-    offset = torch.tensor([0.0, 0.0, R2 / 2])
-
-    for i in range(n_points):
-        theta = 2 * np.pi * torch.rand(1)
-
-        if hollow2:
-            # For hollow torus, sample points near the surface
-            rho = r2 - shell_thickness / 2 + shell_thickness * torch.rand(1)
-        else:
-            # For filled torus, sample points throughout the tube
-            rho = torch.sqrt(torch.rand(1)) * r2
-
-        phi = 2 * np.pi * torch.rand(1)
-
-        # Create second torus with different orientation
-        points2[i, 0] = (R2 + rho * torch.cos(phi)) * torch.cos(theta)
-        points2[i, 1] = rho * torch.sin(phi)
-        points2[i, 2] = (R2 + rho * torch.cos(phi)) * torch.sin(theta)
-
-        # Apply offset to create entanglement
-        points2[i] = points2[i] + offset
-
-    # Combine the points and create labels
-    all_points = torch.cat([points1, points2], dim=0)
-    labels = torch.cat([
-        torch.zeros(n_points),
-        torch.ones(n_points)
-    ])
-
-    return all_points, labels
+def _torus_implicit_field(x, y, z, R, r):
+    return (x ** 2 + y ** 2 + z ** 2) ** 2 - 2 * (R ** 2 + r ** 2) * (x ** 2 + y ** 2) + 2 * (
+                R ** 2 - r ** 2) * z ** 2 + (R ** 2 - r ** 2) ** 2
 
 
-def generate_clelia_curve(n_points=5000, a=3.0, b=2.0, c=2.0):
-    """
-    Generate a Clelia curve in R^3
+def _genus3_field(x, y, z, n=3, R=1.0, r=0.25):
+    angles = torch.linspace(0, 2 * np.pi, n + 1, device=x.device)[:-1]
+    shifts_x = 1.5 * torch.cos(angles)
+    shifts_y = 1.5 * torch.sin(angles)
 
-    The Clelia curve is parametrized by:
-    x = a * sin(b*t) * cos(c*t)
-    y = a * sin(b*t) * sin(c*t)
-    z = a * cos(b*t)
+    f = torch.ones_like(x)
+    for sx, sy in zip(shifts_x, shifts_y):
+        xi = x - sx
+        yi = y - sy
+        zi = z
+        f *= _torus_implicit_field(xi, yi, zi, R, r)
+    return f - 10
 
-    where the ratio b/c determines the curve's shape
 
-    Parameters:
-    -----------
-    n_points : int
-        Number of points on the curve
-    a, b, c : float
-        Parameters controlling the curve shape
+def generate_genus3(n_points=5000, R=1.0, r=0.25, noise_var=0.01, embedding_dim=3, translation=None, rotation=None):
+    # Create dense grid
+    grid_x, grid_y, grid_z = torch.meshgrid(
+        torch.linspace(-3, 3, 100),
+        torch.linspace(-3, 3, 100),
+        torch.linspace(-0.5, 0.5, 50),
+        indexing='ij'
+    )
+    vals = genus3_field(grid_x, grid_y, grid_z, R=R, r=r)
+    vals_np = vals.cpu().numpy()
 
-    Returns:
-    --------
-    points : torch.Tensor
-        Tensor of shape (n_points, 3) containing the points on the curve
-    """
+    # Extract surface
+    verts, faces, normals, _ = marching_cubes(vals_np, level=0)
+
+    # Rescale vertices to world coords
+    verts = torch.tensor(verts.copy(), dtype=torch.float32)
+    verts[:, 0] = verts[:, 0] / 99 * 6 - 3
+    verts[:, 1] = verts[:, 1] / 99 * 6 - 3
+    verts[:, 2] = verts[:, 2] / 49 * 1 - 0.5
+
+    # Sample points
+    idx = torch.randint(0, verts.shape[0], (n_points,))
+    points = verts[idx]
+
+    # Apply rotation/translation
+    points = _rotate_translate(points, embedding_dim, translation, rotation)
+
+    # Add noise
+    noise = noise_var * torch.randn_like(points) * r
+    points += noise
+
+    labels = None
+    return points, labels
+
+
+def generate_sphere(n_points=5000, radius=1.0, filled=False, noise_var=0.01, embedding_dim=3, translation=None,
+                    rotation=None):
+    if filled:
+        u = torch.rand(n_points)
+        v = torch.rand(n_points)
+        w = torch.rand(n_points)
+
+        theta = torch.acos(1 - 2 * u)
+        phi = 2 * np.pi * v
+        r = radius * w.pow(1 / 3)
+
+        x = r * torch.sin(theta) * torch.cos(phi)
+        y = r * torch.sin(theta) * torch.sin(phi)
+        z = r * torch.cos(theta)
+
+        angles = torch.stack((theta, phi, r), dim=1)
+
+    else:
+        theta = torch.acos(1 - 2 * torch.rand(n_points))
+        phi = 2 * np.pi * torch.rand(n_points)
+
+        x = radius * torch.sin(theta) * torch.cos(phi)
+        y = radius * torch.sin(theta) * torch.sin(phi)
+        z = radius * torch.cos(theta)
+
+        angles = torch.stack((theta, phi), dim=1)
+
+    points = torch.stack((x, y, z), dim=1)
+
+    points = _rotate_translate(points, embedding_dim, translation, rotation)
+
+    noise = noise_var * torch.randn_like(points) * radius
+    points += noise
+
+    return points, angles
+
+
+def generate_nested_spheres(n_points=5000, radii=None, noise_var=0.01, embedding_dim=3, translation=None,
+                            rotation=None):
+    if radii is None:
+        radii = torch.tensor([1.0, 3.0, 8.0])
+    else:
+        radii = torch.tensor(radii)
+
+    volumes = radii ** 3
+    proportions = volumes / volumes.sum()
+    n_points_sphere = (proportions * n_points).long()
+
+    all_points = []
+    all_labels = []
+
+    for i, radius in enumerate(radii):
+        points, _ = generate_sphere(n_points=n_points_sphere[i].item(), radius=radius.item(), filled=(i == 0),
+                                    noise_var=noise_var)
+        all_points.append(points)
+        all_labels.append(torch.full((n_points_sphere[i],), i))
+
+    points = torch.cat(all_points, dim=0)
+    labels = torch.cat(all_labels, dim=0)
+
+    points = _rotate_translate(points, embedding_dim, translation, rotation)
+
+    return points, labels
+
+
+def generate_clelia_curve(n_points=5000, r=3.0, c=3.0, embedding_dim=3, translation=None, rotation=None):
     t = torch.linspace(0, 2 * np.pi, n_points)
 
-    x = a * torch.sin(b * t) * torch.cos(c * t)
-    y = a * torch.sin(b * t) * torch.sin(c * t)
-    z = a * torch.cos(b * t)
+    x = r * torch.sin(t) * torch.cos(c * t)
+    y = r * torch.sin(t) * torch.sin(c * t)
+    z = r * torch.cos(t)
 
     points = torch.stack([x, y, z], dim=1)
+    points = _rotate_translate(points, embedding_dim, translation, rotation)
+    return points, t
+
+
+def _rotate_translate(points, embedding_dim, translation=None, rotation=None):
+    if embedding_dim > 3:
+        points = torch.cat([points, torch.zeros(embedding_dim - 3)])
+    if rotation is not None:
+        points = points @ rotation.T
+    if translation is not None:
+        points = points + translation
     return points
 
 
@@ -194,7 +286,8 @@ def visualize_manifolds(manifolds_dict):
                     points[mask, 1].numpy(),
                     points[mask, 2].numpy(),
                     alpha=0.6,
-                    label=f'Component {int(label)}'
+                    label=f'Component {int(label)}',
+                    s=0.1
                 )
             ax.legend()
         else:
@@ -203,7 +296,8 @@ def visualize_manifolds(manifolds_dict):
                 points[:, 0].numpy(),
                 points[:, 1].numpy(),
                 points[:, 2].numpy(),
-                alpha=0.6
+                alpha=0.6,
+                s=0.1
             )
 
         ax.set_title(name)
@@ -211,40 +305,7 @@ def visualize_manifolds(manifolds_dict):
         ax.set_ylabel('Y')
         ax.set_zlabel('Z')
         ax.grid(True)
+        ax.set_aspect('equal', adjustable='box')
 
     plt.tight_layout()
     plt.show()
-
-
-# Example usage
-if __name__ == "__main__":
-    # Set random seed for reproducibility
-    torch.manual_seed(42)
-
-    # 1. Generate five blobs (contractible manifolds)
-    blobs, blob_labels = generate_five_blobs(n_points_per_blob=500)
-
-    # 2. Generate filled torus
-    filled_torus = generate_filled_torus(n_points=2000)
-
-    # 3. Generate nested spheres
-    nested_spheres, sphere_labels = generate_nested_spheres(n_points=3000)
-
-    # 4. Generate entangled tori (one filled, one hollow)
-    entangled_tori, tori_labels = generate_entangled_tori(
-        n_points=2000, hollow1=False, hollow2=True
-    )
-
-    # 5. Generate Clelia curve
-    clelia_curve = generate_clelia_curve(n_points=1000)
-
-    # Visualize all manifolds
-    manifolds = {
-        'Five Blobs': (blobs, blob_labels),
-        'Filled Torus': filled_torus,
-        'Nested Spheres': (nested_spheres, sphere_labels),
-        'Entangled Tori': (entangled_tori, tori_labels),
-        'Clelia Curve': clelia_curve
-    }
-
-    visualize_manifolds(manifolds)
