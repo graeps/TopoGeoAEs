@@ -29,7 +29,7 @@ base_config = {
     'num_epochs': 10,
     'log_interval': 100,
     'recon_loss': "MSE",
-    'dim_topo_loss': 0,  # Max feature dimension topological loss
+    'dim_topo_loss': 1,  # Max feature dimension topological loss
 
     # Curvature computation
     "n_grid_points": 800,  # to compute curvature

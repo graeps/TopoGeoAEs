@@ -146,76 +146,33 @@ def get_z_grid(config, n_grid_points=200):
     return z_grid
 
 
-def get_vectors(config, model):
+def get_vectors(config, model, test_loader):
     print("Forwarding data through model...")
-    model.eval()
-    device = config.device
-    if config.dataset_name == "s1_synthetic":
-        dataset, labels = load_s1_synthetic(
-            rotation=config.rotation,
-            n_times=config.n_grid_points,
-            radius=config.radius,
-            n_wiggles=config.n_wiggles,
-            geodesic_distortion_amp=config.geodesic_distortion_amp,
-            embedding_dim=config.embedding_dim,
-            noise_var=config.noise_var,
-            geodesic_distortion_func=config.geodesic_distortion_func,
-        )
-    elif config.dataset_name == "s1_in_s1_synthetic":
-        dataset, labels = load_s1_in_s1_synthetic(
-            rotation=config.rotation,
-            n_times=config.n_grid_points,
-            radius_inner=config.radius_inner,
-            radius_outer=config.radius_outer,
-            n_wiggles=config.n_wiggles,
-            geodesic_distortion_amp=config.geodesic_distortion_amp,
-            embedding_dim=config.embedding_dim,
-            noise_var=config.noise_var,
-            geodesic_distortion_func=config.geodesic_distortion_func,
-        )
-    elif config.dataset_name == "scrunchy":
-        dataset, labels = load_scrunchy(
-            rotation=config.rotation,
-            n_times=config.n_grid_points,
-            radius=config.radius,
-            n_wiggles=config.n_wiggles,
-            geodesic_distortion_amp=config.geodesic_distortion_amp,
-            embedding_dim=config.embedding_dim,
-            noise_var=config.noise_var,
-        )
-    elif config.dataset_name == "interlocking_rings_synthetic":
-        dataset, labels = load_interlocking_rings_synthetic(
-            rotation=config.rotation,
-            embedding_dim=config.embedding_dim,
-            noise_var=config.noise_var,
-        )
-    elif config.dataset_name == "s2_synthetic":
-        dataset, labels = load_s2_synthetic(
-            rotation=config.rotation,
-            n_times=config.n_grid_points,
-            radius=config.radius,
-            geodesic_distortion_amp=config.geodesic_distortion_amp,
-            embedding_dim=config.embedding_dim,
-            noise_var=config.noise_var,
-        )
-    elif config.dataset_name == "t2_synthetic":
-        dataset, labels = load_t2_synthetic(
-            rotation=config.rotation,
-            n_times=config.n_grid_points,
-            major_radius=config.major_radius,
-            minor_radius=config.minor_radius,
-            geodesic_distortion_amp=config.geodesic_distortion_amp,
-            embedding_dim=config.embedding_dim,
-            noise_var=config.noise_var,
-        )
-    else:
-        raise InvalidConfigError(f"Unknown dataset: {config['dataset_name']}")
+    all_inputs = []
+    all_latents = []
+    all_reconstructions = []
+    all_labels = []
 
+    model.eval()
     with torch.no_grad():
-        dataset = dataset.to(device)
-        z, x_recon, _ = model.forward(dataset)
-        recons = x_recon
-        latent_vectors = z
+        for x, y in test_loader:
+            x = x.to(config.device)  # Move to GPU if necessary
+            y = y.to(config.device)
+
+            # Forward pass: depends on your model's interface
+            z, x_recon, _ = model(x)  # z = latent, x_recon = reconstructed data
+
+            # Collect
+            all_inputs.append(x.cpu())
+            all_latents.append(z.cpu())
+            all_reconstructions.append(x_recon.cpu())
+            all_labels.append(y.cpu())
+
+    # Concatenate along batch dimension (dim=0)
+    dataset = torch.cat(all_inputs, dim=0)
+    latent_vectors = torch.cat(all_latents, dim=0)
+    recons = torch.cat(all_reconstructions, dim=0)
+    labels = torch.cat(all_labels, dim=0)
 
     return recons, latent_vectors, dataset, labels
 
@@ -324,8 +281,8 @@ def compute_curvature_error(z_grid, learned, true, config):
 
 
 # Empiric curvature estimate
-def compute_empiric_curvature(config, model, k=160):
-    recons, latent_vectors, true_data, labels = get_vectors(config, model)
+def compute_empiric_curvature(config, model, test_loader, k=160):
+    recons, latent_vectors, true_data, labels = get_vectors(config, model, test_loader)
     curvature_inputs = estimate_curvature_1d_quadric(true_data, k)
     curvature_latents = estimate_curvature_1d_quadric(latent_vectors, k)
     curvature_recons = estimate_curvature_1d_quadric(recons, k)
