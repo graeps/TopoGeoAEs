@@ -2,7 +2,6 @@ import os
 import time
 import numpy as np
 import torch
-import pandas as pd
 
 from sklearn.neighbors import NearestNeighbors
 from sklearn.decomposition import PCA
@@ -21,7 +20,7 @@ from ..datasets.synthetic_sphere_like import (
     get_interlocking_rings_immersion,
     load_s1_synthetic,
     load_s1_in_s1_synthetic,
-    load_scrunchy_synthetic,
+    load_scrunchy,
     load_interlocking_rings_synthetic,
     load_s2_synthetic,
     load_t2_synthetic,
@@ -96,7 +95,7 @@ def get_true_immersion(config):
             config.embedding_dim,
             rot,
         )
-    if config.dataset_name == "scrunchy_synthetic":
+    if config.dataset_name == "scrunchy":
         return get_scrunchy_immersion(
             config.radius,
             config.n_wiggles,
@@ -130,7 +129,7 @@ def get_true_immersion(config):
 
 
 def get_z_grid(config, n_grid_points=200):
-    if config.dataset_name in {"s1_synthetic", "scrunchy_synthetic"}:
+    if config.dataset_name in {"s1_synthetic", "scrunchy"}:
         return torch.linspace(0, 2 * gs.pi, n_grid_points)
     elif config.dataset_name == "interlocking_rings_synthetic":
         return torch.linspace(0, 4 * gs.pi, n_grid_points)
@@ -174,8 +173,8 @@ def get_vectors(config, model):
             noise_var=config.noise_var,
             geodesic_distortion_func=config.geodesic_distortion_func,
         )
-    elif config.dataset_name == "scrunchy_synthetic":
-        dataset, labels = load_scrunchy_synthetic(
+    elif config.dataset_name == "scrunchy":
+        dataset, labels = load_scrunchy(
             rotation=config.rotation,
             n_times=config.n_grid_points,
             radius=config.radius,
@@ -267,7 +266,7 @@ def compute_curvature_true(config, n_grid_points=2000):
     print("Computing true curvature of immersion...")
     z_grid = get_z_grid(config, n_grid_points)
     immersion = get_true_immersion(config)
-    if config.dataset_name in {"s1_synthetic", "interlocking_rings_synthetic", "scrunchy_synthetic"}:
+    if config.dataset_name in {"s1_synthetic", "interlocking_rings_synthetic", "scrunchy"}:
         manifold_dim = 1
     elif config.dataset_name == "s2_synthetic" or config.dataset_name == "t2_synthetic":
         manifold_dim = 2
@@ -282,7 +281,7 @@ def compute_curvature_true(config, n_grid_points=2000):
 def compute_curvature_true_latents(config, angles):
     print("Computing true curvature on latent vectors...")
     immersion = get_true_immersion(config)
-    if config.dataset_name in {"s1_synthetic", "interlocking_rings_synthetic", "scrunchy_synthetic"}:
+    if config.dataset_name in {"s1_synthetic", "interlocking_rings_synthetic", "scrunchy"}:
         manifold_dim = 1
     elif config.dataset_name == "s2_synthetic" or config.dataset_name == "t2_synthetic":
         manifold_dim = 2

@@ -68,10 +68,10 @@ def elbo(posterior_type, x, z, x_recon, posterior_params, config):
         recon_loss = nn.functional.mse_loss(x_recon, x, reduction="sum")
 
     if topo_loss:
-        vr = VietorisRipsComplex(dim=1)
+        vr = VietorisRipsComplex(dim=config.dim_topo_loss)
         pi_x = vr(x)
         pi_z = vr(z)
-        topo_loss = SignatureLoss(p=2, dimensions=1)([x, pi_x], [z, pi_z])
+        topo_loss = SignatureLoss(p=2, dimensions=config.dim_topo_loss)([x, pi_x], [z, pi_z])
     else:
         topo_loss = 0
 

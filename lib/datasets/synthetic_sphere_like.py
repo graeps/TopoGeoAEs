@@ -171,11 +171,12 @@ def load_t2_synthetic(
     ).sample((sqrt_ntimes ** 2,))
 
     noisy_data = data + noise
+
     labels = pd.DataFrame({"thetas": angle_grid[:, 0], "phis": angle_grid[:, 1]})
     return noisy_data, labels
 
 
-def load_scrunchy_synthetic(rotation,
+def load_scrunchy(rotation,
                             n_times=1500,
                             radius=1.0,
                             n_wiggles=6,
@@ -197,12 +198,15 @@ def load_scrunchy_synthetic(rotation,
     angles = gs.linspace(0, 2 * gs.pi, n_times)
     data = torch.stack([immersion(angle) for angle in angles])
 
-    noise = MultivariateNormal(
-        loc=torch.zeros(embedding_dim),
-        covariance_matrix=noise_var * torch.eye(embedding_dim),
-    ).sample((n_times,))
+    if noise_var > 0:
+        noise = MultivariateNormal(
+            loc=torch.zeros(embedding_dim),
+            covariance_matrix=noise_var * torch.eye(embedding_dim),
+        ).sample((n_times,))
+        noisy_data = data + radius * noise
+    else:
+        noisy_data = data
 
-    noisy_data = data + radius * noise
     labels = pd.DataFrame({"angles": angles})
     return noisy_data, labels
 

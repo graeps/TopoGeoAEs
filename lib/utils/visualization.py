@@ -500,15 +500,15 @@ def plot_data_latents_recon(model, test_loader, device='cpu', n_samples=200):
     ax1 = fig.add_subplot(1, 3, 1, projection='3d' if dataset.shape[1] == 3 else None)
     if dataset.shape[1] == 2:
         ax1.scatter(dataset[:, 0], dataset[:, 1], s=1)
-        ax1.set_title("Noisy S¹ in ℝ²")
+        ax1.set_title("Noisy data in ℝ²")
     elif dataset.shape[1] == 3:
         ax1.scatter(dataset[:, 0], dataset[:, 1], dataset[:, 2], s=1)
-        ax1.set_title("Noisy S¹ in ℝ³")
+        ax1.set_title("Noisy data in ℝ³")
     else:
         proj = PCA(n_components=2).fit_transform(dataset)
         ax1.scatter(proj[:, 0], proj[:, 1], s=1)
-        ax1.set_title("Noisy S¹ projected to ℝ² via PCA")
-    ax1.axis('equal')
+        ax1.set_title("Noisy data projected to ℝ² via PCA")
+    ax1.set_aspect('equal', adjustable='datalim')
 
     # Latent space plot
     ax2 = fig.add_subplot(1, 3, 2, projection='3d' if latent_vectors.shape[1] == 3 else None)
@@ -528,9 +528,8 @@ def plot_data_latents_recon(model, test_loader, device='cpu', n_samples=200):
         reduced = PCA(n_components=2).fit_transform(latent_vectors)
         ax2 = fig.add_subplot(1, 3, 2)
         ax2.scatter(reduced[:, 0], reduced[:, 1], c=colors, cmap='hsv', alpha=0.7, s=1)
-        ax2.set_title("Latent Space (PCA)")
-    if hasattr(ax2, 'axis'):
-        ax2.axis('equal')
+        ax2.set_title("Latent Space projected via PCA")
+    ax2.set_aspect('equal', adjustable='datalim')
 
     # Recon manifold plot
     ax3 = fig.add_subplot(1, 3, 3, projection='3d' if recon_dataset.shape[1] == 3 else None)
@@ -544,9 +543,8 @@ def plot_data_latents_recon(model, test_loader, device='cpu', n_samples=200):
         proj = PCA(n_components=2).fit_transform(recon_dataset)
         ax3 = fig.add_subplot(1, 3, 3)
         ax3.scatter(proj[:, 0], proj[:, 1], c=colors, cmap='hsv', s=1)
-        ax3.set_title("Reconstructed Manifold (PCA)")
-    if hasattr(ax3, 'axis'):
-        ax3.axis('equal')
+        ax3.set_title("Reconstructed Manifold projected via PCA")
+    ax3.set_aspect('equal', adjustable='datalim')
 
     plt.tight_layout()
     plt.show()

@@ -1,7 +1,7 @@
 from torch.utils.data import TensorDataset, DataLoader, random_split
 import torch
 
-from ..datasets.synthetic_sphere_like import load_s1_synthetic, load_s1_in_s1_synthetic, load_scrunchy_synthetic, \
+from ..datasets.synthetic_sphere_like import load_s1_synthetic, load_s1_in_s1_synthetic, load_scrunchy, \
     load_interlocking_rings_synthetic, load_s2_synthetic, load_t2_synthetic
 
 from ..datasets.topo_datasets import generate_torus, generate_sphere, generate_genus3, generate_three_manifolds, \
@@ -32,8 +32,8 @@ def load_synthetic_ds(config):
             noise_var=config.noise_var,
             geodesic_distortion_func=config.geodesic_distortion_func,
         )
-    elif config.dataset_name == "scrunchy_synthetic":
-        dataset, labels = load_scrunchy_synthetic(
+    elif config.dataset_name == "scrunchy":
+        dataset, labels = load_scrunchy(
             rotation=config.rotation,
             n_times=config.n_times,
             radius=config.radius,
@@ -67,15 +67,11 @@ def load_synthetic_ds(config):
             embedding_dim=config.embedding_dim,
             noise_var=config.noise_var,
         )
-    elif config.dataset_name == "tours_filled":
+    elif config.dataset_name == "torus":
         dataset, labels = generate_torus(n_points=config.n_times, R=config.major_radius, r=config.minor_radius,
-                                         filled=True, noise_var=config.noise_var, embedding_dim=config.embedding_dim,
-                                         translation=config.transloation, rotation=config.rotation)
-    elif config.dataset_name == "torus_hollowed":
-        dataset, labels = generate_torus(n_points=config.n_times, R=config.major_radius, r=config.minor_radius,
-                                         filled=False, noise_var=config.noise_var,
+                                         filled=config.filled, noise_var=config.noise_var,
                                          embedding_dim=config.embedding_dim,
-                                         translation=config.transloation, rotation=config.rotation)
+                                         translation=config.translation, rotation=config.rotation)
     elif config.dataset_name == "entangled_tori":
         dataset, labels = generate_entangled_tori(n_points=config.n_times, R=config.major_radius, r=config.minor_radius,
                                                   filled1=config.filled1, filled2=config.filled2,
@@ -110,7 +106,10 @@ def load_synthetic_ds(config):
     else:
         raise InvalidConfigError(f"Unknown dataset: {config['dataset_name']}")
 
-    dataset = TensorDataset(dataset, torch.tensor(labels.values).float())
+    if isinstance(labels, torch.Tensor):
+        dataset = TensorDataset(dataset, labels.float())
+    else:
+        dataset = TensorDataset(dataset, torch.tensor(labels.values).float())
 
     train_size = int(0.9 * len(dataset))
     test_size = len(dataset) - train_size

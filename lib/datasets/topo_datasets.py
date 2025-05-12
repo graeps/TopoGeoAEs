@@ -146,14 +146,14 @@ def generate_genus3(n_points=5000, R=1.0, r=0.25, noise_var=0.01, embedding_dim=
         torch.linspace(-0.5, 0.5, 50),
         indexing='ij'
     )
-    vals = genus3_field(grid_x, grid_y, grid_z, R=R, r=r)
+    vals = _genus3_field(grid_x, grid_y, grid_z, R=R, r=r)
     vals_np = vals.cpu().numpy()
 
     # Extract surface
     verts, faces, normals, _ = marching_cubes(vals_np, level=0)
 
     # Rescale vertices to world coords
-    verts = torch.tensor(verts.copy(), dtype=torch.float32)
+    verts = torch.tensor(verts.copy())
     verts[:, 0] = verts[:, 0] / 99 * 6 - 3
     verts[:, 1] = verts[:, 1] / 99 * 6 - 3
     verts[:, 2] = verts[:, 2] / 49 * 1 - 0.5
@@ -169,7 +169,7 @@ def generate_genus3(n_points=5000, R=1.0, r=0.25, noise_var=0.01, embedding_dim=
     noise = noise_var * torch.randn_like(points) * r
     points += noise
 
-    labels = None
+    labels = torch.zeros(n_points)
     return points, labels
 
 
@@ -254,8 +254,10 @@ def _rotate_translate(points, embedding_dim, translation=None, rotation=None):
     if embedding_dim > 3:
         points = torch.cat([points, torch.zeros(embedding_dim - 3)])
     if rotation == "random":
+        np.random.seed(42)
         rotation = SpecialOrthogonal(n=embedding_dim).random_point()
     if rotation is not None:
+        rotation = rotation.to(points.dtype)
         points = points @ rotation.T
     if translation is not None:
         points = points + translation

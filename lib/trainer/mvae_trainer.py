@@ -7,6 +7,7 @@ class MVAETrainer:
         self.config = config
         self.num_epochs = config.num_epochs
         self.log_interval = config.log_interval
+        self.verbose = config.verbose
         self.device = config.device
         self.recon_loss = config.recon_loss
         self.train_loader, self.test_loader = data_loader
@@ -27,7 +28,7 @@ class MVAETrainer:
         print("Training the " + f'{self.model.posterior_type}' + "VAE model.")
 
         for epoch in range(self.num_epochs):
-            train_loss, train_recon_loss, train_kl_loss, train_topo_loss = self.train_one_epoch(epoch)
+            train_loss, train_recon_loss, train_kl_loss, train_topo_loss = self.train_one_epoch(epoch, self.verbose)
             test_loss, test_recon_loss, test_kl_loss, test_topo_loss = self.test_one_epoch()
 
             self.history['train_loss'].append(train_loss)
@@ -44,14 +45,15 @@ class MVAETrainer:
 
         return self.history
 
-    def train_one_epoch(self, epoch):
+    def train_one_epoch(self, epoch, verbose):
         self.model.train()
         train_loss = 0
         train_recon_loss = 0
         train_kl_loss = 0
         train_topo_loss = 0
 
-        print(f"Starting epoch {epoch + 1}/{self.num_epochs}")
+        if verbose:
+            print(f"Starting epoch {epoch + 1}/{self.num_epochs}")
 
         for batch_idx, (x, _) in enumerate(self.train_loader):
             x = x.to(self.device)
@@ -67,10 +69,11 @@ class MVAETrainer:
             train_kl_loss += kl_loss.item()
             train_topo_loss += topo_loss.item() if hasattr(topo_loss, 'item') else topo_loss
 
-            if (batch_idx + 1) % self.log_interval == 0:
+            if ((batch_idx + 1) % self.log_interval == 0) and verbose:
                 print(
                     f"Epoch [{epoch + 1}/{self.num_epochs}], Step [{batch_idx + 1}/{len(self.train_loader)}], Loss: {loss.item():.4f}"
                 )
+
         avg_train_loss = train_loss / len(self.train_loader.dataset)
         avg_train_recon_loss = train_recon_loss / len(self.train_loader.dataset)
         avg_train_kl_loss = train_kl_loss / len(self.train_loader.dataset)
