@@ -840,8 +840,10 @@ def plot_empiric_curvature(config, model, test_loader):
     # Compute empiric curvature
     curvature_inputs, curvature_latents, curvature_recons, labels = compute_empiric_curvature(config, model,
                                                                                               test_loader)
-    angles = labels.squeeze()
+    _, _, _, curvature_learned = compute_curvature_learned(config, model, test_loader)
+
     # Compute true curvature
+    angles = labels.squeeze()
     _, _, curvature_true = compute_curvature_true_latents(config, angles)
 
     # Sort by angles
@@ -850,14 +852,16 @@ def plot_empiric_curvature(config, model, test_loader):
     curvature_inputs = curvature_inputs[sort_idx]
     curvature_latents = curvature_latents[sort_idx]
     curvature_recons = curvature_recons[sort_idx]
+    curvature_learned = curvature_learned[sort_idx]
     curvature_true = curvature_true[sort_idx]
 
     plt.figure(figsize=(10, 6))
 
-    plt.plot(angles_sorted, curvature_inputs, label='Input Curvature', color='tab:blue', linewidth=1.5, alpha=0.7)
-    plt.plot(angles_sorted, curvature_true, label='True Curvature', color='tab:green', linewidth=1.5, alpha=0.5)
-    plt.plot(angles_sorted, curvature_latents, label='Latent Curvature', color='tab:orange', linewidth=1, alpha=0.7)
-    plt.plot(angles_sorted, curvature_recons, label='Reconstructed Curvature', color='tab:red', linewidth=1, alpha=0.7)
+    plt.plot(angles_sorted, curvature_true, label='True Curvature', color='tab:green', linewidth=1.5, alpha=0.9)
+    plt.plot(angles_sorted, curvature_learned, label='Learned Curvature', color='tab:pink', linewidth=1.5, alpha=0.9)
+    plt.plot(angles_sorted, curvature_inputs, label='Input Curvature', color='tab:blue', linewidth=1.5, alpha=0.9)
+    plt.plot(angles_sorted, curvature_latents, label='Latent Curvature', color='tab:orange', linewidth=1.5, alpha=0.9)
+    plt.plot(angles_sorted, curvature_recons, label='Reconstructed Curvature', color='tab:red', linewidth=1.5, alpha=0.9)
 
     plt.xlabel('Angle (radians)')
     plt.ylabel('Curvature')

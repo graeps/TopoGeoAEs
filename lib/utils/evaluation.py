@@ -204,10 +204,10 @@ def _compute_curvature(z_grid, immersion, dim, embedding_dim):
     return curv, curv_norm
 
 
-def compute_curvature_learned(model, config, n_grid_points=2000):
+def compute_curvature_learned(config, model, test_loader, n_grid_points=2000):
     print("Computing learned curvature...")
     if config.model_type == 'EuclideanVAE':
-        _, z_grid, _, labels = get_vectors(config, model)
+        _, z_grid, _, labels = get_vectors(config, model, test_loader)
     elif config.model_type == 'VonMisesVAE':
         z_grid = get_z_grid(config, n_grid_points)
         labels = None
