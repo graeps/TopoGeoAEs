@@ -8,9 +8,7 @@ from sklearn.decomposition import PCA
 
 from .evaluation import compute_curvature_learned, compute_curvature_true, compute_curvature_error, \
     compute_curvature_true_latents, estimate_curvature_1d_quadric, estimate_curvature_2d_quadric, \
-    compute_empiric_curvature
-from ..datasets.synthetic_sphere_like import get_s1_synthetic_immersion, get_scrunchy_immersion, \
-    get_interlocking_rings_immersion
+    compute_empiric_curvature, get_vectors
 
 
 def show_training_history(history: dict) -> None:
@@ -281,213 +279,29 @@ def plot_latent_projections(model, pointcloud, test_loader, device="cpu"):
         plt.show()
 
 
-def plot_euclidean_latent_space(model, test_loader, device='cpu', n_samples=200):
-    """
-    Plots the latent space of a Variational Autoencoder (VAE).
+def plot_datapoints(ax, data, title, colors=None, cmap='hsv'):
+    d = data.shape[1]
+    pca_applied = False
 
-    Args:
-        model: The trained VAE model.
-        test_loader: DataLoader for the test dataset.
-        device: The device to run computations on ('cpu' or 'cuda').
-        n_samples: Number of random samples to plot.
-    """
-    model.eval()
-    model.to(device)
-
-    latent_vectors = []
-    labels = []
-
-    # Collect latent space representations and labels
-    with torch.no_grad():
-        for x, y in test_loader:
-            x = x.to(device)
-            z, _, _ = model.forward(x)
-            latent_vectors.append(z.cpu())
-            labels.append(y)
-
-    latent_vectors = torch.cat(latent_vectors, dim=0)
-    labels = torch.cat(labels, dim=0)
-
-    latent_vectors = latent_vectors.numpy()
-    labels = labels.numpy()
-
-    assert latent_vectors.shape[0] == labels.shape[0], \
-        f"Mismatch: {latent_vectors.shape[0]} latent vectors vs {labels.shape[0]} labels"
-
-    n_total = latent_vectors.shape[0]
-    if n_samples > n_total:
-        print(f"Warning: n_samples ({n_samples}) > total samples ({n_total}). Using all samples.")
-        n_samples = n_total
-
-    indices = np.random.choice(n_total, size=n_samples, replace=False)
-    latent_vectors = latent_vectors[indices]
-    labels = labels[indices]
-
-    if labels.ndim > 1 and labels.shape[1] == 2:
-        colors = (labels[:, 0] + labels[:, 1]) % 360
+    if d == 1:
+        ax.scatter(data[:, 0], np.zeros_like(data[:, 0]), c=colors, cmap=cmap, s=1, alpha=0.7)
+        ax.set_yticks([])
+    elif d == 2:
+        ax.scatter(data[:, 0], data[:, 1], c=colors, cmap=cmap, s=1, alpha=0.7)
+    elif d == 3:
+        ax.scatter(data[:, 0], data[:, 1], data[:, 2], c=colors, cmap=cmap, s=1, alpha=0.7)
     else:
-        colors = labels.squeeze()
+        data = PCA(n_components=3).fit_transform(data)
+        ax.scatter(data[:, 0], data[:, 1], data[:, 2], c=colors, cmap=cmap, s=1, alpha=0.7)
+        pca_applied = True
 
-    dim = latent_vectors.shape[1]
-
-    if dim == 1:
-        # 1D scatter plot
-        plt.figure(figsize=(10, 2))
-        plt.scatter(latent_vectors[:, 0], np.zeros_like(latent_vectors[:, 0]),
-                    c=colors, cmap='hsv', alpha=0.7)
-        plt.xlabel("Latent Dimension 1")
-        plt.title("1D Latent Space Visualization")
-        plt.yticks([])
-        plt.colorbar(label="Class Label")
-        plt.show()
-    elif dim == 2:
-        plt.figure(figsize=(10, 7))
-        scatter = plt.scatter(
-            latent_vectors[:, 0], latent_vectors[:, 1], c=colors, cmap='hsv', alpha=0.7
-        )
-        plt.colorbar(scatter, label="Class Label")
-        plt.title("2D Latent Space Visualization")
-        plt.xlabel("Dimension 1")
-        plt.ylabel("Dimension 2")
-        plt.show()
-    elif dim == 3:
-        fig = plt.figure(figsize=(10, 7))
-        ax = fig.add_subplot(111, projection='3d')
-        scatter = ax.scatter(
-            latent_vectors[:, 0], latent_vectors[:, 1], latent_vectors[:, 2],
-            c=colors, cmap='hsv', alpha=0.7
-        )
-        ax.set_title("3D Latent Space Visualization")
-        ax.set_xlabel("Dimension 1")
-        ax.set_ylabel("Dimension 2")
-        ax.set_zlabel("Dimension 3")
-        fig.colorbar(scatter, label="Class Label")
-        plt.show()
-    else:
-        # PCA to 2D
-        pca = PCA(n_components=2)
-        reduced = pca.fit_transform(latent_vectors)
-        plt.figure(figsize=(10, 7))
-        scatter = plt.scatter(
-            reduced[:, 0], reduced[:, 1], c=colors, cmap='hsv', alpha=0.7
-        )
-        plt.colorbar(scatter, label="Class Label")
-        plt.title("PCA Projection of Latent Space")
-        plt.xlabel("PC 1")
-        plt.ylabel("PC 2")
-        plt.show()
+    title_suffix = " (PCA)" if pca_applied else ""
+    ax.set_title(f"{title}{title_suffix}")
+    ax.set_aspect('equal', adjustable='datalim')
 
 
-def plot_recon_manifold(model, test_loader, device='cpu', n_samples=200):
-    model.eval()
-    model.to(device)
-
-    recon_dataset = []
-    labels = []
-
-    with torch.no_grad():
-        for x, y in test_loader:
-            x = x.to(device)
-            _, x_recon, _ = model(x)
-            recon_dataset.append(x_recon.cpu())
-            labels.extend(y.numpy())
-
-    recon_dataset = np.concatenate(recon_dataset)
-    labels = np.array(labels)
-
-    if len(recon_dataset) > n_samples:
-        indices = sample(range(len(recon_dataset)), n_samples)
-        recon_dataset = recon_dataset[indices]
-        labels = labels[indices]
-
-    if labels.shape[1] == 2:
-        colors = (labels[:, 0] + labels[:, 1]) % 360
-    else:
-        colors = labels
-
-    if recon_dataset.shape[1] == 2:
-        plt.scatter(recon_dataset[:, 0], recon_dataset[:, 1], c=colors, cmap='hsv')
-        plt.axis('equal')
-        plt.title("Reconstructed Manifold ℝ²")
-        plt.colorbar(label='Angle [0, 2π]')
-        plt.show()
-    elif recon_dataset.shape[1] == 3:
-        fig = plt.figure(figsize=(10, 7))
-        ax = fig.add_subplot(111, projection='3d')
-        p = ax.scatter(recon_dataset[:, 0], recon_dataset[:, 1], recon_dataset[:, 2],
-                       c=colors, cmap='hsv')
-        fig.colorbar(p, ax=ax, label='Angle [0, 2π]')
-        ax.set_title("Reconstructed Manifold in ℝ³")
-        plt.show()
-    else:
-        proj = PCA(n_components=2).fit_transform(recon_dataset)
-        plt.scatter(proj[:, 0], proj[:, 1], c=colors, cmap='hsv')
-        plt.axis('equal')
-        plt.title("Reconstructed Manifold projected to ℝ² via PCA")
-        plt.colorbar(label='Angle [0, 2π]')
-        plt.show()
-
-
-def plot_dataset(test_loader, device='cpu'):
-    dataset = []
-    for x, _ in test_loader:
-        dataset.append(x.to(device))
-    dataset = torch.cat(dataset, dim=0)
-
-    if dataset.shape[1] == 2:
-        plt.scatter(dataset[:, 0].cpu(), dataset[:, 1].cpu(), s=1)
-        plt.axis('equal')
-        plt.title("Noisy S¹ in ℝ²")
-        plt.show()
-    elif dataset.shape[1] == 3:
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        ax.scatter(dataset[:, 0].cpu(), dataset[:, 1].cpu(), dataset[:, 2].cpu(), s=1)
-        ax.set_title("Noisy S¹ in ℝ³")
-        plt.show()
-    else:
-        proj = PCA(n_components=2).fit_transform(dataset.cpu().numpy())
-        plt.scatter(proj[:, 0], proj[:, 1], s=1)
-        plt.axis('equal')
-        plt.title("Noisy S¹ projected to ℝ² via PCA")
-        plt.show()
-
-
-def plot_data_latents_recon(model, test_loader, device='cpu', n_samples=200):
-    model.eval()
-    model.to(device)
-
-    # Gather original data, latent vectors, reconstructions, and labels
-    dataset = []
-    latent_vectors = []
-    recon_dataset = []
-    labels = []
-
-    with torch.no_grad():
-        for x, y in test_loader:
-            x = x.to(device)
-            z, x_recon, _ = model(x)
-
-            dataset.append(x.cpu())
-            latent_vectors.append(z.cpu())
-            recon_dataset.append(x_recon.cpu())
-            labels.append(y)
-
-    dataset = torch.cat(dataset, dim=0).numpy()
-    latent_vectors = torch.cat(latent_vectors, dim=0).numpy()
-    recon_dataset = torch.cat(recon_dataset, dim=0).numpy()
-    labels = torch.cat(labels, dim=0).numpy()
-
-    # Downsample
-    n_total = latent_vectors.shape[0]
-    if n_samples > n_total:
-        n_samples = n_total
-    indices = np.random.choice(n_total, size=n_samples, replace=False)
-
-    dataset = dataset[indices]
-    latent_vectors = latent_vectors[indices]
-    recon_dataset = recon_dataset[indices]
-    labels = labels[indices]
+def plot_data_latents_recon(config, model, data_loader):
+    dataset, latent_vectors, recon_dataset, labels = get_vectors(config, model, data_loader, config.n_plot_points)
 
     if labels.ndim > 1 and labels.shape[1] == 2:
         colors = (labels[:, 0] + labels[:, 1]) % 360
@@ -497,54 +311,18 @@ def plot_data_latents_recon(model, test_loader, device='cpu', n_samples=200):
     fig = plt.figure(figsize=(18, 5))
 
     # Dataset plot
-    ax1 = fig.add_subplot(1, 3, 1, projection='3d' if dataset.shape[1] == 3 else None)
-    if dataset.shape[1] == 2:
-        ax1.scatter(dataset[:, 0], dataset[:, 1], s=1)
-        ax1.set_title("Noisy data in ℝ²")
-    elif dataset.shape[1] == 3:
-        ax1.scatter(dataset[:, 0], dataset[:, 1], dataset[:, 2], s=1)
-        ax1.set_title("Noisy data in ℝ³")
-    else:
-        proj = PCA(n_components=2).fit_transform(dataset)
-        ax1.scatter(proj[:, 0], proj[:, 1], s=1)
-        ax1.set_title("Noisy data projected to ℝ² via PCA")
-    ax1.set_aspect('equal', adjustable='datalim')
+    ax1 = fig.add_subplot(1, 3, 1, projection='3d' if dataset.shape[1] == 3 or dataset.shape[1] > 3 else None)
+    plot_datapoints(ax1, dataset, "Original Data", colors)
 
     # Latent space plot
-    ax2 = fig.add_subplot(1, 3, 2, projection='3d' if latent_vectors.shape[1] == 3 else None)
-    if latent_vectors.shape[1] == 1:
-        ax2 = fig.add_subplot(1, 3, 2)
-        ax2.scatter(latent_vectors[:, 0], np.zeros_like(latent_vectors[:, 0]), c=colors, cmap='hsv', alpha=0.7, s=1)
-        ax2.set_title("1D Latent Space")
-        ax2.set_yticks([])
-    elif latent_vectors.shape[1] == 2:
-        ax2.scatter(latent_vectors[:, 0], latent_vectors[:, 1], c=colors, cmap='hsv', alpha=0.7, s=1)
-        ax2.set_title("2D Latent Space")
-    elif latent_vectors.shape[1] == 3:
-        ax2.scatter(latent_vectors[:, 0], latent_vectors[:, 1], latent_vectors[:, 2], c=colors, cmap='hsv', alpha=0.7,
-                    s=1)
-        ax2.set_title("3D Latent Space")
-    else:
-        reduced = PCA(n_components=2).fit_transform(latent_vectors)
-        ax2 = fig.add_subplot(1, 3, 2)
-        ax2.scatter(reduced[:, 0], reduced[:, 1], c=colors, cmap='hsv', alpha=0.7, s=1)
-        ax2.set_title("Latent Space projected via PCA")
-    ax2.set_aspect('equal', adjustable='datalim')
+    ax2 = fig.add_subplot(1, 3, 2,
+                          projection='3d' if latent_vectors.shape[1] == 3 or latent_vectors.shape[1] > 3 else None)
+    plot_datapoints(ax2, latent_vectors, "Latent Space", colors)
 
-    # Recon manifold plot
-    ax3 = fig.add_subplot(1, 3, 3, projection='3d' if recon_dataset.shape[1] == 3 else None)
-    if recon_dataset.shape[1] == 2:
-        ax3.scatter(recon_dataset[:, 0], recon_dataset[:, 1], c=colors, cmap='hsv', s=1)
-        ax3.set_title("Reconstructed Manifold ℝ²")
-    elif recon_dataset.shape[1] == 3:
-        ax3.scatter(recon_dataset[:, 0], recon_dataset[:, 1], recon_dataset[:, 2], c=colors, cmap='hsv', s=1)
-        ax3.set_title("Reconstructed Manifold ℝ³")
-    else:
-        proj = PCA(n_components=2).fit_transform(recon_dataset)
-        ax3 = fig.add_subplot(1, 3, 3)
-        ax3.scatter(proj[:, 0], proj[:, 1], c=colors, cmap='hsv', s=1)
-        ax3.set_title("Reconstructed Manifold projected via PCA")
-    ax3.set_aspect('equal', adjustable='datalim')
+    # Reconstruction plot
+    ax3 = fig.add_subplot(1, 3, 3,
+                          projection='3d' if recon_dataset.shape[1] == 3 or recon_dataset.shape[1] > 3 else None)
+    plot_datapoints(ax3, recon_dataset, "Reconstructed Data", colors)
 
     plt.tight_layout()
     plt.show()
@@ -565,7 +343,6 @@ def curvature_compute_plot_vm(config, model, test_loader):
     print("Computing learned curvature...")
     z_grid, _, _, curv_norms_learned = compute_curvature_learned(
         model=model,
-        test_loader=test_loader,
         config=config,
         n_grid_points=config.n_grid_points,
     )
@@ -836,40 +613,68 @@ def scatter_empiric_curvature(config, model, test_loader, n_samples=2000):
     plt.show()
 
 
-def plot_empiric_curvature(config, model, test_loader):
+def plot_empiric_curvature(config, model, data_loader):
+    recons, latents, inputs, labels = get_vectors(config, model, data_loader, config.n_grid_points)
     # Compute empiric curvature
-    curvature_inputs, curvature_latents, curvature_recons, labels = compute_empiric_curvature(config, model,
-                                                                                              test_loader)
-    _, _, _, curvature_learned = compute_curvature_learned(config, model, test_loader)
+    curvature_inputs, curvature_latents, curvature_recons, labels = compute_empiric_curvature(recons, latents,
+                                                                                              inputs,
+                                                                                              labels,
+                                                                                              quadric_dim=config.quadric_dim)
+    _, _, _, curvature_learned = compute_curvature_learned(config, model, latents, labels)
 
     # Compute true curvature
-    angles = labels.squeeze()
-    _, _, curvature_true = compute_curvature_true_latents(config, angles)
+    _, _, curvature_true = compute_curvature_true_latents(config, labels)
 
-    # Sort by angles
-    sort_idx = torch.argsort(angles)
-    angles_sorted = angles[sort_idx]
-    curvature_inputs = curvature_inputs[sort_idx]
-    curvature_latents = curvature_latents[sort_idx]
-    curvature_recons = curvature_recons[sort_idx]
-    curvature_learned = curvature_learned[sort_idx]
-    curvature_true = curvature_true[sort_idx]
+    if labels.ndim == 1:
+        angles = labels
+        plt.figure(figsize=(10, 6))
 
-    plt.figure(figsize=(10, 6))
+        plt.plot(angles, curvature_true, label='True Curvature', color='tab:green', linewidth=1.5, alpha=0.9)
+        plt.plot(angles, curvature_learned, label='Learned Curvature', color='tab:pink', linewidth=1.5, alpha=0.9)
+        plt.plot(angles, curvature_inputs, label='Input Curvature', color='tab:blue', linewidth=1.5, alpha=0.9)
+        plt.plot(angles, curvature_latents, label='Latent Curvature', color='tab:orange', linewidth=1.5, alpha=0.9)
+        plt.plot(angles, curvature_recons, label='Reconstructed Curvature', color='tab:red', linewidth=1.5, alpha=0.9)
 
-    plt.plot(angles_sorted, curvature_true, label='True Curvature', color='tab:green', linewidth=1.5, alpha=0.9)
-    plt.plot(angles_sorted, curvature_learned, label='Learned Curvature', color='tab:pink', linewidth=1.5, alpha=0.9)
-    plt.plot(angles_sorted, curvature_inputs, label='Input Curvature', color='tab:blue', linewidth=1.5, alpha=0.9)
-    plt.plot(angles_sorted, curvature_latents, label='Latent Curvature', color='tab:orange', linewidth=1.5, alpha=0.9)
-    plt.plot(angles_sorted, curvature_recons, label='Reconstructed Curvature', color='tab:red', linewidth=1.5, alpha=0.9)
+        plt.xlabel('Angle (radians)')
+        plt.ylabel('Curvature')
+        plt.title('Curvature Comparison Across Representations')
+        plt.legend()
+        plt.grid(True, linestyle='--', alpha=0.5)
+        plt.tight_layout()
+        plt.show()
 
-    plt.xlabel('Angle (radians)')
-    plt.ylabel('Curvature')
-    plt.title('Curvature Comparison Across Representations')
-    plt.legend()
-    plt.grid(True, linestyle='--', alpha=0.5)
-    plt.tight_layout()
-    plt.show()
+    if labels.ndim == 2:
+        fig = plt.figure(figsize=(18, 8))  # taller figure for two rows
+
+        # Dataset true curvature plot
+        ax1 = fig.add_subplot(2, 3, 1, projection='3d' if inputs.shape[1] >= 3 else None)
+        plot_datapoints(ax1, inputs, "Inputs true curvature", curvature_true)
+
+        # Dataset empirical curvature plot
+        ax2 = fig.add_subplot(2, 3, 2, projection='3d' if inputs.shape[1] >= 3 else None)
+        plot_datapoints(ax2, inputs, "Inputs empirical curvature", curvature_inputs)
+
+        # Latents empirical curvature plot
+        ax3 = fig.add_subplot(2, 3, 3, projection='3d' if latents.shape[1] >= 3 else None)
+        plot_datapoints(ax3, latents, "Latents empirical curvature", curvature_latents)
+
+        # Learned curvature plot
+        ax4 = fig.add_subplot(2, 3, 4, projection='3d' if recons.shape[1] >= 3 else None)
+        plot_datapoints(ax4, recons, "Learned curvature on recons", curvature_learned)
+
+        # Reconstructed Data plot
+        ax5 = fig.add_subplot(2, 3, 5, projection='3d' if recons.shape[1] >= 3 else None)
+        plot_datapoints(ax5, recons, "Reconstructed Data", curvature_recons)
+
+        # Optional: turn off the empty 6th subplot
+        ax6 = fig.add_subplot(2, 3, 6)
+        ax6.axis('off')
+
+        plt.tight_layout()
+        plt.show()
+
+    else:
+        raise NotImplementedError("Wrong label dim. Plotting curvature not implemented.")
 
 
 def normalize(arr):

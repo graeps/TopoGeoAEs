@@ -146,35 +146,57 @@ def get_z_grid(config, n_grid_points=200):
     return z_grid
 
 
-def get_vectors(config, model, test_loader):
+def get_vectors(config, model, test_loader, n_samples=200):
     print("Forwarding data through model...")
-    all_inputs = []
-    all_latents = []
-    all_reconstructions = []
-    all_labels = []
-
     model.eval()
+    inputs, latents, recons, labels = [], [], [], []
+
     with torch.no_grad():
         for x, y in test_loader:
-            x = x.to(config.device)  # Move to GPU if necessary
+            x = x.to(config.device)
             y = y.to(config.device)
 
-            # Forward pass: depends on your model's interface
-            z, x_recon, _ = model(x)  # z = latent, x_recon = reconstructed data
+            z, x_recon, _ = model(x)
 
-            # Collect
-            all_inputs.append(x.cpu())
-            all_latents.append(z.cpu())
-            all_reconstructions.append(x_recon.cpu())
-            all_labels.append(y.cpu())
+            inputs.append(x.cpu())
+            latents.append(z.cpu())
+            recons.append(x_recon.cpu())
+            labels.append(y.cpu())
 
-    # Concatenate along batch dimension (dim=0)
-    dataset = torch.cat(all_inputs, dim=0)
-    latent_vectors = torch.cat(all_latents, dim=0)
-    recons = torch.cat(all_reconstructions, dim=0)
-    labels = torch.cat(all_labels, dim=0)
+    inputs = torch.cat(inputs, dim=0)
+    latents = torch.cat(latents, dim=0)
+    recons = torch.cat(recons, dim=0)
+    labels = torch.cat(labels, dim=0)
 
-    return recons, latent_vectors, dataset, labels
+    n_total = latents.shape[0]
+    n_samples = min(n_samples, n_total)
+    indices = torch.randperm(n_total)[:n_samples]
+
+    # Apply random sampling
+    inputs = inputs[indices]
+    latents = latents[indices]
+    recons = recons[indices]
+    labels = labels[indices]
+
+    # Sort by label if label dim = 1
+    if labels.shape[1] == 1:
+        labels = labels.squeeze()
+        sort_idx = torch.argsort(labels)
+
+    # lexicographic sort if label dim = 2
+    elif labels.shape[1] == 2:
+        sort_idx = np.lexsort((labels[:, 1].numpy(), labels[:, 0].numpy()))
+        sort_idx = torch.from_numpy(sort_idx)
+
+    else:
+        raise NotImplementedError(f"Labels should either be one-dimensional or two-dimensional")
+
+    labels = labels[sort_idx]
+    inputs = inputs[sort_idx]
+    latents = latents[sort_idx]
+    recons = recons[sort_idx]
+
+    return recons, latents, inputs, labels
 
 
 def _compute_curvature(z_grid, immersion, dim, embedding_dim):
@@ -204,13 +226,12 @@ def _compute_curvature(z_grid, immersion, dim, embedding_dim):
     return curv, curv_norm
 
 
-def compute_curvature_learned(config, model, test_loader, n_grid_points=2000):
+def compute_curvature_learned(config, model, latent_vectors=None, labels=None,  n_grid_points=2000):
     print("Computing learned curvature...")
     if config.model_type == 'EuclideanVAE':
-        _, z_grid, _, labels = get_vectors(config, model, test_loader)
+        z_grid = latent_vectors
     elif config.model_type == 'VonMisesVAE':
         z_grid = get_z_grid(config, n_grid_points)
-        labels = None
     else:
         raise InvalidConfigError(f"Unknown model type: {config.model_type}")
     immersion = get_learned_immersion(model, config)
@@ -281,15 +302,21 @@ def compute_curvature_error(z_grid, learned, true, config):
 
 
 # Empiric curvature estimate
-def compute_empiric_curvature(config, model, test_loader, k=160):
-    recons, latent_vectors, true_data, labels = get_vectors(config, model, test_loader)
-    curvature_inputs = estimate_curvature_1d_quadric(true_data, k)
-    curvature_latents = estimate_curvature_1d_quadric(latent_vectors, k)
-    curvature_recons = estimate_curvature_1d_quadric(recons, k)
+def compute_empiric_curvature(recons, latent_vectors, true_data, labels, quadric_dim, k=160):
+    if quadric_dim == 1:
+        curvature_inputs = estimate_curvature_1d_quadric(true_data, k)
+        curvature_latents = estimate_curvature_1d_quadric(latent_vectors, k)
+        curvature_recons = estimate_curvature_1d_quadric(recons, k)
+    elif quadric_dim == 2:
+        curvature_inputs = estimate_curvature_2d_quadric(true_data, k)
+        curvature_latents = estimate_curvature_2d_quadric(latent_vectors, k)
+        curvature_recons = estimate_curvature_2d_quadric(recons, k)
+    else:
+        raise InvalidConfigError(f"Unknown quadric dim: {quadric_dim}")
     return curvature_inputs, curvature_latents, curvature_recons, labels
 
 
-def estimate_curvature_1d_quadric(points, k=30):
+def estimate_curvature_1d_quadric(points, k=160):
     n, d = points.shape
     nbrs = NearestNeighbors(n_neighbors=k).fit(points)
     _, indices = nbrs.kneighbors(points)
@@ -310,7 +337,7 @@ def estimate_curvature_1d_quadric(points, k=30):
     return np.array(curvatures)
 
 
-def estimate_curvature_2d_quadric(points, k=30):
+def estimate_curvature_2d_quadric(points, k=200):
     n, d = points.shape
     nbrs = NearestNeighbors(n_neighbors=k).fit(points)
     _, indices = nbrs.kneighbors(points)
