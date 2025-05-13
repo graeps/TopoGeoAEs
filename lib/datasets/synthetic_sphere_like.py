@@ -128,6 +128,7 @@ def load_s2_synthetic(
     phis = gs.linspace(0, 2 * gs.pi, sqrt_ntimes)
 
     angle_grid = torch.cartesian_prod(thetas, phis)
+    print("angle_grid", angle_grid)
     data = torch.stack([immersion(pair) for pair in angle_grid])
 
     noise = MultivariateNormal(
@@ -296,15 +297,15 @@ def get_s2_synthetic_immersion(radius, geodesic_distortion_amp, embedding_dim, r
 
     def immersion(angle_pair):
         theta, phi = angle_pair
-        amplitude = radius * (
+        amplitude = (
                 1
                 + geodesic_distortion_amp * gs.exp(-5 * theta ** 2)
                 + geodesic_distortion_amp * gs.exp(-5 * (theta - gs.pi) ** 2)
         )
 
-        x = gs.sin(theta) * gs.cos(phi)
-        y = gs.sin(theta) * gs.sin(phi)
-        z = gs.cos(theta)
+        x = radius * gs.sin(theta) * gs.cos(phi)
+        y = radius * gs.sin(theta) * gs.sin(phi)
+        z = radius * gs.cos(theta)
 
         point = amplitude * gs.array([x, y, z])
         point = gs.squeeze(point, axis=-1)

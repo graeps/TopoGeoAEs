@@ -5,6 +5,7 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
+from scipy.interpolate import griddata
 
 from .evaluation import compute_curvature_learned, compute_curvature_true, compute_curvature_error, \
     compute_curvature_true_latents, estimate_curvature_1d_quadric, estimate_curvature_2d_quadric, \
@@ -620,10 +621,13 @@ def plot_empiric_curvature(config, model, data_loader):
                                                                                               inputs,
                                                                                               labels,
                                                                                               quadric_dim=config.quadric_dim)
+
+    # Compute learned curvature using pullback metric
     _, _, _, curvature_learned = compute_curvature_learned(config, model, latents, labels)
 
     # Compute true curvature
     _, _, curvature_true = compute_curvature_true_latents(config, labels)
+    print("curvature_true", curvature_true)
 
     if labels.ndim == 1:
         angles = labels
@@ -643,33 +647,57 @@ def plot_empiric_curvature(config, model, data_loader):
         plt.tight_layout()
         plt.show()
 
-    if labels.ndim == 2:
-        fig = plt.figure(figsize=(18, 8))  # taller figure for two rows
+    elif labels.ndim == 2:
+        # Heatmaps
+        # fig = plt.figure(figsize=(18, 8))  # taller figure for two rows
+        #
+        # # Dataset true curvature plot
+        # ax1 = fig.add_subplot(2, 3, 1, projection='3d' if inputs.shape[1] >= 3 else None)
+        # plot_datapoints(ax1, inputs, "Inputs true curvature", curvature_true)
+        #
+        # # Dataset empirical curvature plot
+        # ax2 = fig.add_subplot(2, 3, 2, projection='3d' if inputs.shape[1] >= 3 else None)
+        # plot_datapoints(ax2, inputs, "Inputs empirical curvature", curvature_inputs)
+        #
+        # # Latents empirical curvature plot
+        # ax3 = fig.add_subplot(2, 3, 3, projection='3d' if latents.shape[1] >= 3 else None)
+        # plot_datapoints(ax3, latents, "Latents empirical curvature", curvature_latents)
+        #
+        # # Learned curvature plot
+        # ax4 = fig.add_subplot(2, 3, 4, projection='3d' if recons.shape[1] >= 3 else None)
+        # plot_datapoints(ax4, recons, "Learned curvature on recons", curvature_learned)
+        #
+        # # Reconstructed Data plot
+        # ax5 = fig.add_subplot(2, 3, 5, projection='3d' if recons.shape[1] >= 3 else None)
+        # plot_datapoints(ax5, recons, "Reconstructed Data", curvature_recons)
+        #
+        # # Optional: turn off the empty 6th subplot
+        # ax6 = fig.add_subplot(2, 3, 6)
+        # ax6.axis('off')
+        #
+        # plt.tight_layout()
+        # plt.show()
 
-        # Dataset true curvature plot
-        ax1 = fig.add_subplot(2, 3, 1, projection='3d' if inputs.shape[1] >= 3 else None)
-        plot_datapoints(ax1, inputs, "Inputs true curvature", curvature_true)
+        # ---------------- Error plot -----------------
+        # Define regular grid on [0, 2pi) x [0, 2pi)
+        grid_res = 100
+        method = "cubic"
+        grid_x, grid_y = np.meshgrid(
+            np.linspace(0, 2 * np.pi, grid_res),
+            np.linspace(0, 2 * np.pi, grid_res)
+        )
 
-        # Dataset empirical curvature plot
-        ax2 = fig.add_subplot(2, 3, 2, projection='3d' if inputs.shape[1] >= 3 else None)
-        plot_datapoints(ax2, inputs, "Inputs empirical curvature", curvature_inputs)
+        # Interpolate curvature to regular grid
+        curvature_grid = griddata(labels, curvature_true, (grid_x, grid_y), method=method)
 
-        # Latents empirical curvature plot
-        ax3 = fig.add_subplot(2, 3, 3, projection='3d' if latents.shape[1] >= 3 else None)
-        plot_datapoints(ax3, latents, "Latents empirical curvature", curvature_latents)
-
-        # Learned curvature plot
-        ax4 = fig.add_subplot(2, 3, 4, projection='3d' if recons.shape[1] >= 3 else None)
-        plot_datapoints(ax4, recons, "Learned curvature on recons", curvature_learned)
-
-        # Reconstructed Data plot
-        ax5 = fig.add_subplot(2, 3, 5, projection='3d' if recons.shape[1] >= 3 else None)
-        plot_datapoints(ax5, recons, "Reconstructed Data", curvature_recons)
-
-        # Optional: turn off the empty 6th subplot
-        ax6 = fig.add_subplot(2, 3, 6)
-        ax6.axis('off')
-
+        # Plot
+        fig = plt.figure(figsize=(8, 6))
+        ax = fig.add_subplot(111, projection='3d')
+        ax.plot_surface(grid_x, grid_y, curvature_grid, cmap='viridis')
+        ax.set_xlabel(r'$\theta_1$')
+        ax.set_ylabel(r'$\theta_2$')
+        ax.set_zlabel('Estimated Curvature')
+        ax.set_title(f'Interpolated Empirical Curvature ({method})')
         plt.tight_layout()
         plt.show()
 

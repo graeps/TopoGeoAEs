@@ -111,10 +111,10 @@ def get_true_immersion(config):
         )
     elif config.dataset_name == "s2_synthetic":
         return get_s2_synthetic_immersion(
-            config.radius,
-            config.geodesic_distortion_amp,
-            config.embedding_dim,
-            rot,
+            radius=config.radius,
+            geodesic_distortion_amp=config.geodesic_distortion_amp,
+            embedding_dim=config.embedding_dim,
+            rot=rot,
         )
     elif config.dataset_name == "t2_synthetic":
         return get_t2_synthetic_immersion(
@@ -146,13 +146,13 @@ def get_z_grid(config, n_grid_points=200):
     return z_grid
 
 
-def get_vectors(config, model, test_loader, n_samples=200):
+def get_vectors(config, model, data_loader, n_samples=200):
     print("Forwarding data through model...")
     model.eval()
     inputs, latents, recons, labels = [], [], [], []
 
     with torch.no_grad():
-        for x, y in test_loader:
+        for x, y in data_loader:
             x = x.to(config.device)
             y = y.to(config.device)
 
@@ -208,25 +208,25 @@ def _compute_curvature(z_grid, immersion, dim, embedding_dim):
     neural_manifold.equip_with_metric(PullbackMetric)
     if dim == 1:
         curv = gs.zeros(len(z_grid), embedding_dim)
-        for i_z, z in enumerate(z_grid):
+        for i, z in enumerate(z_grid):
             if not torch.is_tensor(z):
                 z = torch.tensor(z)
             z = torch.unsqueeze(z, dim=0)
-            curv[i_z, :] = neural_manifold.metric.mean_curvature_vector(z)
+            curv[i, :] = neural_manifold.metric.mean_curvature_vector(z)
     else:
         curv = torch.full((len(z_grid), embedding_dim), torch.nan)
-        for i, z_i in enumerate(z_grid):
+        for i, z in enumerate(z_grid):
             try:
-                curv[i, :] = neural_manifold.metric.mean_curvature_vector(z_i)
+                curv[i, :] = neural_manifold.metric.mean_curvature_vector(z)
             except Exception as e:
                 print(f"An error occurred for i={i}: {e}")
-                print(neural_manifold.metric.metric_matrix(z_i))
+                print(neural_manifold.metric.metric_matrix(z))
     curv_norm = torch.linalg.norm(curv, dim=1, keepdim=True).squeeze()
     print("Curvature computation finished.")
     return curv, curv_norm
 
 
-def compute_curvature_learned(config, model, latent_vectors=None, labels=None,  n_grid_points=2000):
+def compute_curvature_learned(config, model, latent_vectors=None, labels=None, n_grid_points=2000):
     print("Computing learned curvature...")
     if config.model_type == 'EuclideanVAE':
         z_grid = latent_vectors
