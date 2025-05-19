@@ -238,14 +238,16 @@ def _compute_curvature(z_grid, immersion, dim, embedding_dim):
     neural_manifold.equip_with_metric(PullbackMetric)
     if dim == 1:
         curv = gs.zeros(len(z_grid), embedding_dim)
-        for i, z in tqdm(enumerate(z_grid), desc="Computing curvature from immersion (Manifold Dim = 1)", total=len(z_grid)):
+        for i, z in tqdm(enumerate(z_grid), desc="Computing curvature from immersion (Manifold Dim = 1)",
+                         total=len(z_grid)):
             if not torch.is_tensor(z):
                 z = torch.tensor(z)
             z = torch.unsqueeze(z, dim=0)
             curv[i, :] = neural_manifold.metric.mean_curvature_vector(z)
     else:
         curv = torch.full((len(z_grid), embedding_dim), torch.nan)
-        for i, z in tqdm(enumerate(z_grid), desc="Computing curvature from immersion  (Manifold Dim > 1)", total=len(z_grid)):
+        for i, z in tqdm(enumerate(z_grid), desc="Computing curvature from immersion  (Manifold Dim > 1)",
+                         total=len(z_grid)):
             try:
                 curv[i, :] = neural_manifold.metric.mean_curvature_vector(z)
             except Exception as e:
@@ -333,9 +335,12 @@ def compute_curvature_error_linf(curv1, curv2):
     return np.max(np.abs(curv1 - curv2))
 
 
-def compute_curvature_error_mse(curv1, curv2):
+def compute_curvature_error_mse(curv1, curv2, eps=1e-12):
     curv1 = np.array(curv1)
     curv2 = np.array(curv2)
+    curv1 = np.clip(curv1, eps, None)
+    curv2 = np.clip(curv2, eps, None)
+
     diff = (curv1 - curv2) ** 2
     mean = diff.sum() / len(curv1)
     return mean
@@ -384,8 +389,8 @@ def _get_pointcloud_diameters(points):
 
 def normalize_curvature_to_input_radius(points, radius, curvatures):
     max_dist, min_dist = _get_pointcloud_diameters(points)
-    norm_const = (max_dist + min_dist)/2
-    normed_curvatures = norm_const/radius * curvatures
+    norm_const = (max_dist + min_dist) / 2
+    normed_curvatures = norm_const / radius * curvatures
     return normed_curvatures
 
 
@@ -447,7 +452,6 @@ def estimate_curvature_2d_quadric(points, k=200):
         H = 0.5 * np.trace(II)
         curvatures.append(abs(H))
     return np.array(curvatures)
-
 
 
 class InvalidConfigError(Exception):

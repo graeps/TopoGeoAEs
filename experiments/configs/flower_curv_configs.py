@@ -53,7 +53,7 @@ param_grid = {
     "alpha": [1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0] * 3,
     "gamma": [0.0, 1.0, 1.0, 100.0, 100.0, 1.0, 1.0] * 3,
     "dim_topo_loss": ["_", 0, 1, 0, 1, 0, 1] * 3,
-    "geodesic_amp": [0.1] * 7 + [0.5] * 14,
+    "geodesic_distortion_amp": [0.1] * 7 + [0.3] * 14,
     "noise_var": [0.001] * 14 + [0.01] * 7,
 }
 
@@ -77,20 +77,21 @@ def generate_experiments(base_configuration, parameter_grid):
 
     for i in range(n):
         overrides = {k: v[i] for k, v in parameter_grid.items() if v[i] != "_"}
-        name = f"exp{i:02d}_{overrides.get('experiment', 'default')}"
+
+        base_name = base_configuration.get("experiment", "default")
+        name = f"exp{i:02d}_{base_name}"  # concise ID with base experiment name
+
         overrides["experiment"] = name
 
         cfg = base_configuration.copy()
         cfg.update(overrides)
         cfg["description"] = describe_experiment(overrides)
 
-        default_root_log_dir = "./results"  # Or any preferred base path
-
+        default_root_log_dir = "./results"
         if cfg.get("log_dir") is None:
             log_dir = os.path.join(default_root_log_dir, cfg["dataset_name"], f"results_{name}")
         else:
             log_dir = os.path.join(cfg["log_dir"], cfg["dataset_name"], f"results_{name}")
-
         os.makedirs(log_dir, exist_ok=True)
         cfg["log_dir"] = log_dir
 

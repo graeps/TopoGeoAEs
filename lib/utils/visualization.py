@@ -328,6 +328,11 @@ def plot_data_latents_recon(config, model, data_loader):
     plot_datapoints(ax3, recons, "Reconstructed Data", colors)
 
     plt.tight_layout()
+
+    if config.log_dir is not None:
+        save_path = os.path.join(config.log_dir, "input_latents_recons_plot.png")
+        plt.savefig(save_path)
+
     plt.show()
 
 
@@ -650,8 +655,8 @@ def _plot_empirical_curvature_from_vectors(config, model, recons, latents, input
             ],
             [
                 ('True Curvature', curvature_true, 'tab:green'),
-                ('Normalized Learned Curvature', curvature_latents_normalized, 'tab:pink'),
-                ('Latent + Normalized Curvature', curvatures_latents_sum, 'tab:orange')
+                ('Input Curvature', curvature_inputs, 'tab:blue'),
+                ('Normalized Learned Curvature', curvature_latents_normalized, 'tab:orange'),
             ]
         ]
         titles = [
@@ -663,7 +668,7 @@ def _plot_empirical_curvature_from_vectors(config, model, recons, latents, input
         fig, axes = plt.subplots(1, 3, figsize=(18, 5), sharex=True,)
         for ax, curves, title in zip(axes, curve_groups, titles):
             for label, curve, color in curves:
-                ax.plot(angles, curve, label=label, color=color, linewidth=1.5, alpha=0.9)
+                ax.plot(angles, curve, label=label, color=color, linewidth=1.5, alpha=0.8)
             ax.set_title(title)
             ax.set_xlabel('Angle (radians)')
             ax.grid(True, linestyle='--', alpha=0.5)
