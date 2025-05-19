@@ -2,10 +2,12 @@ import os
 import time
 import numpy as np
 import torch
+from tqdm import tqdm
 
 from sklearn.neighbors import NearestNeighbors
 from sklearn.decomposition import PCA
 from numpy.linalg import lstsq
+from scipy.spatial.distance import pdist
 
 from geomstats.geometry.base import ImmersedSet
 from geomstats.geometry.euclidean import Euclidean
@@ -18,12 +20,12 @@ from ..datasets.synthetic_sphere_like import (
     get_t2_synthetic_immersion,
     get_scrunchy_immersion,
     get_interlocking_rings_immersion,
-    load_s1_synthetic,
-    load_s1_in_s1_synthetic,
-    load_scrunchy,
-    load_interlocking_rings_synthetic,
-    load_s2_synthetic,
-    load_t2_synthetic,
+)
+
+from ..datasets.topo_datasets import (
+    get_clelia_immersion,
+    get_8_curve_immersion,
+    get_torus_immersion,
 )
 
 os.environ["GEOMSTATS_BACKEND"] = "pytorch"
@@ -83,6 +85,7 @@ def get_learned_immersion(model, config):
 
 def get_true_immersion(config):
     rot = torch.eye(n=config.embedding_dim)
+    trans = torch.zeros(config.embedding_dim)
     if config.rotation == "random":
         rot = SpecialOrthogonal(n=config.embedding_dim).random_point()
 
@@ -102,6 +105,15 @@ def get_true_immersion(config):
             config.geodesic_distortion_amp,
             config.embedding_dim,
             rot,
+        )
+    if config.dataset_name == "torus":
+        return get_torus_immersion(
+            major_radius=config.major_radius,
+            minor_radius=config.minor_radius,
+            embedding_dim=config.embedding_dim,
+            deformation_amp=config.deformation_amp,
+            translation=trans,
+            rotation=rot
         )
     if config.dataset_name == "interlocking_rings_synthetic":
         return get_interlocking_rings_immersion(
@@ -123,6 +135,20 @@ def get_true_immersion(config):
             config.geodesic_distortion_amp,
             config.embedding_dim,
             rot,
+        )
+    elif config.dataset_name == "clelia_curve":
+        return get_clelia_immersion(
+            r=config.radius,
+            c=config.clelia_c,
+            embedding_dim=config.embedding_dim,
+            translation=trans,
+            rotation=rot
+        )
+    elif config.dataset_name == "8_curve":
+        return get_clelia_immersion(
+            embedding_dim=config.embedding_dim,
+            translation=trans,
+            rotation=rot
         )
     else:
         raise InvalidConfigError(f"Unknown dataset: {config.dataset_name}")
@@ -147,7 +173,9 @@ def get_z_grid(config, n_grid_points=200):
 
 
 def get_vectors(config, model, data_loader, n_samples=200):
-    print("Forwarding data through model...")
+    if config.verbose:
+        print("Forwarding data through model to compute latents and recons...")
+
     model.eval()
     inputs, latents, recons, labels = [], [], [], []
 
@@ -178,6 +206,10 @@ def get_vectors(config, model, data_loader, n_samples=200):
     recons = recons[indices]
     labels = labels[indices]
 
+    # Reshaping labels if 1 dim array
+    if labels.ndim == 1:
+        labels = labels.unsqueeze(1)  # Shape: (N, 1)
+
     # Sort by label if label dim = 1
     if labels.shape[1] == 1:
         labels = labels.squeeze()
@@ -200,34 +232,32 @@ def get_vectors(config, model, data_loader, n_samples=200):
 
 
 def _compute_curvature(z_grid, immersion, dim, embedding_dim):
-    """Compute mean curvature vector and its norm at each point."""
-    print("Starting actual computation...")
     neural_manifold = NeuralManifoldIntrinsic(
         dim, embedding_dim, immersion, equip=False
     )
     neural_manifold.equip_with_metric(PullbackMetric)
     if dim == 1:
         curv = gs.zeros(len(z_grid), embedding_dim)
-        for i, z in enumerate(z_grid):
+        for i, z in tqdm(enumerate(z_grid), desc="Computing curvature from immersion (Manifold Dim = 1)", total=len(z_grid)):
             if not torch.is_tensor(z):
                 z = torch.tensor(z)
             z = torch.unsqueeze(z, dim=0)
             curv[i, :] = neural_manifold.metric.mean_curvature_vector(z)
     else:
         curv = torch.full((len(z_grid), embedding_dim), torch.nan)
-        for i, z in enumerate(z_grid):
+        for i, z in tqdm(enumerate(z_grid), desc="Computing curvature from immersion  (Manifold Dim > 1)", total=len(z_grid)):
             try:
                 curv[i, :] = neural_manifold.metric.mean_curvature_vector(z)
             except Exception as e:
                 print(f"An error occurred for i={i}: {e}")
                 print(neural_manifold.metric.metric_matrix(z))
     curv_norm = torch.linalg.norm(curv, dim=1, keepdim=True).squeeze()
-    print("Curvature computation finished.")
     return curv, curv_norm
 
 
 def compute_curvature_learned(config, model, latent_vectors=None, labels=None, n_grid_points=2000):
-    print("Computing learned curvature...")
+    if config.verbose:
+        print("Computing learned curvature...")
     if config.model_type == 'EuclideanVAE':
         z_grid = latent_vectors
     elif config.model_type == 'VonMisesVAE':
@@ -240,28 +270,33 @@ def compute_curvature_learned(config, model, latent_vectors=None, labels=None, n
     return z_grid, labels, *result  # *result = curv, curv_norm
 
 
-def compute_curvature_true(config, n_grid_points=2000):
-    print("Computing true curvature of immersion...")
+def _old_compute_curvature_true(config, n_grid_points=2000):
+    if config.verbose:
+        print("Computing true curvature of input dataset using on z-grid...")
     z_grid = get_z_grid(config, n_grid_points)
     immersion = get_true_immersion(config)
-    if config.dataset_name in {"s1_synthetic", "interlocking_rings_synthetic", "scrunchy"}:
+    if config.dataset_name in {"s1_synthetic", "interlocking_rings_synthetic", "scrunchy", "clelia_curve", "8_curve"}:
         manifold_dim = 1
-    elif config.dataset_name == "s2_synthetic" or config.dataset_name == "t2_synthetic":
+    elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "torus"}:
         manifold_dim = 2
     else:
         raise InvalidConfigError(f"Unknown dataset: {config.dataset_name}")
-    start = time.time()
     result = _compute_curvature(z_grid, immersion, manifold_dim, config.embedding_dim)
-    print(f"Computation time: {time.time() - start:.3f} s")
     return z_grid, *result
 
 
-def compute_curvature_true_latents(config, angles):
-    print("Computing true curvature on latent vectors...")
+def compute_curvature_true(config, angles=None, n_grid_points=2000):
+    if angles is None:
+        if config.verbose:
+            print("Computing true curvature of input dataset using on z-grid...")
+        angles = get_z_grid(config, n_grid_points)
+    else:
+        if config.verbose:
+            print("Computing true curvature of input dataset on given angles...")
     immersion = get_true_immersion(config)
-    if config.dataset_name in {"s1_synthetic", "interlocking_rings_synthetic", "scrunchy"}:
+    if config.dataset_name in {"s1_synthetic", "interlocking_rings_synthetic", "scrunchy", "clelia_curve", "8_curve"}:
         manifold_dim = 1
-    elif config.dataset_name == "s2_synthetic" or config.dataset_name == "t2_synthetic":
+    elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "torus"}:
         manifold_dim = 2
     else:
         raise InvalidConfigError(f"Unknown dataset: {config.dataset_name}")
@@ -292,6 +327,46 @@ def _compute_curvature_error_s2(thetas, phis, learned, true):
     return diff / norm
 
 
+def compute_curvature_error_linf(curv1, curv2):
+    curv1 = np.array(curv1)
+    curv2 = np.array(curv2)
+    return np.max(np.abs(curv1 - curv2))
+
+
+def compute_curvature_error_mse(curv1, curv2):
+    curv1 = np.array(curv1)
+    curv2 = np.array(curv2)
+    diff = (curv1 - curv2) ** 2
+    mean = diff.sum() / len(curv1)
+    return mean
+
+
+def compute_curvature_error_male(true_curv, approx_curv, eps=1e-12):
+    # Computes mean absolute log error
+
+    true_curv = np.asarray(true_curv)
+    approx_curv = np.asarray(approx_curv)
+    true_curv = np.clip(true_curv, eps, None)
+    approx_curv = np.clip(approx_curv, eps, None)
+
+    log_error = np.log(approx_curv / true_curv)
+    return np.mean(np.abs(log_error))
+
+
+def compute_curvature_error_smape(true_curv, approx_curv, eps=1e-12):
+    """
+    Computes the symmetric mean absolute percentage error (SMAPE) between true and approximate curvatures.
+    """
+    true_curv = np.asarray(true_curv)
+    approx_curv = np.asarray(approx_curv)
+
+    # Ensure non-zero denominator
+    denominator = np.clip(np.abs(true_curv) + np.abs(approx_curv), eps, None)
+    smape = np.abs(true_curv - approx_curv) / denominator
+
+    return 100 * np.mean(smape)
+
+
 def compute_curvature_error(z_grid, learned, true, config):
     if config.dataset_name == "s1_synthetic":
         return _compute_curvature_error_s1(z_grid, learned, true)
@@ -301,8 +376,21 @@ def compute_curvature_error(z_grid, learned, true, config):
         raise InvalidConfigError(f"Unknown dataset: {config.dataset_name}")
 
 
+def _get_pointcloud_diameters(points):
+    max_dist = np.max(pdist(points, metric='euclidean'))
+    min_dist = np.min(pdist(points, metric='euclidean'))
+    return max_dist, min_dist
+
+
+def normalize_curvature_to_input_radius(points, radius, curvatures):
+    max_dist, min_dist = _get_pointcloud_diameters(points)
+    norm_const = (max_dist + min_dist)/2
+    normed_curvatures = norm_const/radius * curvatures
+    return normed_curvatures
+
+
 # Empiric curvature estimate
-def compute_empiric_curvature(recons, latent_vectors, true_data, labels, quadric_dim, k=160):
+def compute_empirical_curvature(recons, latent_vectors, true_data, labels, quadric_dim, k=160):
     if quadric_dim == 1:
         curvature_inputs = estimate_curvature_1d_quadric(true_data, k)
         curvature_latents = estimate_curvature_1d_quadric(latent_vectors, k)
@@ -321,7 +409,7 @@ def estimate_curvature_1d_quadric(points, k=160):
     nbrs = NearestNeighbors(n_neighbors=k).fit(points)
     _, indices = nbrs.kneighbors(points)
     curvatures = []
-    for i in range(n):
+    for i in tqdm(range(n), desc="Estimating 1D curvature"):
         neighbors = points[indices[i]]
         centroid = neighbors.mean(axis=0)
         centered = neighbors - centroid
@@ -342,7 +430,7 @@ def estimate_curvature_2d_quadric(points, k=200):
     nbrs = NearestNeighbors(n_neighbors=k).fit(points)
     _, indices = nbrs.kneighbors(points)
     curvatures = []
-    for i in range(n):
+    for i in tqdm(range(n), desc="Estimating 2D curvature"):
         neighbors = points[indices[i]]
         centroid = neighbors.mean(axis=0)
         centered = neighbors - centroid
@@ -359,6 +447,7 @@ def estimate_curvature_2d_quadric(points, k=200):
         H = 0.5 * np.trace(II)
         curvatures.append(abs(H))
     return np.array(curvatures)
+
 
 
 class InvalidConfigError(Exception):

@@ -13,29 +13,18 @@ import geomstats.backend as gs  # noqa: E402
 from geomstats.geometry.special_orthogonal import SpecialOrthogonal  # noqa: E402
 
 
-def load_s1_synthetic(
-        rotation,
-        n_times=1500,
-        radius=1.0,
-        n_wiggles=6,
-        geodesic_distortion_amp=0.4,
-        embedding_dim=10,
-        noise_var=0.01,
-        geodesic_distortion_func="wiggles",
-):
+def load_s1_synthetic(rotation, n_times=1500, radius=1.0, n_wiggles=6, geodesic_distortion_amp=0.4, embedding_dim=10,
+                      noise_var=0.01, geodesic_distortion_func="wiggles", random_seed=42,
+                      ):
     """Generate noisy S¹-immersed data in R^embedding_dim."""
+    gs.random.seed(random_seed)
     rot = torch.eye(embedding_dim)
     if rotation == "random":
         rot = SpecialOrthogonal(n=embedding_dim).random_point()
 
-    immersion = get_s1_synthetic_immersion(
-        geodesic_distortion_func=geodesic_distortion_func,
-        radius=radius,
-        n_wiggles=n_wiggles,
-        geodesic_distortion_amp=geodesic_distortion_amp,
-        embedding_dim=embedding_dim,
-        rot=rot,
-    )
+    immersion = get_s1_synthetic_immersion(geodesic_distortion_func=geodesic_distortion_func, radius=radius,
+                                           n_wiggles=n_wiggles, geodesic_distortion_amp=geodesic_distortion_amp,
+                                           embedding_dim=embedding_dim, rot=rot, )
 
     angles = gs.linspace(0, 2 * gs.pi, n_times)
     data = torch.stack([immersion(angle) for angle in angles])
@@ -47,8 +36,7 @@ def load_s1_synthetic(
         ).sample((n_times,))
         data = data + radius * noise
 
-    labels = pd.DataFrame({"angles": angles})
-    return data, labels
+    return data, angles
 
 
 def load_s1_in_s1_synthetic(
@@ -115,8 +103,10 @@ def load_s2_synthetic(
         geodesic_distortion_amp,
         embedding_dim,
         noise_var,
+        random_seed=42,
 ):
     """Generate noisy S²-immersed data in R^embedding_dim."""
+    gs.random.seed(random_seed)
     rot = torch.eye(embedding_dim)
     if rotation == "random":
         rot = SpecialOrthogonal(n=embedding_dim).random_point()
@@ -128,17 +118,16 @@ def load_s2_synthetic(
     phis = gs.linspace(0, 2 * gs.pi, sqrt_ntimes)
 
     angle_grid = torch.cartesian_prod(thetas, phis)
-    print("angle_grid", angle_grid)
     data = torch.stack([immersion(pair) for pair in angle_grid])
 
-    noise = MultivariateNormal(
-        loc=torch.zeros(embedding_dim),
-        covariance_matrix=radius * noise_var * torch.eye(embedding_dim),
-    ).sample((sqrt_ntimes ** 2,))
+    if noise_var != 0:
+        noise = MultivariateNormal(
+            loc=torch.zeros(embedding_dim),
+            covariance_matrix=radius * noise_var * torch.eye(embedding_dim),
+        ).sample((sqrt_ntimes ** 2,))
+        data = data + noise
 
-    noisy_data = data + noise
-    labels = pd.DataFrame({"thetas": angle_grid[:, 0], "phis": angle_grid[:, 1]})
-    return noisy_data, labels
+    return data, angle_grid
 
 
 def load_t2_synthetic(
@@ -149,8 +138,10 @@ def load_t2_synthetic(
         geodesic_distortion_amp,
         embedding_dim,
         noise_var,
+        random_seed=42,
 ):
     """Generate noisy T²-immersed data in R^embedding_dim."""
+    gs.random.seed(random_seed)
     rot = torch.eye(embedding_dim)
     if rotation == "random":
         rot = SpecialOrthogonal(n=embedding_dim).random_point()
@@ -166,25 +157,25 @@ def load_t2_synthetic(
     angle_grid = torch.cartesian_prod(thetas, phis)
     data = torch.stack([immersion(pair) for pair in angle_grid])
 
-    noise = MultivariateNormal(
-        loc=torch.zeros(embedding_dim),
-        covariance_matrix=major_radius * noise_var * torch.eye(embedding_dim),
-    ).sample((sqrt_ntimes ** 2,))
+    if noise_var != 0:
+        noise = MultivariateNormal(
+            loc=torch.zeros(embedding_dim),
+            covariance_matrix=major_radius * noise_var * torch.eye(embedding_dim),
+        ).sample((sqrt_ntimes ** 2,))
+        data = data + noise
 
-    noisy_data = data + noise
-
-    labels = pd.DataFrame({"thetas": angle_grid[:, 0], "phis": angle_grid[:, 1]})
-    return noisy_data, labels
+    return data, angle_grid
 
 
 def load_scrunchy(rotation,
-                            n_times=1500,
-                            radius=1.0,
-                            n_wiggles=6,
-                            geodesic_distortion_amp=0.4,
-                            embedding_dim=10,
-                            noise_var=0.01,
-                            ):
+                  n_times=1500,
+                  radius=1.0,
+                  n_wiggles=6,
+                  geodesic_distortion_amp=0.4,
+                  embedding_dim=10,
+                  noise_var=0.01, random_seed=42,
+                  ):
+    gs.random.seed(random_seed)
     rot = torch.eye(embedding_dim)
     if rotation == "random":
         rot = SpecialOrthogonal(n=embedding_dim).random_point()
@@ -208,7 +199,7 @@ def load_scrunchy(rotation,
     else:
         noisy_data = data
 
-    labels = pd.DataFrame({"angles": angles})
+    labels = angles.unsqueeze(dim=1)
     return noisy_data, labels
 
 
@@ -247,30 +238,7 @@ def get_s1_synthetic_immersion(
         embedding_dim,
         rot,
 ):
-    """Return immersion S¹ → ℝ^N producing a distorted high-dimensional circle.
-
-    Parameters
-    ----------
-    geodesic_distortion_func : {"wiggles", "bump"}
-        Type of geodesic distortion.
-    radius : float
-        Base radius of the circle.
-    n_wiggles : int
-        Number of oscillations (used if distortion is "wiggles").
-    geodesic_distortion_amp : float
-        Amplitude of distortion.
-    embedding_dim : int
-        Target embedding dimension.
-    rot : torch.Tensor
-        Rotation matrix in SO(N) applied after immersion.
-
-    Returns
-    -------
-    synth_immersion : callable
-        Function mapping angle ∈ [0, 2π] to ℝ^embedding_dim.
-    """
-
-    def immersion(angle: float) -> torch.Tensor:
+    def immersion(angle):
         if geodesic_distortion_func == "wiggles":
             amp = radius * (1 + geodesic_distortion_amp * gs.cos(n_wiggles * angle))
         elif geodesic_distortion_func == "bump":

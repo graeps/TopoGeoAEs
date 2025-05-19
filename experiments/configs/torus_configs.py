@@ -5,18 +5,19 @@ base_config = {
     "dataset_name": "torus",
     "batch_size": 64,
     "rotation": "random",
-    "translation": None,
+    "translation": "random",
+    "deformation_amp": 0.1,
     "n_times": 40000,
     "major_radius": 2.5,
     "minor_radius": 2,
     "filled": False,
-    "embedding_dim": 3,
+    "embedding_dim": 4,
     "noise_var": 0.001,
 
     # Model
     'model_type': 'EuclideanVAE',
-    'data_dim': 3,
-    'latent_dim': 2,
+    'data_dim': 4,
+    'latent_dim': 3,
     'sftbeta': 4.5,
     'device': "cpu",
     'encoder_widths': [50, 32, 32],
@@ -33,7 +34,10 @@ base_config = {
     'dim_topo_loss': 0,  # Max feature dimension topological loss
 
     # Curvature computation
+    "quadric_dim": 2,
+    "n_plot_points": 1000,
     "n_grid_points": 800,  # to compute curvature
+    "k": 200,
 }
 
 exp1a_config = {

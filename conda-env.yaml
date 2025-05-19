@@ -3,23 +3,25 @@ channels:
   - defaults
   - conda-forge
 dependencies:
-  - python=3.9
-  - pytorch
-  - torchvision
+  - python=3.10
   - numpy
-  - scipy
+  - scipy=1.13.1
   - matplotlib
   - jupyter
   - geomstats
-  - wandb
   - plotly
-  - tqdm
+  - scikit-image
   - pip
   - pip:
+      - --extra-index-url https://download.pytorch.org/whl/cpu
+      - torch
+      - torchvision
+      - torchaudio
       - git+https://github.com/geoopt/geoopt.git
       - torch-topological
+      - giotto-tda
 variables:
-  GEOMSTATS_BACKEND: numpy
+  GEOMSTATS_BACKEND: "pytorch"
 
 # update environment after changes:
 # conda env update --file conda-env.yaml --prune

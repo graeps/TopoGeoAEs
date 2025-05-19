@@ -1,4 +1,5 @@
 import torch
+from tqdm import tqdm
 from ..utils.loss_functions import elbo
 
 
@@ -16,16 +17,19 @@ class MVAETrainer:
         self.history = {'train_loss': [], 'train_recon_loss': [], 'train_kl_loss': [], 'train_topo_loss': [],
                         'test_loss': [],
                         'test_recon_loss': [], 'test_kl_loss': [], 'test_topo_loss': []}
-        print("Trainer successfully initialized.")
+
+        if config.verbose:
+            print("Trainer successfully initialized.")
 
     def train(self):
         """
         Trains the Euclidean VAE model.
 
         Returns:
-            tuple: Training and testing losses per epoch.
+            dict: Training and testing losses per epoch.
         """
-        print("Training the " + f'{self.model.posterior_type}' + "VAE model.")
+        if self.verbose:
+            print(f"Training the {self.model.posterior_type} VAE model.")
 
         for epoch in range(self.num_epochs):
             train_loss, train_recon_loss, train_kl_loss, train_topo_loss = self.train_one_epoch(epoch, self.verbose)
@@ -40,8 +44,9 @@ class MVAETrainer:
             self.history['test_kl_loss'].append(test_kl_loss)
             self.history['test_topo_loss'].append(test_topo_loss)
 
-            print(f"Epoch {epoch + 1}/{self.num_epochs}, Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}")
-            print("-" * 50)
+            if self.verbose:
+                print(f"Epoch {epoch + 1}/{self.num_epochs}, Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}")
+                print("-" * 50)
 
         return self.history
 
@@ -54,16 +59,19 @@ class MVAETrainer:
 
         if verbose:
             print(f"Starting epoch {epoch + 1}/{self.num_epochs}")
+            dataloader = self.train_loader
+        else:
+            dataloader = tqdm(self.train_loader, desc=f"Epoch {epoch + 1}/{self.num_epochs}", leave=False)
 
-        for batch_idx, (x, _) in enumerate(self.train_loader):
+        for batch_idx, (x, _) in enumerate(dataloader):
             x = x.to(self.device)
             self.optimizer.zero_grad()
             z, x_recon, posterior_params = self.model(x)
             loss, recon_loss, kl_loss, topo_loss = elbo(self.model.posterior_type, x, z, x_recon, posterior_params,
                                                         self.config)
             loss.backward()
-
             self.optimizer.step()
+
             train_loss += loss.item()
             train_recon_loss += recon_loss.item()
             train_kl_loss += kl_loss.item()
@@ -71,14 +79,13 @@ class MVAETrainer:
 
             if ((batch_idx + 1) % self.log_interval == 0) and verbose:
                 print(
-                    f"Epoch [{epoch + 1}/{self.num_epochs}], Step [{batch_idx + 1}/{len(self.train_loader)}], Loss: {loss.item():.4f}"
-                )
+                    f"Epoch [{epoch + 1}/{self.num_epochs}], Batch [{batch_idx + 1}/{len(self.train_loader)}], Loss: {loss.item():.4f}")
 
-        avg_train_loss = train_loss / len(self.train_loader.dataset)
-        avg_train_recon_loss = train_recon_loss / len(self.train_loader.dataset)
-        avg_train_kl_loss = train_kl_loss / len(self.train_loader.dataset)
-        avg_train_topo_loss = train_topo_loss / len(self.train_loader.dataset)
-        return avg_train_loss, avg_train_recon_loss, avg_train_kl_loss, avg_train_topo_loss
+        n_samples = len(self.train_loader.dataset)
+        return (train_loss / n_samples,
+                train_recon_loss / n_samples,
+                train_kl_loss / n_samples,
+                train_topo_loss / n_samples)
 
     def test_one_epoch(self):
         """
