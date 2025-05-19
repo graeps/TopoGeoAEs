@@ -1,6 +1,10 @@
 from scripts.experiment_utils import generate_experiments
 
 base_config = {
+    # Experiment
+    "experiment": "flower_curve",
+    "random_seed": 42,
+
     # Dataset
     "dataset_name": "clelia_curve",
     "batch_size": 64,
@@ -8,13 +12,13 @@ base_config = {
     "translation": "random",
     "n_times": 10000,
     "radius": 2.0,
-    "embedding_dim": 3,
+    "embedding_dim": 10,
     "noise_var": 0.001,
     "clelia_c": 1,
 
     # Model
     'model_type': 'EuclideanVAE',
-    "data_dim": 3,
+    "data_dim": 10,
     'latent_dim': 2,
     'sftbeta': 4.5,
     'device': "cpu",
@@ -42,16 +46,11 @@ base_config = {
     "k": 160,
 }
 
-# Low embedding dim + no noise
-exp2a_config = {
-    "experiment": "exp1a_scrunchy: low embedding dim + noise",
-}
-
 param_grid = {
     "alpha": [1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0] * 3,
     "gamma": [0.0, 1.0, 1.0, 100.0, 100.0, 1.0, 1.0] * 3,
     "dim_topo_loss": ["_", 0, 1, 0, 1, 0, 1] * 3,
-    "clelia_c": [0.3] * 7 + [1.0] * 7 + [3.0]
+    "clelia_c": [0.3] * 7 + [1.0] * 7 + [3.0] * 7
 }
 
 all_configs = generate_experiments(base_config, param_grid)

@@ -19,9 +19,10 @@ from .experiment_utils import generate_experiment_report
 # Optional: Map your config names to their import paths
 CONFIG_MODULES = {
     "scrunchy": "configs.scruchy_configs",
-    "flower_curv": "configs.flower_curv_configs",
+    "flower_curve": "configs.flower_curve_configs",
     "flower_scrunchy": "configs.flower_scrunchy_configs",
-    "clelia_scrunchy": "configs.clelia_curv_configs",
+    "clelia_curve": "configs.clelia_curve_configs",
+    "torus": "configs.torus_configs",
 }
 
 

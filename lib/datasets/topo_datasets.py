@@ -99,6 +99,7 @@ def load_torus(n_points=5000, major_radius=5.0, minor_radius=1.0, noise_var=0.01
                rotation="random", random_seed=42, ):
     gs.random.seed(random_seed)
     torch.manual_seed(random_seed)
+
     rot = torch.eye(embedding_dim)
     if rotation == "random":
         rot = SpecialOrthogonal(n=embedding_dim).random_point()

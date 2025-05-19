@@ -361,7 +361,7 @@ def get_scrunchy_immersion(radius, n_wiggles, distortion_amp, embedding_dim, rot
 
 def get_flower_scrunchy_immersion(radius, n_wiggles, distortion_amp, embedding_dim, rot):
     def immersion(angle):
-        amp = radius * (1 + distortion_amp / 3 * gs.cos(n_wiggles * angle * 1.5))
+        amp = radius * (1 + distortion_amp / 2 * gs.cos(angle * 3))
 
         x = amp * gs.cos(angle)
         y = amp * gs.sin(angle)

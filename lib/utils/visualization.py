@@ -631,7 +631,11 @@ def _plot_empirical_curvature_from_vectors(config, model, recons, latents, input
     _, _, _, curvature_learned = compute_curvature_learned(config, model, latents, labels)
 
     # Normalize learned curvature
-    curvature_latents_normalized = normalize_curvature_to_input_radius(latents, config.radius, curvature_latents)
+    if hasattr(config, "radius"):
+        r_norm = config.radius
+    else:
+        r_norm = config.major_radius
+    curvature_latents_normalized = normalize_curvature_to_input_radius(latents, r_norm, curvature_latents)
 
     # Summed curvatures
     curvatures_latents_sum = curvature_latents_normalized + curvature_latents
