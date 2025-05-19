@@ -761,7 +761,7 @@ def _plot_empirical_curvature_from_vectors(config, model, recons, latents, input
 
     # Plot grouped bars for MALE, MSE, Linf, STD
     error_groups = [
-        ('MALE (%)', mal_errors, 'tab:orange'),
+        ('MALE', mal_errors, 'tab:orange'),
         ('MSE', mse_errors, 'tab:purple'),
         ('$L^\infty$', linf_errors, 'tab:brown')
     ]
@@ -812,7 +812,7 @@ def _plot_empirical_curvature_from_vectors(config, model, recons, latents, input
     results_dict = {
         "error_comparisons": labels_comparisons,
         "errors": {
-            "MALE_percent": mal_errors,
+            "MALE": mal_errors,
             "MSE": mse_errors,
             "SMAPE_percent": smap_errors,
             "L_inf": linf_errors

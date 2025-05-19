@@ -2,7 +2,7 @@ from torch.utils.data import TensorDataset, DataLoader, random_split
 import torch
 
 from ..datasets.synthetic_sphere_like import load_s1_synthetic, load_s1_in_s1_synthetic, load_scrunchy, \
-    load_interlocking_rings_synthetic, load_s2_synthetic, load_t2_synthetic
+    load_interlocking_rings_synthetic, load_s2_synthetic, load_t2_synthetic, load_flower_scrunchy
 
 from ..datasets.topo_datasets import generate_torus, generate_sphere, generate_genus3, generate_three_manifolds, \
     generate_nested_spheres, load_clelia_curve, load_8_curve, generate_entangled_tori, load_torus
@@ -35,6 +35,17 @@ def load_synthetic_ds(config):
         )
     elif config.dataset_name == "scrunchy":
         dataset, labels = load_scrunchy(
+            rotation=config.rotation,
+            n_times=config.n_times,
+            radius=config.radius,
+            n_wiggles=config.n_wiggles,
+            geodesic_distortion_amp=config.geodesic_distortion_amp,
+            embedding_dim=config.embedding_dim,
+            noise_var=config.noise_var,
+            random_seed=config.random_seed,
+        )
+    elif config.dataset_name == "flower_scrunchy":
+        dataset, labels = load_flower_scrunchy(
             rotation=config.rotation,
             n_times=config.n_times,
             radius=config.radius,

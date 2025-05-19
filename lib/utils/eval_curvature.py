@@ -20,6 +20,7 @@ from ..datasets.synthetic_sphere_like import (
     get_t2_synthetic_immersion,
     get_scrunchy_immersion,
     get_interlocking_rings_immersion,
+    get_flower_scrunchy_immersion
 )
 
 from ..datasets.topo_datasets import (
@@ -100,6 +101,14 @@ def get_true_immersion(config):
         )
     if config.dataset_name == "scrunchy":
         return get_scrunchy_immersion(
+            config.radius,
+            config.n_wiggles,
+            config.geodesic_distortion_amp,
+            config.embedding_dim,
+            rot,
+        )
+    if config.dataset_name == "flower_scrunchy":
+        return get_flower_scrunchy_immersion(
             config.radius,
             config.n_wiggles,
             config.geodesic_distortion_amp,
@@ -277,7 +286,7 @@ def _old_compute_curvature_true(config, n_grid_points=2000):
         print("Computing true curvature of input dataset using on z-grid...")
     z_grid = get_z_grid(config, n_grid_points)
     immersion = get_true_immersion(config)
-    if config.dataset_name in {"s1_synthetic", "interlocking_rings_synthetic", "scrunchy", "clelia_curve", "8_curve"}:
+    if config.dataset_name in {"s1_synthetic", "interlocking_rings_synthetic", "scrunchy", "clelia_curve", "8_curve", "flower_scrunchy"}:
         manifold_dim = 1
     elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "torus"}:
         manifold_dim = 2
@@ -296,7 +305,7 @@ def compute_curvature_true(config, angles=None, n_grid_points=2000):
         if config.verbose:
             print("Computing true curvature of input dataset on given angles...")
     immersion = get_true_immersion(config)
-    if config.dataset_name in {"s1_synthetic", "interlocking_rings_synthetic", "scrunchy", "clelia_curve", "8_curve"}:
+    if config.dataset_name in {"s1_synthetic", "interlocking_rings_synthetic", "scrunchy", "clelia_curve", "8_curve", "flower_scrunchy"}:
         manifold_dim = 1
     elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "torus"}:
         manifold_dim = 2

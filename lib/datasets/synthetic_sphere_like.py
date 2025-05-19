@@ -187,7 +187,45 @@ def load_scrunchy(rotation,
         embedding_dim=embedding_dim,
         rot=rot,
     )
-    angles = gs.linspace(0, 2 * gs.pi, n_times)
+
+    angles = _get_equal_arc_length_angles(immersion, n_times)
+    data = torch.stack([immersion(angle) for angle in angles])
+
+    if noise_var > 0:
+        noise = MultivariateNormal(
+            loc=torch.zeros(embedding_dim),
+            covariance_matrix=noise_var * torch.eye(embedding_dim),
+        ).sample((n_times,))
+        noisy_data = data + radius * noise
+    else:
+        noisy_data = data
+
+    labels = angles.unsqueeze(dim=1)
+    return noisy_data, labels
+
+
+def load_flower_scrunchy(rotation,
+                         n_times=1500,
+                         radius=1.0,
+                         n_wiggles=6,
+                         geodesic_distortion_amp=0.4,
+                         embedding_dim=10,
+                         noise_var=0.01, random_seed=42,
+                         ):
+    gs.random.seed(random_seed)
+    rot = torch.eye(embedding_dim)
+    if rotation == "random":
+        rot = SpecialOrthogonal(n=embedding_dim).random_point()
+
+    immersion = get_flower_scrunchy_immersion(
+        radius=radius,
+        n_wiggles=n_wiggles,
+        distortion_amp=geodesic_distortion_amp,
+        embedding_dim=embedding_dim,
+        rot=rot,
+    )
+
+    angles = _get_equal_arc_length_angles(immersion, n_times)
     data = torch.stack([immersion(angle) for angle in angles])
 
     if noise_var > 0:
@@ -321,6 +359,22 @@ def get_scrunchy_immersion(radius, n_wiggles, distortion_amp, embedding_dim, rot
     return immersion
 
 
+def get_flower_scrunchy_immersion(radius, n_wiggles, distortion_amp, embedding_dim, rot):
+    def immersion(angle):
+        amp = radius * (1 + distortion_amp / 3 * gs.cos(n_wiggles * angle * 1.5))
+
+        x = amp * gs.cos(angle)
+        y = amp * gs.sin(angle)
+        z = distortion_amp * gs.cos(n_wiggles * angle)
+        point = gs.squeeze(gs.array([x, y, z]), axis=-1)
+        if embedding_dim > 3:
+            point = gs.concatenate([point, gs.zeros(embedding_dim - 3)])
+
+        return gs.einsum("ij,j->i", rot, point)
+
+    return immersion
+
+
 def get_interlocking_rings_immersion(radius, embedding_dim, rot):
     def immersion(angle: float) -> torch.Tensor:
         assert 0 <= angle <= 4 * gs.pi
@@ -344,3 +398,16 @@ def get_interlocking_rings_immersion(radius, embedding_dim, rot):
         return gs.einsum("ij,j->i", rot, point)
 
     return immersion
+
+
+def _get_equal_arc_length_angles(immersion, n_points=1500, oversample=10000):
+    angles_fine = torch.linspace(0, 2 * torch.pi, oversample)
+    points = torch.stack([immersion(a) for a in angles_fine])
+    dists = torch.norm(points[1:] - points[:-1], dim=1)
+    arc_lengths = torch.cat([torch.zeros(1), torch.cumsum(dists, dim=0)])
+    arc_lengths = arc_lengths / arc_lengths[-1]
+
+    desired = torch.linspace(0, 1, n_points)
+    idxs = torch.searchsorted(arc_lengths, desired)
+    idxs = torch.clamp(idxs, 0, oversample - 1)
+    return angles_fine[idxs]

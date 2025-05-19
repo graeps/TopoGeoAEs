@@ -1,4 +1,4 @@
-from types import SimpleNamespace
+from scripts.experiment_utils import generate_experiments
 
 base_config = {
     # Dataset
@@ -29,7 +29,11 @@ base_config = {
     'num_epochs': 15,
     'log_interval': 100,
     'recon_loss': "MSE",
-    'dim_topo_loss': 0,  # Max feature dimension topological loss
+    'topo_loss': True,
+    'dim_topo_loss': 0,
+    'alpha': 1.0,  # Weight for reconstruction loss
+    'beta': 0.0,  # Weight for KL loss
+    'gamma': 0.0,  # Weight for topological loss
 
     # Curvature computation
     "quadric_dim": 1,
@@ -39,230 +43,15 @@ base_config = {
 }
 
 # Low embedding dim + no noise
-exp1a_config = {
-    "experiment": "exp1a_scrunchy: low embedding dim + noise",
-
-    # Trainer
-    'topo_loss': True,
-    'dim_topo_loss': 0,
-    'alpha': 1.0,  # Weight for reconstruction loss
-    'beta': 0.0,  # Weight for KL loss
-    'gamma': 0.0,  # Weight for topological loss
-}
-
-# exp1a + only topological loss
-exp1b_config = {
-    "experiment": "exp1b_scrunchy: exp1a + only topological loss",
-
-    # Trainer
-    'topo_loss': True,
-    'dim_topo_loss': 0,
-    'alpha': 0.0,  # Weight for reconstruction loss
-    'beta': 0.0,  # Weight for KL loss
-    'gamma': 1.0,  # Weight for topological loss
-}
-
-# exp1a + mix topo and recon loss
-exp1c_config = {
-    "experiment": "exp1c_scrunchy: exp1a + mix topo and recon loss",
-
-    # Trainer
-    'topo_loss': True,
-    'dim_topo_loss': 1,
-    'alpha': 0.0,  # Weight for reconstruction loss
-    'beta': 0.0,  # Weight for KL loss
-    'gamma': 1.0,  # Weight for topological loss
-}
-
-exp1d_config = {
-    "experiment": "exp1d_scrunchy: exp1a + mix topo and recon loss",
-
-    # Trainer
-    'topo_loss': True,
-    'dim_topo_loss': 1,
-    'alpha': 1.0,  # Weight for reconstruction loss
-    'beta': 0.0,  # Weight for KL loss
-    'gamma': 100.0,  # Weight for topological loss
-}
-
-exp1e_config = {
-    "experiment": "exp1e_scrunchy: exp1a + mix topo and recon loss",
-
-    # Trainer
-    'topo_loss': True,
-    'dim_topo_loss': 1,
-    'alpha': 1.0,  # Weight for reconstruction loss
-    'beta': 0.0,  # Weight for KL loss
-    'gamma': 100.0,  # Weight for topological loss
-}
-
-# Low embedding dim + no noise
 exp2a_config = {
     "experiment": "exp1a_scrunchy: low embedding dim + noise",
-
-    # Dataset
-    "clelia_c": 0.5,
-
-    # Trainer
-    'topo_loss': True,
-    'dim_topo_loss': 0,
-    'alpha': 1.0,  # Weight for reconstruction loss
-    'beta': 0.0,  # Weight for KL loss
-    'gamma': 0.0,  # Weight for topological loss
 }
 
-# exp1a + only topological loss
-exp2b_config = {
-    "experiment": "exp1b_scrunchy: exp1a + only topological loss",
-
-    # Dataset
-    "clelia_c": 0.5,
-
-    # Trainer
-    'topo_loss': True,
-    'dim_topo_loss': 0,
-    'alpha': 0.0,  # Weight for reconstruction loss
-    'beta': 0.0,  # Weight for KL loss
-    'gamma': 1.0,  # Weight for topological loss
+param_grid = {
+    "alpha": [1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0] * 3,
+    "gamma": [0.0, 1.0, 1.0, 100.0, 100.0, 1.0, 1.0] * 3,
+    "dim_topo_loss": ["_", 0, 1, 0, 1, 0, 1] * 3,
+    "clelia_c": [0.3] * 7 + [1.0] * 7 + [3.0]
 }
 
-# exp1a + mix topo and recon loss
-exp2c_config = {
-    "experiment": "exp1c_scrunchy: exp1a + mix topo and recon loss",
-
-    # Dataset
-    "clelia_c": 0.5,
-
-    # Trainer
-    'topo_loss': True,
-    'dim_topo_loss': 1,
-    'alpha': 0.0,  # Weight for reconstruction loss
-    'beta': 0.0,  # Weight for KL loss
-    'gamma': 1.0,  # Weight for topological loss
-}
-
-exp2d_config = {
-    "experiment": "exp1d_scrunchy: exp1a + mix topo and recon loss",
-
-    # Dataset
-    "clelia_c": 0.5,
-
-    # Trainer
-    'topo_loss': True,
-    'dim_topo_loss': 1,
-    'alpha': 1.0,  # Weight for reconstruction loss
-    'beta': 0.0,  # Weight for KL loss
-    'gamma': 100.0,  # Weight for topological loss
-}
-
-exp2e_config = {
-    "experiment": "exp1e_scrunchy: exp1a + mix topo and recon loss",
-
-    # Dataset
-    "clelia_c": 0.5,
-
-    # Trainer
-    'topo_loss': True,
-    'dim_topo_loss': 1,
-    'alpha': 1.0,  # Weight for reconstruction loss
-    'beta': 0.0,  # Weight for KL loss
-    'gamma': 100.0,  # Weight for topological loss
-}
-
-# Low embedding dim + no noise
-exp3a_config = {
-    "experiment": "exp1a_scrunchy: low embedding dim + noise",
-
-    # Dataset
-    "clelia_c": 3,
-
-    # Trainer
-    'topo_loss': True,
-    'dim_topo_loss': 0,
-    'alpha': 1.0,  # Weight for reconstruction loss
-    'beta': 0.0,  # Weight for KL loss
-    'gamma': 0.0,  # Weight for topological loss
-}
-
-# exp1a + only topological loss
-exp3b_config = {
-    "experiment": "exp1b_scrunchy: exp1a + only topological loss",
-
-    # Dataset
-    "clelia_c": 3,
-
-    # Trainer
-    'topo_loss': True,
-    'dim_topo_loss': 0,
-    'alpha': 0.0,  # Weight for reconstruction loss
-    'beta': 0.0,  # Weight for KL loss
-    'gamma': 1.0,  # Weight for topological loss
-}
-
-# exp1a + mix topo and recon loss
-exp3c_config = {
-    "experiment": "exp1c_scrunchy: exp1a + mix topo and recon loss",
-
-    # Dataset
-    "clelia_c": 3,
-
-    # Trainer
-    'topo_loss': True,
-    'dim_topo_loss': 1,
-    'alpha': 0.0,  # Weight for reconstruction loss
-    'beta': 0.0,  # Weight for KL loss
-    'gamma': 1.0,  # Weight for topological loss
-}
-
-exp3d_config = {
-    "experiment": "exp1d_scrunchy: exp1a + mix topo and recon loss",
-
-    # Dataset
-    "clelia_c": 3,
-
-    # Trainer
-    'topo_loss': True,
-    'dim_topo_loss': 1,
-    'alpha': 1.0,  # Weight for reconstruction loss
-    'beta': 0.0,  # Weight for KL loss
-    'gamma': 100.0,  # Weight for topological loss
-}
-
-exp3e_config = {
-    "experiment": "exp1e_scrunchy: exp1a + mix topo and recon loss",
-
-    # Dataset
-    "clelia_c": 3,
-
-    # Trainer
-    'topo_loss': True,
-    'dim_topo_loss': 1,
-    'alpha': 1.0,  # Weight for reconstruction loss
-    'beta': 0.0,  # Weight for KL loss
-    'gamma': 100.0,  # Weight for topological loss
-}
-
-
-def make_config(overrides):
-    cfg = base_config.copy()
-    cfg.update(overrides)
-    return SimpleNamespace(**cfg)
-
-
-all_configs = {
-    "exp1a_scrunchy": make_config(exp1a_config),
-    "exp1b_scrunchy": make_config(exp1b_config),
-    "exp1c_scrunchy": make_config(exp1c_config),
-    "exp1d_scrunchy": make_config(exp1d_config),
-    "exp1e_scrunchy": make_config(exp1e_config),
-    "exp2a_scrunchy": make_config(exp2a_config),
-    "exp2b_scrunchy": make_config(exp2b_config),
-    "exp2c_scrunchy": make_config(exp2c_config),
-    "exp2d_scrunchy": make_config(exp2d_config),
-    "exp2e_scrunchy": make_config(exp2e_config),
-    "exp3a_scrunchy": make_config(exp3a_config),
-    "exp3b_scrunchy": make_config(exp3b_config),
-    "exp3c_scrunchy": make_config(exp3c_config),
-    "exp3d_scrunchy": make_config(exp3d_config),
-    "exp3e_scrunchy": make_config(exp3e_config),
-}
+all_configs = generate_experiments(base_config, param_grid)

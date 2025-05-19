@@ -1,35 +1,79 @@
 import json
 from pathlib import Path
 import os
+from types import SimpleNamespace
+
+
+def _describe_experiment(overrides):
+    desc_lines = []
+    for k, v in overrides.items():
+        if k != "experiment":
+            desc_lines.append(f"{k}={v}")
+    return ", ".join(desc_lines)
+
+
+def generate_experiments(base_configuration, parameter_grid):
+    # Ensure all lists are of equal length
+    lengths = [len(v) for v in parameter_grid.values()]
+    if len(set(lengths)) != 1:
+        raise ValueError("All parameter lists in param_grid must have the same length for synchronized iteration.")
+
+    n = lengths[0]
+    experiments = {}
+
+    for i in range(n):
+        overrides = {k: v[i] for k, v in parameter_grid.items() if v[i] != "_"}
+
+        base_name = base_configuration.get("experiment", "default")
+        name = f"exp{i:02d}_{base_name}"  # concise ID with base experiment name
+
+        overrides["experiment"] = name
+
+        cfg = base_configuration.copy()
+        cfg.update(overrides)
+        cfg["description"] = _describe_experiment(overrides)
+
+        default_root_log_dir = "./results"
+        if cfg.get("log_dir") is None:
+            log_dir = os.path.join(default_root_log_dir, cfg["dataset_name"], f"results_{name}")
+        else:
+            log_dir = os.path.join(cfg["log_dir"], cfg["dataset_name"], f"results_{name}")
+        os.makedirs(log_dir, exist_ok=True)
+        cfg["log_dir"] = log_dir
+
+        experiments[name] = SimpleNamespace(**cfg)
+
+    return experiments
 
 
 def render_curvature_stats(json_path):
     with open(json_path, "r") as f:
         stats = json.load(f)
 
-    html = "<h2>Curvature Error Stats</h2>"
-
-    # Error Comparison Table
     comparisons = stats["error_comparisons"]
     errors = stats["errors"]
+    curvature_std = stats["curvature_std"]
 
-    html += "<h3>Error Comparisons</h3>"
-    html += "<table border='1' cellspacing='0' cellpadding='5'>"
-    html += "<tr><th>Comparison</th>" + "".join(f"<th>{metric}</th>" for metric in errors.keys()) + "</tr>"
-    for i, comp in enumerate(comparisons):
-        html += f"<tr><td>{comp}</td>" + "".join(
-            f"<td>{errors[metric][i]:.4f}</td>" for metric in errors.keys()) + "</tr>"
+    html = ""
+
+    # Table 1: Error Comparison
+    html += "<h2>Curvature Comparison</h2>"
+    html += "<table>"
+    html += "<tr><th>Metric</th>" + "".join(f"<th>{c}</th>" for c in comparisons) + "</tr>"
+
+    for metric, values in errors.items():
+        row = f"<tr><td><b>{metric}</b></td>" + "".join(f"<td>{v:.4f}</td>" for v in values) + "</tr>"
+        html += row
+
     html += "</table><br>"
 
-    # Curvature Std Table
-    labels = stats["curvature_std"]["labels"]
-    values = stats["curvature_std"]["values"]
+    # Table 2: Curvature Standard Deviations
+    html += "<h2>Curvature Standard Deviations</h2>"
+    html += "<table>"
+    html += "<tr><th>Label</th><th>Std. Deviation</th></tr>"
+    for label, value in zip(curvature_std["labels"], curvature_std["values"]):
+        html += f"<tr><td>{label}</td><td>{value:.4f}</td></tr>"
 
-    html += "<h3>Curvature Std Dev</h3>"
-    html += "<table border='1' cellspacing='0' cellpadding='5'>"
-    html += "<tr><th>Label</th><th>Std</th></tr>"
-    for label, val in zip(labels, values):
-        html += f"<tr><td>{label}</td><td>{val:.4f}</td></tr>"
     html += "</table><br>"
 
     return html
@@ -56,40 +100,42 @@ def generate_experiment_report(config):
                     margin: 20px;
                     background-color: #f9f9fb;
                     color: #333;
+                    font-size: 13px;
                 }
                 h1 {
-                    font-size: 28px;
+                    font-size: 22px;
                     color: #2c3e50;
                     border-bottom: 2px solid #ccc;
-                    padding-bottom: 10px;
+                    padding-bottom: 6px;
                 }
                 h2 {
-                    font-size: 22px;
+                    font-size: 16px;
                     color: #34495e;
-                    margin-top: 30px;
-                    margin-bottom: 10px;
+                    margin-top: 24px;
+                    margin-bottom: 6px;
                 }
                 h3 {
-                    font-size: 18px;
+                    font-size: 14px;
                     color: #2d3436;
-                    margin-top: 20px;
-                    margin-bottom: 8px;
+                    margin-top: 18px;
+                    margin-bottom: 6px;
                 }
                 table {
                     border-collapse: collapse;
                     width: 100%;
-                    margin-bottom: 30px;
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-                    border-radius: 8px;
+                    margin-bottom: 20px;
+                    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+                    border-radius: 6px;
                     overflow: hidden;
+                    font-size: 11px;
                 }
                 th, td {
-                    padding: 12px 16px;
+                    padding: 4px 8px;
                     text-align: left;
-                    border-bottom: 1px solid #eee;
+                    border-bottom: 1px solid #e0e0e0;
                 }
                 th {
-                    background-color: #f4f6f8;
+                    background-color: #f0f2f4;
                     font-weight: 600;
                     color: #2c3e50;
                 }
@@ -97,21 +143,22 @@ def generate_experiment_report(config):
                     background-color: #fff;
                 }
                 tr:hover td {
-                    background-color: #f1f1f1;
+                    background-color: #f5f7f9;
                 }
                 img {
                     width: 95%;
                     max-width: 900px;
-                    margin-bottom: 30px;
-                    border-radius: 10px;
-                    box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+                    margin-bottom: 20px;
+                    border-radius: 6px;
+                    box-shadow: 0 1px 6px rgba(0,0,0,0.06);
                 }
                 .description {
-                    font-size: 16px;
-                    margin-bottom: 20px;
-                    line-height: 1.6;
+                    font-size: 12px;
+                    margin-bottom: 16px;
+                    line-height: 1.5;
                 }
             </style>
+
         </head>
         <body>
         """)
@@ -125,7 +172,7 @@ def generate_experiment_report(config):
             f.write(f'<img src="{img_path.name}"><br>')
 
         for json_path in json_files:
-            if json_path.name == "curvature_error_stats.json":
+            if json_path.name == "curvature_errors_stats.json":
                 f.write(render_curvature_stats(json_path))
             else:
                 f.write(f"<h2>{json_path.name}</h2>")
