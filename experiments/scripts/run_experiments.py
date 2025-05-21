@@ -33,13 +33,13 @@ def run_experiment(name):
     config_module = __import__(CONFIG_MODULES[name], fromlist=["all_configs"])
     all_configs = config_module.all_configs
 
-    torch.manual_seed(42)
-    np.random.seed(42)
-
     for config_name, config in all_configs.items():
         print("----------------------------------------------------------------")
         print(f"Running {config_name}. Description: {config.description}")
         print("----------------------------------------------------------------")
+
+        torch.manual_seed(config.random_seed)
+        np.random.seed(config.random_seed)
 
         data_loader = dataloader.load_synthetic_ds(config)
         train_loader, test_loader = data_loader
@@ -50,7 +50,7 @@ def run_experiment(name):
         history = trainer.MVAETrainer(vae_model, data_loader, optimizer, config).train()
 
         utils.show_training_history(config, history)
-        utils.plot_data_latents_recon(config, vae_model, test_loader)
-        utils.plot_empirical_curvature(config=config, model=vae_model, data_loader=train_loader)
+        utils.plot_data_latents_recon(config, vae_model, train_loader)
+        utils.plot_curvature_persistence(config=config, model=vae_model, data_loader=train_loader)
 
         generate_experiment_report(config)

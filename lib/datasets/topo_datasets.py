@@ -83,7 +83,7 @@ def get_torus_immersion(major_radius, minor_radius, embedding_dim, deformation_a
         # Apply sinusoidal wiggles in higher dimensions
         for i in range(3, embedding_dim):
             t = i - 2  # frequency parameter
-            wiggle = deformation_amp * torch.sin(t * phi + theta)
+            wiggle = deformation_amp * torch.sin(t * phi)
             point[i] = wiggle
 
         # Optional: apply global rotation and translation
@@ -128,17 +128,18 @@ def load_torus(n_points=5000, major_radius=5.0, minor_radius=1.0, noise_var=0.01
     return data, angle_grid
 
 
-def generate_torus(n_points=5000, R=5.0, r=1.0, filled=False, noise_var=0.01, embedding_dim=3, translation=None,
+def generate_torus(n_points=5000, major_radius=5.0, minor_radius=1.0, filled=False, noise_var=0.01, embedding_dim=3,
+                   translation=None,
                    rotation=None, random_seed=42):
     gs.random.seed(random_seed)
     torch.manual_seed(random_seed)
     if filled:
         theta = 2 * torch.pi * torch.rand(n_points)
         phi = 2 * torch.pi * torch.rand(n_points)
-        rho = r * torch.sqrt(torch.rand(n_points))
+        rho = minor_radius * torch.sqrt(torch.rand(n_points))
 
-        x = (R + rho * torch.cos(phi)) * torch.cos(theta)
-        y = (R + rho * torch.cos(phi)) * torch.sin(theta)
+        x = (major_radius + rho * torch.cos(phi)) * torch.cos(theta)
+        y = (major_radius + rho * torch.cos(phi)) * torch.sin(theta)
         z = rho * torch.sin(phi)
         angles = torch.stack((theta, phi, rho), dim=1)
 
@@ -146,26 +147,26 @@ def generate_torus(n_points=5000, R=5.0, r=1.0, filled=False, noise_var=0.01, em
         theta = 2 * torch.pi * torch.rand(n_points)
         phi = 2 * torch.pi * torch.rand(n_points)
 
-        x = (R + r * torch.cos(phi)) * torch.cos(theta)
-        y = (R + r * torch.cos(phi)) * torch.sin(theta)
-        z = r * torch.sin(phi)
+        x = (major_radius + minor_radius * torch.cos(phi)) * torch.cos(theta)
+        y = (major_radius + minor_radius * torch.cos(phi)) * torch.sin(theta)
+        z = minor_radius * torch.sin(phi)
         angles = torch.stack((theta, phi), dim=1)
 
     points = torch.stack((x, y, z), dim=1)
     points = _embedd_rotate_translate(points, embedding_dim, translation, rotation)
-    noise = noise_var * torch.randn_like(points) * r
+    noise = noise_var * torch.randn_like(points) * minor_radius
     points += noise
 
     return points, angles
 
 
-def generate_entangled_tori(n_points=5000, R=5.0, r=1.0, filled1=False, filled2=False, noise_var=0.01, embedding_dim=3,
+def generate_entangled_tori(n_points=5000, major_radius=5.0, minor_radius=1.0, filled1=False, filled2=False, noise_var=0.01, embedding_dim=3,
                             translation=None, rotation=None):
     n1 = n_points // 2
     n2 = n_points - n1
 
-    torus1, _ = generate_torus(n1, R, r, filled=filled1, noise_var=noise_var)
-    torus2, _ = generate_torus(n2, R, r, filled=filled2, noise_var=noise_var)
+    torus1, _ = generate_torus(n1, major_radius, minor_radius, filled=filled1, noise_var=noise_var)
+    torus2, _ = generate_torus(n2, major_radius, minor_radius, filled=filled2, noise_var=noise_var)
 
     R_x90 = torch.tensor([
         [1.0, 0.0, 0.0],
@@ -174,7 +175,7 @@ def generate_entangled_tori(n_points=5000, R=5.0, r=1.0, filled1=False, filled2=
     ])
 
     torus2 = torus2 @ R_x90.T
-    torus2 += torch.tensor([-R, 0.0, 0.0])
+    torus2 += torch.tensor([-major_radius, 0.0, 0.0])
     points = torch.cat([torus1, torus2], dim=0)
 
     points = _embedd_rotate_translate(points, embedding_dim, translation, rotation)

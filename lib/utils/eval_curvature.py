@@ -1,5 +1,4 @@
 import os
-import time
 import numpy as np
 import torch
 from tqdm import tqdm
@@ -8,6 +7,7 @@ from sklearn.neighbors import NearestNeighbors
 from sklearn.decomposition import PCA
 from numpy.linalg import lstsq
 from scipy.spatial.distance import pdist
+from scipy.signal import savgol_filter
 
 from geomstats.geometry.base import ImmersedSet
 from geomstats.geometry.euclidean import Euclidean
@@ -154,7 +154,7 @@ def get_true_immersion(config):
             rotation=rot
         )
     elif config.dataset_name == "8_curve":
-        return get_clelia_immersion(
+        return get_8_curve_immersion(
             embedding_dim=config.embedding_dim,
             translation=trans,
             rotation=rot
@@ -277,8 +277,8 @@ def compute_curvature_learned(config, model, latent_vectors=None, labels=None, n
         raise InvalidConfigError(f"Unknown model type: {config.model_type}")
     immersion = get_learned_immersion(model, config)
     manifold_dim = z_grid.shape[1] if z_grid.ndim > 1 else 1
-    result = _compute_curvature(z_grid, immersion, manifold_dim, config.embedding_dim)
-    return z_grid, labels, *result  # *result = curv, curv_norm
+    curv, curv_norm = _compute_curvature(z_grid, immersion, manifold_dim, config.embedding_dim)
+    return z_grid, labels, curv, curv_norm
 
 
 def _old_compute_curvature_true(config, n_grid_points=2000):
@@ -286,7 +286,8 @@ def _old_compute_curvature_true(config, n_grid_points=2000):
         print("Computing true curvature of input dataset using on z-grid...")
     z_grid = get_z_grid(config, n_grid_points)
     immersion = get_true_immersion(config)
-    if config.dataset_name in {"s1_synthetic", "interlocking_rings_synthetic", "scrunchy", "clelia_curve", "8_curve", "flower_scrunchy"}:
+    if config.dataset_name in {"s1_synthetic", "interlocking_rings_synthetic", "scrunchy", "clelia_curve", "8_curve",
+                               "flower_scrunchy"}:
         manifold_dim = 1
     elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "torus"}:
         manifold_dim = 2
@@ -305,14 +306,15 @@ def compute_curvature_true(config, angles=None, n_grid_points=2000):
         if config.verbose:
             print("Computing true curvature of input dataset on given angles...")
     immersion = get_true_immersion(config)
-    if config.dataset_name in {"s1_synthetic", "interlocking_rings_synthetic", "scrunchy", "clelia_curve", "8_curve", "flower_scrunchy"}:
+    if config.dataset_name in {"s1_synthetic", "interlocking_rings_synthetic", "scrunchy", "clelia_curve", "8_curve",
+                               "flower_scrunchy"}:
         manifold_dim = 1
     elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "torus"}:
         manifold_dim = 2
     else:
         raise InvalidConfigError(f"Unknown dataset: {config.dataset_name}")
-    result = _compute_curvature(angles, immersion, manifold_dim, config.embedding_dim)
-    return angles, *result
+    curv, curv_norm = _compute_curvature(angles, immersion, manifold_dim, config.embedding_dim)
+    return angles, curv, curv_norm
 
 
 def _compute_curvature_error_s1(thetas, learned, true):
@@ -415,6 +417,9 @@ def compute_empirical_curvature(recons, latent_vectors, true_data, labels, quadr
         curvature_recons = estimate_curvature_2d_quadric(recons, k)
     else:
         raise InvalidConfigError(f"Unknown quadric dim: {quadric_dim}")
+    curvature_inputs = savgol_filter(curvature_inputs, 20, 6)
+    curvature_latents = savgol_filter(curvature_latents, 20, 6)
+    curvature_recons = savgol_filter(curvature_recons, 20, 6)
     return curvature_inputs, curvature_latents, curvature_recons, labels
 
 
@@ -461,6 +466,50 @@ def estimate_curvature_2d_quadric(points, k=200):
         H = 0.5 * np.trace(II)
         curvatures.append(abs(H))
     return np.array(curvatures)
+
+
+def compute_all_curvatures(config, model, recons, latents, inputs, labels):
+    # --- Step 1: Compute empirical curvatures on full data ---
+    curvature_inputs, curvature_latents, curvature_recons, labels = compute_empirical_curvature(
+        recons, latents, inputs, labels, quadric_dim=config.quadric_dim, k=config.k
+    )
+
+    # --- Step 2: Determine ordered subsample indices ---
+    n_total = len(labels)
+    n_points = min(config.n_curv_evaluation_points, n_total)
+    step = n_total // n_points
+    sampled_indices = np.arange(0, n_total, step)[:n_points]  # order-preserving
+
+    # --- Step 3: Subsample labels and latents for learned and true curvature ---
+    labels_subset = labels[sampled_indices]
+    latents_subset = latents[sampled_indices]
+
+    # --- Step 4: Compute learned curvature ---
+    _, _, _, curvature_learned = compute_curvature_learned(config, model, latents_subset, labels_subset)
+
+    # --- Step 5: Normalize latent curvature ---
+    r_norm = getattr(config, "radius", getattr(config, "major_radius", 1.0))
+    curvature_latents_normalized = normalize_curvature_to_input_radius(
+        latents_subset, r_norm, curvature_latents[sampled_indices]
+    )
+
+    # --- Step 6: Compute true curvature ---
+    _, _, curvature_true = compute_curvature_true(config, labels_subset)
+
+    # --- Step 7: Subsample empirical curvature to match subset ---
+    curvature_inputs = curvature_inputs[sampled_indices]
+    curvature_recons = curvature_recons[sampled_indices]
+    curvature_latents = curvature_latents[sampled_indices]
+
+    return (
+        curvature_true,
+        curvature_inputs,
+        curvature_recons,
+        curvature_latents,
+        curvature_latents_normalized,
+        curvature_learned,
+        labels_subset
+    )
 
 
 class InvalidConfigError(Exception):

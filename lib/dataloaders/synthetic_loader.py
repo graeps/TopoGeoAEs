@@ -4,7 +4,7 @@ import torch
 from ..datasets.synthetic_sphere_like import load_s1_synthetic, load_s1_in_s1_synthetic, load_scrunchy, \
     load_interlocking_rings_synthetic, load_s2_synthetic, load_t2_synthetic, load_flower_scrunchy
 
-from ..datasets.topo_datasets import generate_torus, generate_sphere, generate_genus3, generate_three_manifolds, \
+from ..datasets.topo_datasets import generate_sphere, generate_genus3, generate_three_manifolds, \
     generate_nested_spheres, load_clelia_curve, load_8_curve, generate_entangled_tori, load_torus
 
 

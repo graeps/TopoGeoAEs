@@ -32,7 +32,7 @@ base_config = {
 
     # Trainer
     'verbose': False,
-    'num_epochs': 20,
+    'num_epochs': 10,
     'log_interval': 100,
     'recon_loss': "MSE",
     'topo_loss': True,
@@ -44,8 +44,13 @@ base_config = {
     # Curvature computation
     "quadric_dim": 1,
     "n_plot_points": 1000,
-    "n_grid_points": 800,  # to compute curvature
+    "n_curv_estimation_points": 800,  # to compute curvature
+    "n_curv_evaluation_points": 800,
     "k": 110,
+
+    # Persistent homology
+    "scale": False,
+    "homology_dimensions": [0,1]
 }
 
 param_grid = {
@@ -54,7 +59,6 @@ param_grid = {
     "dim_topo_loss": ["_", 0, 1, 0, 1, 0, 1] * 3,
     "geodesic_distortion_amp": [0.5] * 7 + [2.5] * 14,
     "noise_var": [0.001] * 14 + [0.01] * 7,
-    "n_grid_points": [800] * 7 + [2000] * 14,
     "n_times": [10000] * 7 + [20000] * 14,
 }
 

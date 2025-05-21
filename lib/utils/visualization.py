@@ -12,9 +12,9 @@ from scipy.interpolate import griddata
 
 from .eval_curvature import compute_curvature_learned, compute_curvature_error, \
     compute_curvature_true, estimate_curvature_1d_quadric, \
-    compute_empirical_curvature, get_vectors, compute_curvature_error_mse, compute_curvature_error_linf, \
-    compute_curvature_error_male, compute_curvature_error_smape, normalize_curvature_to_input_radius
-from .eval_topology import compute_bottleneck_dist
+    compute_all_curvatures, get_vectors, compute_curvature_error_mse, compute_curvature_error_linf, \
+    compute_curvature_error_male, compute_curvature_error_smape
+from .eval_topology import compare_persistent_homology
 
 
 def show_training_history(config, history):
@@ -621,229 +621,170 @@ def scatter_empirical_curvature(config, model, test_loader, n_samples=2000):
     plt.show()
 
 
-def _plot_empirical_curvature_from_vectors(config, model, recons, latents, inputs, labels):
-    # Compute empirical curvature
-    curvature_inputs, curvature_latents, curvature_recons, labels = compute_empirical_curvature(
-        recons, latents, inputs, labels, quadric_dim=config.quadric_dim, k=config.k
-    )
-
-    # Compute learned curvature using pullback metric
-    _, _, _, curvature_learned = compute_curvature_learned(config, model, latents, labels)
-
-    # Normalize learned curvature
-    if hasattr(config, "radius"):
-        r_norm = config.radius
-    else:
-        r_norm = config.major_radius
-    curvature_latents_normalized = normalize_curvature_to_input_radius(latents, r_norm, curvature_latents)
-
-    # Summed curvatures
-    curvatures_latents_sum = curvature_latents_normalized + curvature_latents
-
-    # Compute true curvature
-    _, _, curvature_true = compute_curvature_true(config, labels)
-
-    if labels.ndim == 1:
-        angles = labels
-
-        curve_groups = [
-            [
-                ('True Curvature', curvature_true, 'tab:green'),
-                ('Input Curvature', curvature_inputs, 'tab:blue'),
-                ('Reconstructed Curvature', curvature_recons, 'tab:red')
-            ],
-            [
-                ('True Curvature', curvature_true, 'tab:green'),
-                ('Learned Curvature', curvature_learned, 'tab:pink'),
-                ('Latent Curvature', curvature_latents, 'tab:orange')
-            ],
-            [
-                ('True Curvature', curvature_true, 'tab:green'),
-                ('Input Curvature', curvature_inputs, 'tab:blue'),
-                ('Normalized Learned Curvature', curvature_latents_normalized, 'tab:orange'),
-            ]
+def plot_curvatures_1d(labels, curvature_true, curvature_inputs, curvature_recons,
+                       curvature_latents, curvature_latents_normalized, curvature_learned, config):
+    curve_groups = [
+        [
+            ('True Curvature', curvature_true, 'tab:green'),
+            ('Input Curvature', curvature_inputs, 'tab:blue'),
+            ('Reconstructed Curvature', curvature_recons, 'tab:red')
+        ],
+        [
+            ('True Curvature', curvature_true, 'tab:green'),
+            ('Learned Curvature', curvature_learned, 'tab:pink'),
+            ('Latent Curvature', curvature_latents, 'tab:orange')
+        ],
+        [
+            ('True Curvature', curvature_true, 'tab:green'),
+            ('Input Curvature', curvature_inputs, 'tab:blue'),
+            ('Normalized Learned Curvature', curvature_latents_normalized, 'tab:orange')
         ]
-        titles = [
-            'True, Input, Reconstructed',
-            'True, Learned, Latent',
-            'True, Normalized Learned, Latent + Learned'
-        ]
+    ]
+    titles = ['True, Input, Reconstructed', 'True, Learned, Latent', 'True, Normalized Learned, Latent + Learned']
 
-        fig, axes = plt.subplots(1, 3, figsize=(18, 5), sharex=True,)
-        for ax, curves, title in zip(axes, curve_groups, titles):
-            for label, curve, color in curves:
-                ax.plot(angles, curve, label=label, color=color, linewidth=1.5, alpha=0.8)
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5), sharex=True)
+    for ax, curves, title in zip(axes, curve_groups, titles):
+        for label, curve, color in curves:
+            ax.plot(labels, curve, label=label, color=color, linewidth=1.5, alpha=0.8)
+        ax.set_title(title)
+        ax.set_xlabel('Angle (radians)')
+        ax.grid(True, linestyle='--', alpha=0.5)
+        ax.legend(fontsize=8)
+    axes[0].set_ylabel('Curvature')
+    plt.tight_layout()
+    if config.log_dir:
+        plt.savefig(os.path.join(config.log_dir, "curvature_grid_plot.png"))
+    plt.show()
+
+
+def plot_curvatures_2d(labels, curvature_true, curvature_inputs, curvature_recons,
+                       curvature_latents, curvature_lat_norm, curvature_learned, config):
+    grid_res = 100
+    grid_x, grid_y = np.meshgrid(np.linspace(0, 2 * np.pi, grid_res), np.linspace(0, 2 * np.pi, grid_res))
+
+    def interpolate(values):
+        return griddata(labels, values, (grid_x, grid_y), method="cubic")
+
+    surfaces_1 = {
+        "True Curvature (pullback)": interpolate(curvature_true),
+        "Input Curvature (empirical)": interpolate(curvature_inputs),
+        "Reconstructed Curvature (empirical)": interpolate(curvature_recons),
+    }
+
+    surfaces_2 = {
+        "Learned normalized curvature": interpolate(curvature_lat_norm),
+        "Learned Curvature (pullback)": interpolate(curvature_learned),
+        "Latent Curvature (empirical)": interpolate(curvature_latents),
+    }
+
+    def plot_surface_group(surfaces, suptitle, tag):
+        fig = plt.figure(figsize=(18, 6))
+        for i, (title, surface) in enumerate(surfaces.items(), 1):
+            ax = fig.add_subplot(1, 3, i, projection='3d')
+            surf = ax.plot_surface(grid_x, grid_y, surface, cmap='viridis')
             ax.set_title(title)
-            ax.set_xlabel('Angle (radians)')
-            ax.grid(True, linestyle='--', alpha=0.5)
-            ax.legend(fontsize=8)
-        axes[0].set_ylabel('Curvature')
-        plt.tight_layout()
-        if config.log_dir is not None:
-            filename = "curvature_grid_plot.png"
-            plt.savefig(os.path.join(config.log_dir, filename))
+            ax.set_xlabel(r'$\theta_1$')
+            ax.set_ylabel(r'$\theta_2$')
+            ax.set_zlabel('Curvature')
+            fig.colorbar(surf, ax=ax, shrink=0.6, aspect=10)
+        fig.suptitle(suptitle, fontsize=16)
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+        if config.log_dir:
+            fname = f"surface_{tag}.png"
+            plt.savefig(os.path.join(config.log_dir, fname))
         plt.show()
 
-    elif labels.ndim == 2:
-        # ---------------- Interpolate to Grid -----------------
-        grid_res = 100
-        method = "cubic"
-        grid_x, grid_y = np.meshgrid(
-            np.linspace(0, 2 * np.pi, grid_res),
-            np.linspace(0, 2 * np.pi, grid_res)
-        )
+    plot_surface_group(surfaces_1, 'Curvature Comparison (True, Input, Reconstructed)', 'true_input_reconstructed')
+    plot_surface_group(surfaces_2, 'Curvature Comparison (True, Learned, Latent)', 'true_learned_latent')
 
-        def interpolate_to_grid(values):
-            return griddata(labels, values, (grid_x, grid_y), method=method)
 
-        # Interpolate all curvatures
-        surfaces_1 = {
-            "True Curvature (pullback)": interpolate_to_grid(curvature_true),
-            "Input Curvature (empirical)": interpolate_to_grid(curvature_inputs),
-            "Reconstructed Curvature (empirical)": interpolate_to_grid(curvature_recons),
-        }
-
-        surfaces_2 = {
-            "True Curvature (pullback)": interpolate_to_grid(curvature_true),
-            "Learned Curvature (pullback)": interpolate_to_grid(curvature_learned),
-            "Latent Curvature (empirical)": interpolate_to_grid(curvature_latents),
-        }
-
-        def plot_surface_group(surfaces, suptitle, save_tag=None):
-            fig = plt.figure(figsize=(18, 6))
-            for i, (title, surface) in enumerate(surfaces.items(), 1):
-                ax = fig.add_subplot(1, 3, i, projection='3d')
-                surf = ax.plot_surface(grid_x, grid_y, surface, cmap='viridis')
-                ax.set_title(title)
-                ax.set_xlabel(r'$\theta_1$')
-                ax.set_ylabel(r'$\theta_2$')
-                ax.set_zlabel('Curvature')
-                fig.colorbar(surf, ax=ax, shrink=0.6, aspect=10)
-            fig.suptitle(suptitle, fontsize=16)
-            plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-
-            if config.log_dir is not None and save_tag is not None:
-                filename = f"surface_{save_tag.lower().replace(',', '').replace(' ', '_')}.png"
-                plt.savefig(os.path.join(config.log_dir, filename))
-            plt.show()
-
-        plot_surface_group(surfaces_1, 'Curvature Comparison (True, Input, Reconstructed)',
-                           save_tag='true_input_reconstructed')
-        plot_surface_group(surfaces_2, 'Curvature Comparison (True, Learned, Latent)', save_tag='true_learned_latent')
-
-    else:
-        raise NotImplementedError("Wrong label dim. Plotting curvature not implemented.")
-
-    # Plot errors as bar plots
-    # Error pairs
-    error_pairs = [
+def plot_curvature_errors_and_stats(curvature_true, curvature_inputs, curvature_recons,
+                                    curvature_latents, curv_lat_norm, curvature_learned, config):
+    pairs = [
         ("True vs Input", curvature_true, curvature_inputs),
         ("True vs Learned", curvature_true, curvature_learned),
         ("True vs Latent", curvature_true, curvature_latents),
-        ("Learned vs Latent", curvature_latents, curvature_learned)
+        ("True vs Latent Normalized", curvature_true, curv_lat_norm)
     ]
-    labels_comparisons = [label for label, _, _ in error_pairs]
+    names = [name for name, _, _ in pairs]
+    mal = [compute_curvature_error_male(a, b) for _, a, b in pairs]
+    smap = [compute_curvature_error_smape(a, b) for _, a, b in pairs]
+    mse = [compute_curvature_error_mse(a, b) for _, a, b in pairs]
+    linf = [compute_curvature_error_linf(a, b) for _, a, b in pairs]
 
-    # Compute errors
-    mal_errors = [compute_curvature_error_male(a, b) for _, a, b in error_pairs]
-    smap_errors = [compute_curvature_error_smape(a, b) for _, a, b in error_pairs]
-    mse_errors = [compute_curvature_error_mse(a, b) for _, a, b in error_pairs]
-    linf_errors = [compute_curvature_error_linf(a, b) for _, a, b in error_pairs]
-
-    # STD per curvature type
-    std_curvatures = [
-        np.std(np.asarray(curvature_true)),
-        np.std(np.asarray(curvature_inputs)),
-        np.std(np.asarray(curvature_latents)),
-        np.std(np.asarray(curvature_recons)),
-        np.std(np.asarray(curvature_learned))
-    ]
+    stds = [np.std(np.asarray(x)) for x in
+            [curvature_true, curvature_inputs, curvature_latents, curvature_recons, curvature_learned]]
     std_labels = ['True', 'Input', 'Latent', 'Reconstructed', 'Learned']
 
-    # Create 1x3 subplot layout
     fig, axes = plt.subplots(1, 3, figsize=(18, 5))
-
-    # Plot grouped bars for MALE, MSE, Linf, STD
-    error_groups = [
-        ('MALE', mal_errors, 'tab:orange'),
-        ('MSE', mse_errors, 'tab:purple'),
-        ('$L^\infty$', linf_errors, 'tab:brown')
-    ]
-    num_groups = len(error_groups)
-    num_bars = 4
     bar_width = 0.2
-    x = np.arange(num_groups)
+    x = np.arange(3)
 
+    # MALE, MSE, L_inf
     ax = axes[0]
-    for i in range(num_bars):
+    for i in range(4):
         offsets = x + (i - 1.5) * bar_width
-        heights = [errors[i] for _, errors, _ in error_groups]
-        ax.bar(offsets, heights, bar_width, label=labels_comparisons[i])
+        heights = [group[i] for group in [mal, mse, linf]]
+        ax.bar(offsets, heights, bar_width, label=names[i])
     ax.set_xticks(x)
-    ax.set_xticklabels([name for name, _, _ in error_groups], rotation=15)
-    ax.set_ylabel('Value')
-    ax.set_title('MALE / MSE / $L^\infty$')
-    ax.grid(True, linestyle='--', alpha=0.5)
+    ax.set_xticklabels(['MALE', 'MSE', '$L^\infty$'], rotation=15)
+    ax.set_title('Error Metrics')
     ax.legend(fontsize=8)
-
-    # Plot SMAPE
-    ax = axes[1]
-    x_smap = np.arange(len(smap_errors))
-    ax.bar(x_smap, smap_errors, color='tab:cyan', width=0.4)
-    ax.set_xticks(x_smap)
-    ax.set_xticklabels(labels_comparisons, rotation=15)
-    ax.set_ylabel('SMAPE (%)')
-    ax.set_title('SMAPE Error')
     ax.grid(True, linestyle='--', alpha=0.5)
 
-    # Plot STD
+    # SMAPE
+    ax = axes[1]
+    ax.bar(np.arange(len(smap)), smap, color='tab:cyan', width=0.4)
+    ax.set_xticks(np.arange(len(smap)))
+    ax.set_xticklabels(names, rotation=15)
+    ax.set_title('SMAPE (%)')
+    ax.grid(True, linestyle='--', alpha=0.5)
+
+    # STD
     ax = axes[2]
-    x_std = np.arange(len(std_curvatures))
-    ax.bar(x_std, std_curvatures, color='tab:gray', width=0.4)
-    ax.set_xticks(x_std)
+    ax.bar(np.arange(len(stds)), stds, color='tab:gray', width=0.4)
+    ax.set_xticks(np.arange(len(stds)))
     ax.set_xticklabels(std_labels, rotation=15)
-    ax.set_ylabel('STD')
     ax.set_title('Curvature STD')
     ax.grid(True, linestyle='--', alpha=0.5)
 
-    if config.log_dir is not None:
-        save_path = os.path.join(config.log_dir, "curvature_errors_combined.png")
-        plt.savefig(save_path)
-
+    if config.log_dir:
+        plt.savefig(os.path.join(config.log_dir, "curvature_errors_combined.png"))
     plt.tight_layout()
     plt.show()
 
-    results_dict = {
-        "error_comparisons": labels_comparisons,
-        "errors": {
-            "MALE": mal_errors,
-            "MSE": mse_errors,
-            "SMAPE_percent": smap_errors,
-            "L_inf": linf_errors
-        },
-        "curvature_std": {
-            "labels": std_labels,
-            "values": std_curvatures
-        }
+    results = {
+        "error_comparisons": names,
+        "errors": {"MALE": mal, "MSE": mse, "SMAPE_percent": smap, "L_inf": linf},
+        "curvature_std": {"labels": std_labels, "values": stds}
     }
 
-    # Save JSON file
-    if config.log_dir is not None:
-        json_path = os.path.join(config.log_dir, "curvature_errors_stats.json")
-        with open(json_path, "w") as f:
-            json.dump(results_dict, f, indent=4)
+    if config.log_dir:
+        with open(os.path.join(config.log_dir, "curvature_errors_stats.json"), "w") as f:
+            json.dump(results, f, indent=4)
+
+
+def _plot_empirical_curvature_from_vectors(config, model, recons, latents, inputs, labels, ):
+    (curv_true, curv_in, curv_rec, curv_lat, curv_lat_norm, curv_learned, lbls) = compute_all_curvatures(
+        config, model, recons, latents, inputs, labels)
+    if lbls.ndim == 1:
+        plot_curvatures_1d(lbls, curv_true, curv_in, curv_rec, curv_lat, curv_lat_norm, curv_learned, config)
+    elif lbls.ndim == 2:
+        plot_curvatures_2d(lbls, curv_true, curv_in, curv_rec, curv_lat, curv_lat_norm, curv_learned, config)
+    else:
+        raise NotImplementedError("Label dimension not supported for curvature plotting.")
+    plot_curvature_errors_and_stats(curv_true, curv_in, curv_rec, curv_lat, curv_lat_norm, curv_learned, config)
 
 
 def plot_empirical_curvature(config, model, data_loader):
-    recons, latents, inputs, labels = get_vectors(config, model, data_loader, config.n_grid_points)
+    recons, latents, inputs, labels = get_vectors(config, model, data_loader, config.n_curv_estimation_points)
     _plot_empirical_curvature_from_vectors(config, model, recons, latents, inputs, labels)
 
 
-def plot_persistence_diagrams(point_cloud1, point_cloud2, homology_dimensions):
+def plot_persistence_diagrams(config, diagrams, homology_dimensions):
     """Plot two persistence diagrams side-by-side and print bottleneck distance matrix."""
-    diagrams, distances = compute_bottleneck_dist(point_cloud1, point_cloud2, homology_dimensions)
-    fig, axes = plt.subplots(1, 2, figsize=(12, 6), sharex=True, sharey=True)
-    titles = ["Diagram for Point Cloud 1", "Diagram for Point Cloud 2"]
+    fig, axes = plt.subplots(1, 2, figsize=(12, 6),)
+    titles = ["Diagram for Input Data", "Diagram for Latent Space"]
     colors = {0: 'red', 1: 'blue', 2: 'green'}
 
     for i, ax in enumerate(axes):
@@ -887,20 +828,51 @@ def plot_persistence_diagrams(point_cloud1, point_cloud2, homology_dimensions):
         ax.legend()
 
     plt.tight_layout()
+    if config.log_dir:
+        fname = "persistence_diagrams.png"
+        plt.savefig(os.path.join(config.log_dir, fname))
     plt.show()
 
-    # Print bottleneck distance matrix
-    print("Bottleneck distance matrix:\n", distances)
-    print(f"Distance between diagrams: {distances[0, 1]:.4f}")
+
+def plot_betti_curves(config, betti_curves, homology_dimensions=None):
+    betti_numbers, samplings = betti_curves
+    n_plots = len(betti_numbers)
+    titles = ["Betti Curves Input Data", "Betti Curves Latent Space"]
+    fig, axes = plt.subplots(nrows=1, ncols=n_plots, figsize=(6 * n_plots, 5), squeeze=False)
+
+    for i, betti_numbers in enumerate(betti_numbers):
+        if homology_dimensions is None:
+            dims = list(range(betti_numbers.shape[0]))
+        else:
+            dims = homology_dimensions
+
+        ax = axes[0, i]
+        for dim in dims:
+            ax.plot(samplings[dim], betti_numbers[dim], label=f"H{dim}", linewidth=1.5)
+
+        ax.set_title(titles[i])
+        ax.set_xlabel("Filtration parameter")
+        ax.set_ylabel("Betti number")
+        ax.grid(True, linestyle="--", alpha=0.6)
+        ax.legend()
+        ax.ticklabel_format(axis='both', style='sci', scilimits=(0, 0))
+
+    plt.tight_layout()
+    if config.log_dir:
+        fname = "betti_curves.png"
+        plt.savefig(os.path.join(config.log_dir, fname))
+    plt.show()
 
 
 def plot_curvature_persistence(config, model, data_loader):
-    recons, latents, inputs, labels = get_vectors(config, model, data_loader, config.n_grid_points)
-    _plot_empirical_curvature_from_vectors(config, model, recons, latents, inputs, labels)
+    recons, latents, inputs, labels = get_vectors(config, model, data_loader, config.n_curv_estimation_points)
+    #_plot_empirical_curvature_from_vectors(config, model, recons, latents, inputs, labels)
 
-    homology_dimensions = list(range(config.dim_topo_loss + 1))
-    print("homology dimensions")
-    plot_persistence_diagrams(inputs, latents, homology_dimensions)
+    diagrams, betti_curves, distances = compare_persistent_homology(
+        (inputs, latents), config.homology_dimensions, scale=config.scale)
+    plot_persistence_diagrams(config, diagrams, config.homology_dimensions)
+    plot_betti_curves(config, betti_curves)
+    print("DISTANCES", distances)
 
 
 def normalize(arr):
