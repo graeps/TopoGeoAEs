@@ -23,6 +23,7 @@ CONFIG_MODULES = {
     "flower_scrunchy": "configs.flower_scrunchy_configs",
     "clelia_curve": "configs.clelia_curve_configs",
     "torus": "configs.torus_configs",
+    "interlocked_tori": "configs.interlocked_tori_configs",
 }
 
 
@@ -51,6 +52,7 @@ def run_experiment(name):
 
         utils.show_training_history(config, history)
         utils.plot_data_latents_recon(config, vae_model, train_loader)
-        utils.plot_curvature_persistence(config=config, model=vae_model, data_loader=train_loader)
+        utils.plot_all_curvatures(config=config, model=vae_model, data_loader=train_loader)
+        # utils.plot_curvature_persistence(config=config, model=vae_model, data_loader=train_loader)
 
         generate_experiment_report(config)

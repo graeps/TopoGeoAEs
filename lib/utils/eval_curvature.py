@@ -124,12 +124,16 @@ def get_true_immersion(config):
             translation=trans,
             rotation=rot
         )
-    if config.dataset_name == "interlocking_rings_synthetic":
-        return get_interlocking_rings_immersion(
-            config.radius,
-            config.embedding_dim,
-            rot,
+    if config.dataset_name == "interlocked_tori":
+        return get_torus_immersion(
+            major_radius=config.major_radius,
+            minor_radius=config.minor_radius,
+            embedding_dim=3,
+            deformation_amp=config.deformation_amp,
+            translation=torch.zeros(3),
+            rotation=torch.eye(n=3)
         )
+
     elif config.dataset_name == "s2_synthetic":
         return get_s2_synthetic_immersion(
             radius=config.radius,
@@ -166,8 +170,6 @@ def get_true_immersion(config):
 def get_z_grid(config, n_grid_points=200):
     if config.dataset_name in {"s1_synthetic", "scrunchy"}:
         return torch.linspace(0, 2 * gs.pi, n_grid_points)
-    elif config.dataset_name == "interlocking_rings_synthetic":
-        return torch.linspace(0, 4 * gs.pi, n_grid_points)
     elif config.dataset_name == "s2_synthetic":
         thetas = gs.linspace(0.01, gs.pi, int(np.sqrt(n_grid_points)))
         phis = gs.linspace(0, 2 * gs.pi, int(np.sqrt(n_grid_points)))
@@ -289,7 +291,7 @@ def _old_compute_curvature_true(config, n_grid_points=2000):
     if config.dataset_name in {"s1_synthetic", "interlocking_rings_synthetic", "scrunchy", "clelia_curve", "8_curve",
                                "flower_scrunchy"}:
         manifold_dim = 1
-    elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "torus"}:
+    elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "torus", "interlocked_tori"}:
         manifold_dim = 2
     else:
         raise InvalidConfigError(f"Unknown dataset: {config.dataset_name}")
@@ -309,11 +311,14 @@ def compute_curvature_true(config, angles=None, n_grid_points=2000):
     if config.dataset_name in {"s1_synthetic", "interlocking_rings_synthetic", "scrunchy", "clelia_curve", "8_curve",
                                "flower_scrunchy"}:
         manifold_dim = 1
-    elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "torus"}:
+    elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "torus", "interlocked_tori"}:
         manifold_dim = 2
     else:
         raise InvalidConfigError(f"Unknown dataset: {config.dataset_name}")
-    curv, curv_norm = _compute_curvature(angles, immersion, manifold_dim, config.embedding_dim)
+    if config.dataset_name == "interlocked_tori":
+        curv, curv_norm = _compute_curvature(angles, immersion, manifold_dim, 3)
+    else:
+        curv, curv_norm = _compute_curvature(angles, immersion, manifold_dim, config.embedding_dim)
     return angles, curv, curv_norm
 
 
@@ -406,20 +411,42 @@ def normalize_curvature_to_input_radius(points, radius, curvatures):
 
 
 # Empiric curvature estimate
-def compute_empirical_curvature(recons, latent_vectors, true_data, labels, quadric_dim, k=160):
+def compute_empirical_curvature(config, labels, inputs, latents, recons, quadric_dim, k=160):
     if quadric_dim == 1:
-        curvature_inputs = estimate_curvature_1d_quadric(true_data, k)
-        curvature_latents = estimate_curvature_1d_quadric(latent_vectors, k)
-        curvature_recons = estimate_curvature_1d_quadric(recons, k)
-    elif quadric_dim == 2:
-        curvature_inputs = estimate_curvature_2d_quadric(true_data, k)
-        curvature_latents = estimate_curvature_2d_quadric(latent_vectors, k)
-        curvature_recons = estimate_curvature_2d_quadric(recons, k)
+        curv_in = estimate_curvature_1d_quadric(inputs, k)
+        curv_lat = estimate_curvature_1d_quadric(latents, k)
+        curv_rec = estimate_curvature_1d_quadric(recons, k)
+    elif quadric_dim == 2 and config.dataset_name in {"s1_synthetic", "interlocking_rings_synthetic", "scrunchy",
+                                                      "clelia_curve", "8_curve", "flower_scrunchy", "s2_synthetic",
+                                                      "t2_synthetic", "torus"}:
+        curv_in = estimate_curvature_2d_quadric(inputs, k)
+        curv_lat = estimate_curvature_2d_quadric(latents, k)
+        curv_rec = estimate_curvature_2d_quadric(recons, k)
+    elif quadric_dim == 2 and config.dataset_name in {"interlocked_tori"}:
+        inputs_t1 = inputs[:config.n_times]
+        latents_t1 = inputs[:config.n_times]
+        recons_t1 = inputs[:config.n_times]
+        curv_in_t1 = estimate_curvature_2d_quadric(inputs_t1, k)
+        curv_lat_t1 = estimate_curvature_2d_quadric(latents_t1, k)
+        curv_rec_t1 = estimate_curvature_2d_quadric(recons_t1, k)
+
+        inputs_t2 = inputs[-config.n_times:]
+        latents_t2 = inputs[-config.n_times:]
+        recons_t2 = inputs[-config.n_times:]
+        curv_in_t2 = estimate_curvature_2d_quadric(inputs_t2, k)
+        curv_lat_t2 = estimate_curvature_2d_quadric(latents_t2, k)
+        curv_rec_t2 = estimate_curvature_2d_quadric(recons_t2, k)
+
+        curv_in = np.concatenate([curv_in_t1, curv_in_t2])
+        curv_lat = np.concatenate([curv_lat_t1, curv_lat_t2])
+        curv_rec = np.concatenate([curv_rec_t1, curv_rec_t2])
     else:
         raise InvalidConfigError(f"Unknown quadric dim: {quadric_dim}")
-    curvature_inputs = savgol_filter(curvature_inputs, 20, 6)
-    curvature_latents = savgol_filter(curvature_latents, 20, 6)
-    curvature_recons = savgol_filter(curvature_recons, 20, 6)
+
+    # Apply filter to smooth out curves
+    curvature_inputs = savgol_filter(curv_in, 20, 6)
+    curvature_latents = savgol_filter(curv_lat, 20, 6)
+    curvature_recons = savgol_filter(curv_rec, 20, 6)
     return curvature_inputs, curvature_latents, curvature_recons, labels
 
 
@@ -469,47 +496,47 @@ def estimate_curvature_2d_quadric(points, k=200):
 
 
 def compute_all_curvatures(config, model, recons, latents, inputs, labels):
-    # --- Step 1: Compute empirical curvatures on full data ---
-    curvature_inputs, curvature_latents, curvature_recons, labels = compute_empirical_curvature(
-        recons, latents, inputs, labels, quadric_dim=config.quadric_dim, k=config.k
-    )
+    # Compute empirical curvatures on full data
+    curvature_inputs, curvature_latents, curvature_recons, labels = compute_empirical_curvature(config=config,
+                                                                                                labels=labels,
+                                                                                                inputs=inputs,
+                                                                                                latents=latents,
+                                                                                                recons=recons,
+                                                                                                quadric_dim=config.quadric_dim,
+                                                                                                k=config.k
+                                                                                                )
 
-    # --- Step 2: Determine ordered subsample indices ---
+    # Compute pullback curvature on (ordered) subset of points to reduce computation time
     n_total = len(labels)
     n_points = min(config.n_curv_evaluation_points, n_total)
     step = n_total // n_points
-    sampled_indices = np.arange(0, n_total, step)[:n_points]  # order-preserving
+    sampled_indices = np.arange(0, n_total, step)[:n_points]
 
-    # --- Step 3: Subsample labels and latents for learned and true curvature ---
     labels_subset = labels[sampled_indices]
+    # Subsample data to match subset of curvatures for heat map plotting
+    inputs_subset = inputs[sampled_indices]
     latents_subset = latents[sampled_indices]
+    recons_subset = recons[sampled_indices]
 
-    # --- Step 4: Compute learned curvature ---
     _, _, _, curvature_learned = compute_curvature_learned(config, model, latents_subset, labels_subset)
 
-    # --- Step 5: Normalize latent curvature ---
     r_norm = getattr(config, "radius", getattr(config, "major_radius", 1.0))
     curvature_latents_normalized = normalize_curvature_to_input_radius(
         latents_subset, r_norm, curvature_latents[sampled_indices]
     )
 
-    # --- Step 6: Compute true curvature ---
     _, _, curvature_true = compute_curvature_true(config, labels_subset)
 
-    # --- Step 7: Subsample empirical curvature to match subset ---
+    # Subsample empirical curvature to match subset for error computation
     curvature_inputs = curvature_inputs[sampled_indices]
     curvature_recons = curvature_recons[sampled_indices]
     curvature_latents = curvature_latents[sampled_indices]
 
-    return (
-        curvature_true,
-        curvature_inputs,
-        curvature_recons,
-        curvature_latents,
-        curvature_latents_normalized,
-        curvature_learned,
-        labels_subset
-    )
+    points = (inputs_subset, latents_subset, recons_subset)
+    curvatures = (curvature_true, curvature_inputs, curvature_recons, curvature_latents, curvature_latents_normalized,
+                  curvature_learned)
+
+    return labels_subset, points, curvatures
 
 
 class InvalidConfigError(Exception):

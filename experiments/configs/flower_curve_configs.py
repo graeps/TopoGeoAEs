@@ -45,8 +45,13 @@ base_config = {
     # Curvature computation
     "quadric_dim": 1,
     "n_plot_points": 1000,
-    "n_grid_points": 800,  # Number of points to compute the curvature for
+    "n_curv_estimation_points": 1000,
+    "n_curv_evaluation_points": 1000,
     "k": 110,
+
+    # Persistent homology
+    "scale": False,
+    "homology_dimensions": [0, 1]
 }
 
 param_grid = {

@@ -2,11 +2,11 @@ from scripts.experiment_utils import generate_experiments
 
 base_config = {
     # Experiment
-    "experiment": "torus",
+    "experiment": "interlocked_tori",
     "random_seed": 40,
 
     # Dataset
-    "dataset_name": "torus",
+    "dataset_name": "interlocked_tori",
     "batch_size": 64,
     "rotation": "random",
     "translation": None,
@@ -15,12 +15,12 @@ base_config = {
     "major_radius": 2.5,
     "minor_radius": 1,
     "filled": False,
-    "embedding_dim": 3,
+    "embedding_dim": 4,
     "noise_var": 0.001,
 
     # Model
     'model_type': 'EuclideanVAE',
-    'data_dim': 3,
+    'data_dim': 4,
     'latent_dim': 3,
     'sftbeta': 4.5,
     'device': "cpu",

@@ -282,32 +282,35 @@ def plot_latent_projections(model, pointcloud, test_loader, device="cpu"):
         plt.show()
 
 
-def plot_datapoints(ax, data, title, colors=None, cmap='hsv'):
+def _scatter_datapoints(ax, data, title, colors=None, cmap='hsv'):
     d = data.shape[1]
     pca_applied = False
+    dot_size = 2
 
     if d == 1:
-        ax.scatter(data[:, 0], np.zeros_like(data[:, 0]), c=colors, cmap=cmap, s=1.2, alpha=0.7)
+        sc = ax.scatter(data[:, 0], np.zeros_like(data[:, 0]), c=colors, cmap=cmap, s=dot_size, alpha=0.7)
         ax.set_yticks([])
     elif d == 2:
-        ax.scatter(data[:, 0], data[:, 1], c=colors, cmap=cmap, s=1.2, alpha=0.7)
+        sc = ax.scatter(data[:, 0], data[:, 1], c=colors, cmap=cmap, s=dot_size, alpha=0.7)
     elif d == 3:
-        ax.scatter(data[:, 0], data[:, 1], data[:, 2], c=colors, cmap=cmap, s=1.2, alpha=0.7)
+        sc = ax.scatter(data[:, 0], data[:, 1], data[:, 2], c=colors, cmap=cmap, s=dot_size, alpha=0.7)
     else:
         data = PCA(n_components=3).fit_transform(data)
-        ax.scatter(data[:, 0], data[:, 1], data[:, 2], c=colors, cmap=cmap, s=1.2, alpha=0.7)
+        sc = ax.scatter(data[:, 0], data[:, 1], data[:, 2], c=colors, cmap=cmap, s=dot_size, alpha=0.7)
         pca_applied = True
 
     title_suffix = " (PCA)" if pca_applied else ""
     ax.set_title(f"{title}{title_suffix}")
     ax.set_aspect('equal', adjustable='datalim')
 
+    return sc
+
 
 def plot_data_latents_recon(config, model, data_loader):
     recons, latents, inputs, labels = get_vectors(config, model, data_loader, config.n_plot_points)
 
     if labels.ndim > 1 and labels.shape[1] == 2:
-        colors = (labels[:, 0] + labels[:, 1]) % 360
+        colors = (labels[:, 0] + labels[:, 1]) % (2 * np.pi)
     else:
         colors = labels.squeeze()
 
@@ -315,17 +318,17 @@ def plot_data_latents_recon(config, model, data_loader):
 
     # Dataset plot
     ax1 = fig.add_subplot(1, 3, 1, projection='3d' if inputs.shape[1] == 3 or inputs.shape[1] > 3 else None)
-    plot_datapoints(ax1, inputs, "Original Data", colors)
+    _scatter_datapoints(ax1, inputs, "Original Data", colors)
 
     # Latent space plot
     ax2 = fig.add_subplot(1, 3, 2,
                           projection='3d' if latents.shape[1] == 3 or latents.shape[1] > 3 else None)
-    plot_datapoints(ax2, latents, "Latent Space", colors)
+    _scatter_datapoints(ax2, latents, "Latent Space", colors)
 
     # Reconstruction plot
     ax3 = fig.add_subplot(1, 3, 3,
                           projection='3d' if recons.shape[1] == 3 or recons.shape[1] > 3 else None)
-    plot_datapoints(ax3, recons, "Reconstructed Data", colors)
+    _scatter_datapoints(ax3, recons, "Reconstructed Data", colors)
 
     plt.tight_layout()
 
@@ -522,102 +525,49 @@ def plot_curvature_norms(angles, curvature_norms, config, norm_val, profile_type
     return fig
 
 
-def scatter_empirical_curvature(config, model, test_loader, n_samples=2000):
-    model.eval()
-    model.to(config.device)
+def scatter_curvature_heatmaps(config, inputs, latents, recons, curvature_true, curvature_inputs, curvature_recons,
+                               curvature_latents, curvature_latents_normalized, curvature_learned):
+    fig = plt.figure(figsize=(18, 10))
+    color_map = 'inferno'
 
-    # Gather original data, latent vectors, reconstructions, and labels
-    dataset = []
-    latent_vectors = []
-    recon_dataset = []
-
-    with torch.no_grad():
-        for x, y in test_loader:
-            x = x.to(config.device)
-            z, x_recon, _ = model(x)
-
-            dataset.append(x.cpu())
-            latent_vectors.append(z.cpu())
-            recon_dataset.append(x_recon.cpu())
-
-    dataset = torch.cat(dataset, dim=0).numpy()
-    latent_vectors = torch.cat(latent_vectors, dim=0).numpy()
-    recon_dataset = torch.cat(recon_dataset, dim=0).numpy()
-
-    # Downsample
-    n_total = latent_vectors.shape[0]
-    if n_samples > n_total:
-        n_samples = n_total
-    indices = np.random.choice(n_total, size=n_samples, replace=False)
-
-    dataset = dataset[indices]
-    latent_vectors = latent_vectors[indices]
-    recon_dataset = recon_dataset[indices]
-
-    true_curvature = estimate_curvature_1d_quadric(dataset)
-    latent_curvature = estimate_curvature_1d_quadric(latent_vectors)
-    recon_curvature = estimate_curvature_1d_quadric(recon_dataset)
-
-    fig = plt.figure(figsize=(18, 5))
-
-    # Dataset plot
-    ax1 = fig.add_subplot(1, 3, 1, projection='3d' if dataset.shape[1] == 3 else None)
-    if dataset.shape[1] == 2:
-        sc1 = ax1.scatter(dataset[:, 0], dataset[:, 1], c=true_curvature, cmap='hsv', s=1)
-        ax1.set_title("Noisy S¹ in ℝ²")
-    elif dataset.shape[1] == 3:
-        sc1 = ax1.scatter(dataset[:, 0], dataset[:, 1], dataset[:, 2], c=true_curvature, cmap='hsv', s=1)
-        ax1.set_title("Noisy S¹ in ℝ³")
-    else:
-        proj = PCA(n_components=2).fit_transform(dataset)
-        sc1 = ax1.scatter(proj[:, 0], proj[:, 1], c=true_curvature, cmap='hsv', s=1)
-        ax1.set_title("Noisy S¹ projected to ℝ² via PCA")
-    ax1.axis('equal')
+    # True Curvature on Inputs
+    ax1 = fig.add_subplot(2, 3, 1, projection='3d' if inputs.shape[1] == 3 or inputs.shape[1] > 3 else None)
+    sc1 = _scatter_datapoints(ax=ax1, data=inputs, title="True Curvature on Inputs", colors=curvature_true, cmap=color_map)
     fig.colorbar(sc1, ax=ax1, shrink=0.7)
 
-    # Latent space plot
-    ax2 = fig.add_subplot(1, 3, 2, projection='3d' if latent_vectors.shape[1] == 3 else None)
-    if latent_vectors.shape[1] == 1:
-        ax2 = fig.add_subplot(1, 3, 2)
-        sc2 = ax2.scatter(latent_vectors[:, 0], np.zeros_like(latent_vectors[:, 0]), c=latent_curvature, cmap='hsv',
-                          alpha=0.7, s=1)
-        ax2.set_title("1D Latent Space")
-        ax2.set_yticks([])
-    elif latent_vectors.shape[1] == 2:
-        sc2 = ax2.scatter(latent_vectors[:, 0], latent_vectors[:, 1], c=latent_curvature, cmap='hsv', alpha=0.7, s=1)
-        ax2.set_title("2D Latent Space")
-    elif latent_vectors.shape[1] == 3:
-        sc2 = ax2.scatter(latent_vectors[:, 0], latent_vectors[:, 1], latent_vectors[:, 2], c=latent_curvature,
-                          cmap='hsv', alpha=0.7)
-        ax2.set_title("3D Latent Space")
-    else:
-        reduced = PCA(n_components=2).fit_transform(latent_vectors)
-        ax2 = fig.add_subplot(1, 3, 2)
-        sc2 = ax2.scatter(reduced[:, 0], reduced[:, 1], c=latent_curvature, cmap='hsv', alpha=0.7, s=1)
-        ax2.set_title("Latent Space (PCA)")
-    if hasattr(ax2, 'axis'):
-        ax2.axis('equal')
+    # Empirical Curvature on Inputs
+    ax2 = fig.add_subplot(2, 3, 2, projection='3d' if inputs.shape[1] == 3 or inputs.shape[1] > 3 else None)
+    sc2 = _scatter_datapoints(ax2, inputs, "Empirical Curvature on Inputs", curvature_inputs, cmap=color_map)
     fig.colorbar(sc2, ax=ax2, shrink=0.7)
 
-    # Recon manifold plot
-    ax3 = fig.add_subplot(1, 3, 3, projection='3d' if recon_dataset.shape[1] == 3 else None)
-    if recon_dataset.shape[1] == 2:
-        sc3 = ax3.scatter(recon_dataset[:, 0], recon_dataset[:, 1], c=recon_curvature, cmap='hsv', s=1)
-        ax3.set_title("Reconstructed Manifold ℝ²")
-    elif recon_dataset.shape[1] == 3:
-        sc3 = ax3.scatter(recon_dataset[:, 0], recon_dataset[:, 1], recon_dataset[:, 2], c=recon_curvature, cmap='hsv',
-                          s=1)
-        ax3.set_title("Reconstructed Manifold ℝ³")
-    else:
-        proj = PCA(n_components=2).fit_transform(recon_dataset)
-        ax3 = fig.add_subplot(1, 3, 3)
-        sc3 = ax3.scatter(proj[:, 0], proj[:, 1], c=recon_curvature, cmap='hsv', s=1)
-        ax3.set_title("Reconstructed Manifold (PCA)")
-    if hasattr(ax3, 'axis'):
-        ax3.axis('equal')
+    # Empirical Curvature on Recons
+    ax3 = fig.add_subplot(2, 3, 3, projection='3d' if recons.shape[1] == 3 or recons.shape[1] > 3 else None)
+    sc3 = _scatter_datapoints(ax3, recons, "Empirical Curvature on Reconstructed Data", curvature_recons,
+                              cmap=color_map)
     fig.colorbar(sc3, ax=ax3, shrink=0.7)
 
+    # Empirical Curvature on Latents
+    ax4 = fig.add_subplot(2, 3, 4, projection='3d' if latents.shape[1] == 3 or latents.shape[1] > 3 else None)
+    sc4 = _scatter_datapoints(ax4, latents, "Empirical Curvature on Latents", curvature_latents, cmap=color_map)
+    fig.colorbar(sc4, ax=ax4, shrink=0.7)
+
+    # Normalized Empirical Curvature on Latents
+    ax5 = fig.add_subplot(2, 3, 5, projection='3d' if latents.shape[1] == 3 or latents.shape[1] > 3 else None)
+    sc5 = _scatter_datapoints(ax5, latents, "Normalized Empirical Curvature on Latents", curvature_latents_normalized,
+                              cmap=color_map)
+    fig.colorbar(sc5, ax=ax5, shrink=0.7)
+
+    # Pullback Curvature on Latents
+    ax6 = fig.add_subplot(2, 3, 6, projection='3d' if latents.shape[1] == 3 or latents.shape[1] > 3 else None)
+    sc6 = _scatter_datapoints(ax6, latents, "Pullback Curvature on Latents", curvature_learned, cmap=color_map)
+    fig.colorbar(sc6, ax=ax6, shrink=0.7)
+
     plt.tight_layout()
+
+    if config.log_dir is not None:
+        save_path = os.path.join(config.log_dir, "curvature_heatmaps.png")
+        plt.savefig(save_path)
+
     plt.show()
 
 
@@ -764,26 +714,34 @@ def plot_curvature_errors_and_stats(curvature_true, curvature_inputs, curvature_
             json.dump(results, f, indent=4)
 
 
-def _plot_empirical_curvature_from_vectors(config, model, recons, latents, inputs, labels, ):
-    (curv_true, curv_in, curv_rec, curv_lat, curv_lat_norm, curv_learned, lbls) = compute_all_curvatures(
-        config, model, recons, latents, inputs, labels)
+def _plot_all_curvatures_from_vectors(config, model, recons, latents, inputs, labels):
+    lbls, points, curvatures = compute_all_curvatures(config, model, recons, latents, inputs, labels)
+    inputs, latents, recons = points
+    curv_true, curv_in, curv_rec, curv_lat, curv_lat_norm, curv_learned = curvatures
+
+    # Plot curvatures over angles
     if lbls.ndim == 1:
         plot_curvatures_1d(lbls, curv_true, curv_in, curv_rec, curv_lat, curv_lat_norm, curv_learned, config)
     elif lbls.ndim == 2:
         plot_curvatures_2d(lbls, curv_true, curv_in, curv_rec, curv_lat, curv_lat_norm, curv_learned, config)
     else:
         raise NotImplementedError("Label dimension not supported for curvature plotting.")
+
+    # Plot curvature heat maps
+    scatter_curvature_heatmaps(config, inputs=inputs, latents=latents, recons=recons, curvature_true=curv_true,
+                               curvature_inputs=curv_in, curvature_recons=curv_rec, curvature_learned=curv_learned,
+                               curvature_latents_normalized=curv_lat_norm, curvature_latents=curv_lat)
     plot_curvature_errors_and_stats(curv_true, curv_in, curv_rec, curv_lat, curv_lat_norm, curv_learned, config)
 
 
-def plot_empirical_curvature(config, model, data_loader):
+def plot_all_curvatures(config, model, data_loader):
     recons, latents, inputs, labels = get_vectors(config, model, data_loader, config.n_curv_estimation_points)
-    _plot_empirical_curvature_from_vectors(config, model, recons, latents, inputs, labels)
+    _plot_all_curvatures_from_vectors(config, model, recons, latents, inputs, labels)
 
 
 def plot_persistence_diagrams(config, diagrams, homology_dimensions):
     """Plot two persistence diagrams side-by-side and print bottleneck distance matrix."""
-    fig, axes = plt.subplots(1, 2, figsize=(12, 6),)
+    fig, axes = plt.subplots(1, 2, figsize=(12, 6), )
     titles = ["Diagram for Input Data", "Diagram for Latent Space"]
     colors = {0: 'red', 1: 'blue', 2: 'green'}
 
@@ -866,7 +824,7 @@ def plot_betti_curves(config, betti_curves, homology_dimensions=None):
 
 def plot_curvature_persistence(config, model, data_loader):
     recons, latents, inputs, labels = get_vectors(config, model, data_loader, config.n_curv_estimation_points)
-    #_plot_empirical_curvature_from_vectors(config, model, recons, latents, inputs, labels)
+    # _plot_empirical_curvature_from_vectors(config, model, recons, latents, inputs, labels)
 
     diagrams, betti_curves, distances = compare_persistent_homology(
         (inputs, latents), config.homology_dimensions, scale=config.scale)

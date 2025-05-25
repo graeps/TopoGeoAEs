@@ -160,7 +160,66 @@ def generate_torus(n_points=5000, major_radius=5.0, minor_radius=1.0, filled=Fal
     return points, angles
 
 
-def generate_entangled_tori(n_points=5000, major_radius=5.0, minor_radius=1.0, filled1=False, filled2=False, noise_var=0.01, embedding_dim=3,
+def load_interlocked_tori(n_points=4900, major_radius=5.0, minor_radius=1.0, noise_var=0.01, embedding_dim=3,
+                          deformation_amp=0.01, rotation="random", random_seed=42, ):
+    gs.random.seed(random_seed)
+    torch.manual_seed(random_seed)
+
+    rot = torch.eye(3)
+    trans = torch.zeros(3)
+
+    immersion = get_torus_immersion(major_radius=major_radius, minor_radius=minor_radius, embedding_dim=3,
+                                     deformation_amp=deformation_amp,
+                                     translation=trans, rotation=rot)
+
+    R_x90 = torch.tensor([
+        [1.0, 0.0, 0.0],
+        [0.0, 0.0, -1.0],
+        [0.0, 1.0, 0.0]
+    ])
+
+    sqrt_ntimes = int(gs.sqrt(n_points))
+    thetas = gs.linspace(0, 2 * gs.pi, sqrt_ntimes)
+    phis = gs.linspace(0, 2 * gs.pi, sqrt_ntimes)
+
+    angle_grid = torch.cartesian_prod(thetas, phis)
+    torus1 = torch.stack([immersion(pair) for pair in angle_grid])
+    torus2 = torch.stack([immersion(pair) for pair in angle_grid])
+    torus2 = torus2 @ R_x90.T
+    torus2 += torch.tensor([-major_radius, 0.0, 0.0])
+
+    if embedding_dim > 3:
+        N = torus1.shape[0]
+        zeros = torch.zeros(N, embedding_dim - 3, dtype=torus1.dtype)
+        torus1 = torch.cat([torus1, zeros], dim=1)
+        torus2 = torch.cat([torus2, zeros], dim=1)
+
+    if rotation == "random":
+        rot = SpecialOrthogonal(n=embedding_dim).random_point()
+
+    torus1 = torch.stack([gs.einsum("ij,j->i", rot, point) for point in torus1])
+    torus2 = torch.stack([gs.einsum("ij,j->i", rot, point) for point in torus2])
+
+    if noise_var != 0:
+        noise1 = MultivariateNormal(
+            loc=torch.zeros(embedding_dim),
+            covariance_matrix=major_radius * noise_var * torch.eye(embedding_dim),
+        ).sample((sqrt_ntimes ** 2,))
+        noise2 = MultivariateNormal(
+            loc=torch.zeros(embedding_dim),
+            covariance_matrix=major_radius * noise_var * torch.eye(embedding_dim),
+        ).sample((sqrt_ntimes ** 2,))
+        torus1 = torus1 + noise1
+        torus2 = torus2 + noise2
+
+    data = torch.cat([torus1, torus2])
+    angles = torch.cat([angle_grid, angle_grid])
+
+    return data, angles
+
+
+def generate_entangled_tori(n_points=5000, major_radius=5.0, minor_radius=1.0, filled1=False, filled2=False,
+                            noise_var=0.01, embedding_dim=3,
                             translation=None, rotation=None):
     n1 = n_points // 2
     n2 = n_points - n1
