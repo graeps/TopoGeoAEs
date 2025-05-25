@@ -24,6 +24,7 @@ CONFIG_MODULES = {
     "clelia_curve": "configs.clelia_curve_configs",
     "torus": "configs.torus_configs",
     "interlocked_tori": "configs.interlocked_tori_configs",
+    "nested_spheres": "configs.nested_spheres_configs",
 }
 
 

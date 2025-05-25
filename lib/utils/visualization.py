@@ -311,24 +311,28 @@ def plot_data_latents_recon(config, model, data_loader):
 
     if labels.ndim > 1 and labels.shape[1] == 2:
         colors = (labels[:, 0] + labels[:, 1]) % (2 * np.pi)
+    elif config.dataset_name in {"nested_spheres", "interlocked_tori"}:
+        colors = labels[:, 0]
     else:
         colors = labels.squeeze()
+
+    color_map = "Set2"
 
     fig = plt.figure(figsize=(18, 5))
 
     # Dataset plot
     ax1 = fig.add_subplot(1, 3, 1, projection='3d' if inputs.shape[1] == 3 or inputs.shape[1] > 3 else None)
-    _scatter_datapoints(ax1, inputs, "Original Data", colors)
+    _scatter_datapoints(ax1, inputs, "Original Data", colors, cmap=color_map)
 
     # Latent space plot
     ax2 = fig.add_subplot(1, 3, 2,
                           projection='3d' if latents.shape[1] == 3 or latents.shape[1] > 3 else None)
-    _scatter_datapoints(ax2, latents, "Latent Space", colors)
+    _scatter_datapoints(ax2, latents, "Latent Space", colors, cmap=color_map)
 
     # Reconstruction plot
     ax3 = fig.add_subplot(1, 3, 3,
                           projection='3d' if recons.shape[1] == 3 or recons.shape[1] > 3 else None)
-    _scatter_datapoints(ax3, recons, "Reconstructed Data", colors)
+    _scatter_datapoints(ax3, recons, "Reconstructed Data", colors, cmap=color_map)
 
     plt.tight_layout()
 
@@ -532,7 +536,8 @@ def scatter_curvature_heatmaps(config, inputs, latents, recons, curvature_true, 
 
     # True Curvature on Inputs
     ax1 = fig.add_subplot(2, 3, 1, projection='3d' if inputs.shape[1] == 3 or inputs.shape[1] > 3 else None)
-    sc1 = _scatter_datapoints(ax=ax1, data=inputs, title="True Curvature on Inputs", colors=curvature_true, cmap=color_map)
+    sc1 = _scatter_datapoints(ax=ax1, data=inputs, title="True Curvature on Inputs", colors=curvature_true,
+                              cmap=color_map)
     fig.colorbar(sc1, ax=ax1, shrink=0.7)
 
     # Empirical Curvature on Inputs
@@ -715,15 +720,30 @@ def plot_curvature_errors_and_stats(curvature_true, curvature_inputs, curvature_
 
 
 def _plot_all_curvatures_from_vectors(config, model, recons, latents, inputs, labels):
-    lbls, points, curvatures = compute_all_curvatures(config, model, recons, latents, inputs, labels)
+    labels, points, curvatures = compute_all_curvatures(config, model, recons, latents, inputs, labels)
     inputs, latents, recons = points
     curv_true, curv_in, curv_rec, curv_lat, curv_lat_norm, curv_learned = curvatures
 
     # Plot curvatures over angles
-    if lbls.ndim == 1:
-        plot_curvatures_1d(lbls, curv_true, curv_in, curv_rec, curv_lat, curv_lat_norm, curv_learned, config)
-    elif lbls.ndim == 2:
-        plot_curvatures_2d(lbls, curv_true, curv_in, curv_rec, curv_lat, curv_lat_norm, curv_learned, config)
+    if labels.ndim == 1:
+        plot_curvatures_1d(labels, curv_true, curv_in, curv_rec, curv_lat, curv_lat_norm, curv_learned, config)
+    elif labels.ndim == 2 and labels.shape[1] == 2:
+        plot_curvatures_2d(labels, curv_true, curv_in, curv_rec, curv_lat, curv_lat_norm, curv_learned, config)
+    elif labels.ndim == 2 and labels.shape[1] == 3:
+        entity_indices = labels[:, 0]
+        print("labels", labels)
+        unique_entities = entity_indices.unique(sorted=True)
+        for entity in unique_entities:
+            mask = (entity_indices == entity)
+            angels = labels[mask][:, 1:]
+            curv_true_sub = curv_true[mask]
+            curv_in_sub = curv_in[mask]
+            curv_rec_sub = curv_rec[mask]
+            curv_lat_sub = curv_lat[mask]
+            curv_lat_norm_sub = curv_lat_norm[mask]
+            curv_learned_sub = curv_learned[mask]
+            plot_curvatures_2d(angels, curv_true_sub, curv_in_sub, curv_rec_sub, curv_lat_sub, curv_lat_norm_sub,
+                               curv_learned_sub, config)
     else:
         raise NotImplementedError("Label dimension not supported for curvature plotting.")
 

@@ -94,7 +94,7 @@ def get_torus_immersion(major_radius, minor_radius, embedding_dim, deformation_a
     return immersion
 
 
-def load_torus(n_points=5000, major_radius=5.0, minor_radius=1.0, noise_var=0.01, embedding_dim=3, deformation_amp=0.01,
+def load_torus(n_points, major_radius, minor_radius, noise_var, embedding_dim, deformation_amp,
                translation="random",
                rotation="random", random_seed=42, ):
     gs.random.seed(random_seed)
@@ -160,8 +160,8 @@ def generate_torus(n_points=5000, major_radius=5.0, minor_radius=1.0, filled=Fal
     return points, angles
 
 
-def load_interlocked_tori(n_points=4900, major_radius=5.0, minor_radius=1.0, noise_var=0.01, embedding_dim=3,
-                          deformation_amp=0.01, rotation="random", random_seed=42, ):
+def load_interlocked_tori(n_points, major_radius, minor_radius, noise_var, embedding_dim,
+                          deformation_amp, rotation, random_seed=42):
     gs.random.seed(random_seed)
     torch.manual_seed(random_seed)
 
@@ -169,8 +169,8 @@ def load_interlocked_tori(n_points=4900, major_radius=5.0, minor_radius=1.0, noi
     trans = torch.zeros(3)
 
     immersion = get_torus_immersion(major_radius=major_radius, minor_radius=minor_radius, embedding_dim=3,
-                                     deformation_amp=deformation_amp,
-                                     translation=trans, rotation=rot)
+                                    deformation_amp=deformation_amp,
+                                    translation=trans, rotation=rot)
 
     R_x90 = torch.tensor([
         [1.0, 0.0, 0.0],
@@ -214,8 +214,11 @@ def load_interlocked_tori(n_points=4900, major_radius=5.0, minor_radius=1.0, noi
 
     data = torch.cat([torus1, torus2])
     angles = torch.cat([angle_grid, angle_grid])
+    n_samples = angle_grid.shape[0]
+    sphere_index = torch.tensor([0] * n_samples + [1] * n_samples + [2] * n_samples, dtype=torch.long)
+    labels = (sphere_index, angles)
 
-    return data, angles
+    return data, labels
 
 
 def generate_entangled_tori(n_points=5000, major_radius=5.0, minor_radius=1.0, filled1=False, filled2=False,
@@ -324,7 +327,7 @@ def generate_genus3(n_points=5000, R=1.0, r=0.25, noise_var=0.01, embedding_dim=
     return points, labels
 
 
-def generate_sphere(n_points=5000, radius=1.0, filled=False, noise_var=0.01, embedding_dim=3, translation=None,
+def generate_sphere(n_points, radius, filled=False, noise_var=0.01, embedding_dim=3, translation=None,
                     rotation=None, random_seed=42):
     gs.random.seed(random_seed)
     torch.manual_seed(random_seed)
@@ -361,6 +364,86 @@ def generate_sphere(n_points=5000, radius=1.0, filled=False, noise_var=0.01, emb
     points += noise
 
     return points, angles
+
+
+def get_sphere_immersion(radius, deformation_amp, embedding_dim, translation, rotation):
+    def immersion(angle_pair):
+        theta, phi = angle_pair
+        amplitude = (
+                1
+                + deformation_amp * gs.exp(-5 * theta ** 2)
+                + deformation_amp * gs.exp(-5 * (theta - gs.pi) ** 2)
+        )
+
+        x = radius * gs.sin(theta) * gs.cos(phi)
+        y = radius * gs.sin(theta) * gs.sin(phi)
+        z = radius * gs.cos(theta)
+
+        point = amplitude * gs.array([x, y, z])
+        point = gs.squeeze(point, axis=-1)
+        point = _embedd_rotate_translate(point=point, embedding_dim=embedding_dim, translation=translation,
+                                         rotation=rotation)
+        return point
+
+    return immersion
+
+
+def load_nested_spheres(n_points, major_radius, mid_radius, minor_radius, noise_var, embedding_dim, deformation_amp,
+                        translation=None,
+                        rotation=None, random_seed=42):
+    gs.random.seed(random_seed)
+    torch.manual_seed(random_seed)
+
+    rot_inner = SpecialOrthogonal(n=3).random_point()
+    rot_mid = SpecialOrthogonal(n=3).random_point()
+    rot_outer = SpecialOrthogonal(n=3).random_point()
+    trans = torch.zeros(3)
+
+    immersion_inner = get_sphere_immersion(radius=minor_radius, embedding_dim=3, deformation_amp=deformation_amp,
+                                           translation=trans, rotation=rot_inner)
+    immersion_mid = get_sphere_immersion(radius=mid_radius, embedding_dim=3, deformation_amp=deformation_amp,
+                                         translation=trans, rotation=rot_mid)
+    immersion_outer = get_sphere_immersion(radius=major_radius, embedding_dim=3, deformation_amp=deformation_amp,
+                                           translation=trans, rotation=rot_outer)
+
+    sqrt_ntimes = int(gs.sqrt(n_points))
+    thetas = gs.arccos(np.linspace(0.99, -0.99, sqrt_ntimes))  # For more uniform distribution of sample points on sphere
+    phis = gs.linspace(0, 2 * np.pi, sqrt_ntimes)
+    angle_grid = torch.cartesian_prod(thetas, phis)
+
+    sphere_inner = torch.stack([immersion_inner(pair) for pair in angle_grid])
+    sphere_mid = torch.stack([immersion_mid(pair) for pair in angle_grid])
+    sphere_outer = torch.stack([immersion_outer(pair) for pair in angle_grid])
+
+    data = torch.cat([sphere_inner, sphere_mid, sphere_outer])
+    angles = torch.cat([angle_grid, angle_grid, angle_grid])
+    n_samples = angle_grid.shape[0]
+    sphere_index = torch.tensor([0] * n_samples + [1] * n_samples + [2] * n_samples, dtype=torch.long)
+    labels = (sphere_index, angles)
+
+    rot = torch.eye(n=embedding_dim)
+    if rotation == "random":
+        rot = SpecialOrthogonal(n=embedding_dim).random_point()
+    trans = torch.zeros(embedding_dim)
+    data = _embedd_rotate_translate(point=data, embedding_dim=embedding_dim, translation=trans, rotation=rot)
+
+    if noise_var != 0:
+        noise1 = MultivariateNormal(
+            loc=torch.zeros(embedding_dim),
+            covariance_matrix=minor_radius * noise_var * torch.eye(embedding_dim),
+        ).sample((sqrt_ntimes ** 2,))
+        noise2 = MultivariateNormal(
+            loc=torch.zeros(embedding_dim),
+            covariance_matrix=mid_radius * noise_var * torch.eye(embedding_dim),
+        ).sample((sqrt_ntimes ** 2,))
+        noise3 = MultivariateNormal(
+            loc=torch.zeros(embedding_dim),
+            covariance_matrix=major_radius * noise_var * torch.eye(embedding_dim),
+        ).sample((sqrt_ntimes ** 2,))
+        noise = torch.cat([noise1, noise2, noise3])
+        data = data + noise
+
+    return data, labels
 
 
 def generate_nested_spheres(n_points=5000, radii=None, noise_var=0.01, embedding_dim=3, translation=None,
@@ -471,69 +554,35 @@ def load_8_curve(n_points, noise_var, embedding_dim=3, translation="random", rot
 
 
 def _embedd_rotate_translate(point, embedding_dim, translation, rotation):
-    point = _embedd(point, embedding_dim)
-    point = _rotate_translate(point, rotation, translation)
+    point = _embedd(points=point, embedding_dim=embedding_dim)
+    point = _rotate_translate(points=point, rotation=rotation, translation=translation)
     return point
 
 
-def _embedd(point, embedding_dim):
-    if embedding_dim > len(point):
-        point = gs.concatenate([point, gs.zeros(embedding_dim - len(point))])
-    return point
+def _embedd(points, embedding_dim):
+    points = gs.array(points)
+    if points.ndim == 1:
+        pad_width = embedding_dim - points.shape[0]
+        if pad_width > 0:
+            points = gs.concatenate([points, gs.zeros(pad_width)])
+    elif points.ndim == 2:
+        pad_width = embedding_dim - points.shape[1]
+        if pad_width > 0:
+            zeros = gs.zeros((points.shape[0], pad_width))
+            points = gs.concatenate([points, zeros], axis=1)
+    else:
+        raise ValueError("Input must be a 1D or 2D array.")
+    return points
 
 
-def _rotate_translate(point, translation, rotation):
-    point = gs.einsum("ij,j->i", rotation, point)
-    point = point + translation
-    return point
-
-
-def visualize_manifolds(manifolds_dict):
-    """
-    Visualize multiple manifolds in R^3
-
-    Parameters:
-    -----------
-    manifolds_dict : dict
-        Dictionary mapping manifold names to tuples of (points, labels)
-    """
-    n_manifolds = len(manifolds_dict)
-    fig = plt.figure(figsize=(15, 5 * ((n_manifolds + 1) // 2)))
-
-    for i, (name, data) in enumerate(manifolds_dict.items(), 1):
-        ax = fig.add_subplot(((n_manifolds + 1) // 2), 2, i, projection='3d')
-
-        if isinstance(data, tuple) and len(data) == 2:
-            points, labels = data
-            unique_labels = torch.unique(labels)
-
-            for label in unique_labels:
-                mask = (labels == label)
-                ax.scatter(
-                    points[mask, 0].numpy(),
-                    points[mask, 1].numpy(),
-                    points[mask, 2].numpy(),
-                    alpha=0.6,
-                    label=f'Component {int(label)}',
-                    s=0.1
-                )
-            ax.legend()
-        else:
-            points = data
-            ax.scatter(
-                points[:, 0].numpy(),
-                points[:, 1].numpy(),
-                points[:, 2].numpy(),
-                alpha=0.6,
-                s=0.1
-            )
-
-        ax.set_title(name)
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
-        ax.set_zlabel('Z')
-        ax.grid(True)
-        ax.set_aspect('equal', adjustable='box')
-
-    plt.tight_layout()
-    plt.show()
+def _rotate_translate(points, translation, rotation):
+    points = gs.array(points)
+    if points.ndim == 1:
+        points = gs.einsum("ij,j->i", rotation, points)
+        points = points + translation
+    elif points.ndim == 2:
+        points = gs.einsum("ij,nj->ni", rotation, points)
+        points = points + translation
+    else:
+        raise ValueError("Input must be a 1D or 2D array.")
+    return points

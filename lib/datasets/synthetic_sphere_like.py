@@ -39,63 +39,6 @@ def load_s1_synthetic(rotation, n_times=1500, radius=1.0, n_wiggles=6, geodesic_
     return data, angles
 
 
-def load_s1_in_s1_synthetic(
-        rotation,
-        n_times=1500,
-        radius_outer=3.0,
-        radius_inner=1.0,
-        n_wiggles=6,
-        geodesic_distortion_amp=0.4,
-        embedding_dim=10,
-        noise_var=0.01,
-        geodesic_distortion_func="wiggles",
-):
-    """Generate noisy S¹-immersed data in R^embedding_dim."""
-    rot = torch.eye(embedding_dim)
-    if rotation == "random":
-        rot = SpecialOrthogonal(n=embedding_dim).random_point()
-
-    immersion_outer = get_s1_synthetic_immersion(
-        geodesic_distortion_func=geodesic_distortion_func,
-        radius=radius_outer,
-        n_wiggles=n_wiggles,
-        geodesic_distortion_amp=geodesic_distortion_amp,
-        embedding_dim=embedding_dim,
-        rot=rot,
-    )
-
-    immersion_inner = get_s1_synthetic_immersion(
-        geodesic_distortion_func=geodesic_distortion_func,
-        radius=radius_inner,
-        n_wiggles=n_wiggles,
-        geodesic_distortion_amp=geodesic_distortion_amp,
-        embedding_dim=embedding_dim,
-        rot=rot,
-    )
-
-    angles_outer = gs.linspace(0, 2 * gs.pi, n_times)
-    angles_inner = gs.linspace(0, 2 * gs.pi, n_times)
-    data_outer = torch.stack([immersion_outer(angle) for angle in angles_outer])
-    data_inner = torch.stack([immersion_inner(angle) for angle in angles_inner])
-
-    noise = MultivariateNormal(
-        loc=torch.zeros(embedding_dim),
-        covariance_matrix=noise_var * torch.eye(embedding_dim),
-    ).sample((n_times,))
-
-    noisy_data_outer = data_outer + radius_outer * noise
-    noisy_data_inner = data_inner + radius_inner * noise
-
-    noisy_data = torch.cat([noisy_data_outer, noisy_data_inner], dim=0)
-
-    labels = pd.DataFrame({
-        "circle_id": [0] * n_times + [1] * n_times,
-        "angles": torch.cat([angles_outer, angles_inner]).numpy()
-    })
-
-    return noisy_data, labels
-
-
 def load_s2_synthetic(
         rotation,
         n_times,

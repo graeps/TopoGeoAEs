@@ -27,6 +27,7 @@ from ..datasets.topo_datasets import (
     get_clelia_immersion,
     get_8_curve_immersion,
     get_torus_immersion,
+    get_sphere_immersion,
 )
 
 os.environ["GEOMSTATS_BACKEND"] = "pytorch"
@@ -99,7 +100,7 @@ def get_true_immersion(config):
             config.embedding_dim,
             rot,
         )
-    if config.dataset_name == "scrunchy":
+    elif config.dataset_name == "scrunchy":
         return get_scrunchy_immersion(
             config.radius,
             config.n_wiggles,
@@ -107,7 +108,7 @@ def get_true_immersion(config):
             config.embedding_dim,
             rot,
         )
-    if config.dataset_name == "flower_scrunchy":
+    elif config.dataset_name == "flower_scrunchy":
         return get_flower_scrunchy_immersion(
             config.radius,
             config.n_wiggles,
@@ -115,7 +116,7 @@ def get_true_immersion(config):
             config.embedding_dim,
             rot,
         )
-    if config.dataset_name == "torus":
+    elif config.dataset_name == "torus":
         return get_torus_immersion(
             major_radius=config.major_radius,
             minor_radius=config.minor_radius,
@@ -124,16 +125,26 @@ def get_true_immersion(config):
             translation=trans,
             rotation=rot
         )
-    if config.dataset_name == "interlocked_tori":
+    elif config.dataset_name == "interlocked_tori":
         return get_torus_immersion(
             major_radius=config.major_radius,
             minor_radius=config.minor_radius,
             embedding_dim=3,
             deformation_amp=config.deformation_amp,
             translation=torch.zeros(3),
-            rotation=torch.eye(n=3)
+            rotation=torch.eye(n=3),
         )
-
+    elif config.dataset_name == "nested_spheres":
+        immersion_inner = get_sphere_immersion(radius=config.minor_radius, embedding_dim=3,
+                                               deformation_amp=config.deformation_amp,
+                                               translation=torch.zeros(3), rotation=torch.eye(n=3))
+        immersion_mid = get_sphere_immersion(radius=config.minor_radius, embedding_dim=3,
+                                             deformation_amp=config.deformation_amp,
+                                             translation=torch.zeros(3), rotation=torch.eye(n=3))
+        immersion_outer = get_sphere_immersion(radius=config.minor_radius, embedding_dim=3,
+                                               deformation_amp=config.deformation_amp,
+                                               translation=torch.zeros(3), rotation=torch.eye(n=3))
+        return immersion_inner, immersion_mid, immersion_outer
     elif config.dataset_name == "s2_synthetic":
         return get_s2_synthetic_immersion(
             radius=config.radius,
@@ -231,6 +242,14 @@ def get_vectors(config, model, data_loader, n_samples=200):
         sort_idx = np.lexsort((labels[:, 1].numpy(), labels[:, 0].numpy()))
         sort_idx = torch.from_numpy(sort_idx)
 
+    # lexicographic sort if label dim = 3, for nested_spheres and interlocked_tori.
+    elif labels.shape[1] == 3:
+        sort_idx = np.lexsort((
+            labels[:, 2].numpy(),  # phi (3rd column)
+            labels[:, 1].numpy(),  # theta (2nd column)
+            labels[:, 0].numpy(),  # entity index (1st column)
+        ))
+
     else:
         raise NotImplementedError(f"Labels should either be one-dimensional or two-dimensional")
 
@@ -299,26 +318,48 @@ def _old_compute_curvature_true(config, n_grid_points=2000):
     return z_grid, *result
 
 
-def compute_curvature_true(config, angles=None, n_grid_points=2000):
-    if angles is None:
+def compute_curvature_true(config, labels=None, n_grid_points=2000):
+    if labels is None:
         if config.verbose:
             print("Computing true curvature of input dataset using on z-grid...")
         angles = get_z_grid(config, n_grid_points)
     else:
         if config.verbose:
             print("Computing true curvature of input dataset on given angles...")
-    immersion = get_true_immersion(config)
+
     if config.dataset_name in {"s1_synthetic", "interlocking_rings_synthetic", "scrunchy", "clelia_curve", "8_curve",
                                "flower_scrunchy"}:
+        angles = labels
         manifold_dim = 1
-    elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "torus", "interlocked_tori"}:
+        immersion = get_true_immersion(config)
+        curv, curv_norm = _compute_curvature(angles, immersion, manifold_dim, config.embedding_dim)
+    elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "torus"}:
+        angles = labels
         manifold_dim = 2
+        immersion = get_true_immersion(config)
+        curv, curv_norm = _compute_curvature(angles, immersion, manifold_dim, config.embedding_dim)
+    elif config.dataset_name in {"nested_spheres", "interlocked_tori"}:
+        manifold_dim = 2
+        immersion_inner, immersion_mid, immersion_outer = get_true_immersion(config)
+        immersions = [immersion_inner, immersion_mid, immersion_outer]
+
+        curv, curv_norm = [], []
+        entity_indices = labels[:, 0]
+        angles = labels[:, 1:]
+        unique_entities = entity_indices.unique(sorted=True)
+        for entity in unique_entities:
+            entity_index = int(entity.item())
+            immersion = immersions[entity_index]
+            mask = (entity_indices == entity)
+            angles_sub = angles[mask]
+            curv_sub, curv_norm_sub = _compute_curvature(angles_sub, immersion, manifold_dim, 3)
+            curv.append(curv_sub)
+            curv_norm.append(curv_norm_sub)
+        curv = torch.cat(curv)
+        curv_norm = torch.cat(curv_norm)
     else:
         raise InvalidConfigError(f"Unknown dataset: {config.dataset_name}")
-    if config.dataset_name == "interlocked_tori":
-        curv, curv_norm = _compute_curvature(angles, immersion, manifold_dim, 3)
-    else:
-        curv, curv_norm = _compute_curvature(angles, immersion, manifold_dim, config.embedding_dim)
+
     return angles, curv, curv_norm
 
 
@@ -411,37 +452,39 @@ def normalize_curvature_to_input_radius(points, radius, curvatures):
 
 
 # Empiric curvature estimate
-def compute_empirical_curvature(config, labels, inputs, latents, recons, quadric_dim, k=160):
-    if quadric_dim == 1:
+def compute_empirical_curvature(config, labels, inputs, latents, recons, k=160):
+    if config.dataset_name in {"8_curve", "clelia_curve", "flower_curve", "scrunchy", "flower_scrunchy"}:
         curv_in = estimate_curvature_1d_quadric(inputs, k)
         curv_lat = estimate_curvature_1d_quadric(latents, k)
         curv_rec = estimate_curvature_1d_quadric(recons, k)
-    elif quadric_dim == 2 and config.dataset_name in {"s1_synthetic", "interlocking_rings_synthetic", "scrunchy",
-                                                      "clelia_curve", "8_curve", "flower_scrunchy", "s2_synthetic",
-                                                      "t2_synthetic", "torus"}:
+    elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "torus", "genus_3", "sphere"}:
         curv_in = estimate_curvature_2d_quadric(inputs, k)
         curv_lat = estimate_curvature_2d_quadric(latents, k)
         curv_rec = estimate_curvature_2d_quadric(recons, k)
-    elif quadric_dim == 2 and config.dataset_name in {"interlocked_tori"}:
-        inputs_t1 = inputs[:config.n_times]
-        latents_t1 = inputs[:config.n_times]
-        recons_t1 = inputs[:config.n_times]
-        curv_in_t1 = estimate_curvature_2d_quadric(inputs_t1, k)
-        curv_lat_t1 = estimate_curvature_2d_quadric(latents_t1, k)
-        curv_rec_t1 = estimate_curvature_2d_quadric(recons_t1, k)
+    elif config.dataset_name in {"interlocked_tori", "nested_spheres"}:
+        entity_indices = labels[:, 0]
+        unique_entities = entity_indices.unique(sorted=True)
+        curv_in, curv_lat, curv_rec = [], [], []
+        for entity in unique_entities:
+            mask = (entity_indices == entity)
+            inputs_sub = inputs[mask]
+            latents_sub = latents[mask]
+            recons_sub = recons[mask]
 
-        inputs_t2 = inputs[-config.n_times:]
-        latents_t2 = inputs[-config.n_times:]
-        recons_t2 = inputs[-config.n_times:]
-        curv_in_t2 = estimate_curvature_2d_quadric(inputs_t2, k)
-        curv_lat_t2 = estimate_curvature_2d_quadric(latents_t2, k)
-        curv_rec_t2 = estimate_curvature_2d_quadric(recons_t2, k)
+            curv_in_sub = estimate_curvature_2d_quadric(inputs_sub, k)
+            curv_lat_sub = estimate_curvature_2d_quadric(latents_sub, k)
+            curv_rec_sub = estimate_curvature_2d_quadric(recons_sub, k)
 
-        curv_in = np.concatenate([curv_in_t1, curv_in_t2])
-        curv_lat = np.concatenate([curv_lat_t1, curv_lat_t2])
-        curv_rec = np.concatenate([curv_rec_t1, curv_rec_t2])
+            curv_in.append(curv_in_sub)
+            curv_lat.append(curv_lat_sub)
+            curv_rec.append(curv_rec_sub)
+
+        curv_in = np.concatenate(curv_in)
+        curv_lat = np.concatenate(curv_lat)
+        curv_rec = np.concatenate(curv_rec)
+
     else:
-        raise InvalidConfigError(f"Unknown quadric dim: {quadric_dim}")
+        raise InvalidConfigError(f"Unknown dataset name: {config.dataset_name}")
 
     # Apply filter to smooth out curves
     curvature_inputs = savgol_filter(curv_in, 20, 6)
@@ -502,7 +545,6 @@ def compute_all_curvatures(config, model, recons, latents, inputs, labels):
                                                                                                 inputs=inputs,
                                                                                                 latents=latents,
                                                                                                 recons=recons,
-                                                                                                quadric_dim=config.quadric_dim,
                                                                                                 k=config.k
                                                                                                 )
 
