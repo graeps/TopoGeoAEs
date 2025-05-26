@@ -126,14 +126,21 @@ def get_true_immersion(config):
             rotation=rot
         )
     elif config.dataset_name == "interlocked_tori":
-        return get_torus_immersion(
-            major_radius=config.major_radius,
-            minor_radius=config.minor_radius,
-            embedding_dim=3,
-            deformation_amp=config.deformation_amp,
-            translation=torch.zeros(3),
-            rotation=torch.eye(n=3),
-        )
+        immersion1 = get_torus_immersion(major_radius=config.major_radius,
+                                         minor_radius=config.minor_radius,
+                                         embedding_dim=3,
+                                         deformation_amp=config.deformation_amp,
+                                         translation=torch.zeros(3),
+                                         rotation=torch.eye(n=3),
+                                         )
+        immersion2 = get_torus_immersion(major_radius=config.major_radius,
+                                         minor_radius=config.minor_radius,
+                                         embedding_dim=3,
+                                         deformation_amp=config.deformation_amp,
+                                         translation=torch.zeros(3),
+                                         rotation=torch.eye(n=3),
+                                         )
+        return immersion1, immersion2
     elif config.dataset_name == "nested_spheres":
         immersion_inner = get_sphere_immersion(radius=config.minor_radius, embedding_dim=3,
                                                deformation_amp=config.deformation_amp,
@@ -194,7 +201,7 @@ def get_z_grid(config, n_grid_points=200):
     return z_grid
 
 
-def get_vectors(config, model, data_loader, n_samples=200):
+def get_vectors(config, model, data_loader, n_samples):
     if config.verbose:
         print("Forwarding data through model to compute latents and recons...")
 
@@ -340,9 +347,14 @@ def compute_curvature_true(config, labels=None, n_grid_points=2000):
         curv, curv_norm = _compute_curvature(angles, immersion, manifold_dim, config.embedding_dim)
     elif config.dataset_name in {"nested_spheres", "interlocked_tori"}:
         manifold_dim = 2
-        immersion_inner, immersion_mid, immersion_outer = get_true_immersion(config)
-        immersions = [immersion_inner, immersion_mid, immersion_outer]
-
+        if config.dataset_name == "nested_spheres":
+            immersion_inner, immersion_mid, immersion_outer = get_true_immersion(config)
+            immersions = [immersion_inner, immersion_mid, immersion_outer]
+        elif config.dataset_name == "interlocked_tori":
+            immersion_torus1, immersion_torus2 = get_true_immersion(config)
+            immersions = [immersion_torus1, immersion_torus2]
+        else:
+            raise InvalidConfigError(f"Unknown dataset: {config.dataset_name}")
         curv, curv_norm = [], []
         entity_indices = labels[:, 0]
         angles = labels[:, 1:]
@@ -352,6 +364,7 @@ def compute_curvature_true(config, labels=None, n_grid_points=2000):
             immersion = immersions[entity_index]
             mask = (entity_indices == entity)
             angles_sub = angles[mask]
+            print("angles_sub", angles_sub)
             curv_sub, curv_norm_sub = _compute_curvature(angles_sub, immersion, manifold_dim, 3)
             curv.append(curv_sub)
             curv_norm.append(curv_norm_sub)
@@ -487,10 +500,11 @@ def compute_empirical_curvature(config, labels, inputs, latents, recons, k=160):
         raise InvalidConfigError(f"Unknown dataset name: {config.dataset_name}")
 
     # Apply filter to smooth out curves
-    curvature_inputs = savgol_filter(curv_in, 20, 6)
-    curvature_latents = savgol_filter(curv_lat, 20, 6)
-    curvature_recons = savgol_filter(curv_rec, 20, 6)
-    return curvature_inputs, curvature_latents, curvature_recons, labels
+    if config.smoothing:
+        curv_in = savgol_filter(curv_in, 20, 6)
+        curv_lat = savgol_filter(curv_lat, 20, 6)
+        curv_rec = savgol_filter(curv_rec, 20, 6)
+    return curv_in, curv_lat, curv_rec, labels
 
 
 def estimate_curvature_1d_quadric(points, k=160):
@@ -551,11 +565,11 @@ def compute_all_curvatures(config, model, recons, latents, inputs, labels):
     # Compute pullback curvature on (ordered) subset of points to reduce computation time
     n_total = len(labels)
     n_points = min(config.n_curv_evaluation_points, n_total)
-    step = n_total // n_points
-    sampled_indices = np.arange(0, n_total, step)[:n_points]
+    sampled_indices = np.random.choice(n_total, size=n_points, replace=False)
+    sampled_indices.sort()
 
-    labels_subset = labels[sampled_indices]
     # Subsample data to match subset of curvatures for heat map plotting
+    labels_subset = labels[sampled_indices]
     inputs_subset = inputs[sampled_indices]
     latents_subset = latents[sampled_indices]
     recons_subset = recons[sampled_indices]

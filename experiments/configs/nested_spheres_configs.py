@@ -4,14 +4,15 @@ base_config = {
     # Experiment
     "experiment": "nested_spheres",
     "random_seed": 42,
+    "logging": False,
 
     # Dataset
     "dataset_name": "nested_spheres",
     "batch_size": 64,
     "rotation": "random",
     "translation": None,
-    "deformation_amp": 0.00001,
-    "n_times": 2500,
+    "deformation_amp": 0.0001,
+    "n_times": 5000,
     "major_radius": 10.0,
     "mid_radius": 5.0,
     "minor_radius": 3.0,
@@ -42,11 +43,11 @@ base_config = {
     'gamma': 0.0,  # Weight for topological loss
 
     # Curvature computation
-    "quadric_dim": 2,
     "n_plot_points": 1000,
-    "n_curv_estimation_points": 300,  # to compute curvature
-    "n_curv_evaluation_points": 10,
+    "n_curv_estimation_points": 5000,  # to compute curvature
+    "n_curv_evaluation_points": 500,
     "k": 180,
+    "smoothing": True,
 
     # Persistent homology
     "scale": False,

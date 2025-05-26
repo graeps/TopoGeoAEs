@@ -81,9 +81,11 @@ def get_torus_immersion(major_radius, minor_radius, embedding_dim, deformation_a
         point = _embedd(point, embedding_dim)
 
         # Apply sinusoidal wiggles in higher dimensions
-        for i in range(3, embedding_dim):
-            t = i - 2  # frequency parameter
-            wiggle = deformation_amp * torch.sin(t * phi)
+        for i in range(2, embedding_dim):
+            if i == embedding_dim-1:
+                wiggle = deformation_amp * torch.sin(phi)
+            else:
+                wiggle = deformation_amp * torch.cos(phi)
             point[i] = wiggle
 
         # Optional: apply global rotation and translation
@@ -179,8 +181,9 @@ def load_interlocked_tori(n_points, major_radius, minor_radius, noise_var, embed
     ])
 
     sqrt_ntimes = int(gs.sqrt(n_points))
-    thetas = gs.linspace(0, 2 * gs.pi, sqrt_ntimes)
-    phis = gs.linspace(0, 2 * gs.pi, sqrt_ntimes)
+    eps = 1e-4
+    thetas = gs.linspace(eps, 2 * gs.pi - eps, sqrt_ntimes)
+    phis = gs.linspace(eps, 2 * gs.pi - eps, sqrt_ntimes)
 
     angle_grid = torch.cartesian_prod(thetas, phis)
     torus1 = torch.stack([immersion(pair) for pair in angle_grid])
@@ -215,8 +218,8 @@ def load_interlocked_tori(n_points, major_radius, minor_radius, noise_var, embed
     data = torch.cat([torus1, torus2])
     angles = torch.cat([angle_grid, angle_grid])
     n_samples = angle_grid.shape[0]
-    sphere_index = torch.tensor([0] * n_samples + [1] * n_samples + [2] * n_samples, dtype=torch.long)
-    labels = (sphere_index, angles)
+    entity_index = torch.tensor([0] * n_samples + [1] * n_samples, dtype=torch.long)
+    labels = (entity_index, angles)
 
     return data, labels
 

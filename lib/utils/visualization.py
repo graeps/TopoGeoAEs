@@ -13,7 +13,7 @@ from scipy.interpolate import griddata
 from .eval_curvature import compute_curvature_learned, compute_curvature_error, \
     compute_curvature_true, estimate_curvature_1d_quadric, \
     compute_all_curvatures, get_vectors, compute_curvature_error_mse, compute_curvature_error_linf, \
-    compute_curvature_error_male, compute_curvature_error_smape
+    compute_curvature_error_smape
 from .eval_topology import compare_persistent_homology
 
 
@@ -607,7 +607,7 @@ def plot_curvatures_1d(labels, curvature_true, curvature_inputs, curvature_recon
         ax.legend(fontsize=8)
     axes[0].set_ylabel('Curvature')
     plt.tight_layout()
-    if config.log_dir:
+    if config.log_dir is not None:
         plt.savefig(os.path.join(config.log_dir, "curvature_grid_plot.png"))
     plt.show()
 
@@ -644,7 +644,7 @@ def plot_curvatures_2d(labels, curvature_true, curvature_inputs, curvature_recon
             fig.colorbar(surf, ax=ax, shrink=0.6, aspect=10)
         fig.suptitle(suptitle, fontsize=16)
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-        if config.log_dir:
+        if config.log_dir is not None:
             fname = f"surface_{tag}.png"
             plt.savefig(os.path.join(config.log_dir, fname))
         plt.show()
@@ -662,7 +662,6 @@ def plot_curvature_errors_and_stats(curvature_true, curvature_inputs, curvature_
         ("True vs Latent Normalized", curvature_true, curv_lat_norm)
     ]
     names = [name for name, _, _ in pairs]
-    mal = [compute_curvature_error_male(a, b) for _, a, b in pairs]
     smap = [compute_curvature_error_smape(a, b) for _, a, b in pairs]
     mse = [compute_curvature_error_mse(a, b) for _, a, b in pairs]
     linf = [compute_curvature_error_linf(a, b) for _, a, b in pairs]
@@ -673,16 +672,16 @@ def plot_curvature_errors_and_stats(curvature_true, curvature_inputs, curvature_
 
     fig, axes = plt.subplots(1, 3, figsize=(18, 5))
     bar_width = 0.2
-    x = np.arange(3)
+    x = np.arange(2)
 
-    # MALE, MSE, L_inf
+    # MSE, L_inf
     ax = axes[0]
     for i in range(4):
         offsets = x + (i - 1.5) * bar_width
-        heights = [group[i] for group in [mal, mse, linf]]
+        heights = [group[i] for group in [mse, linf]]
         ax.bar(offsets, heights, bar_width, label=names[i])
     ax.set_xticks(x)
-    ax.set_xticklabels(['MALE', 'MSE', '$L^\infty$'], rotation=15)
+    ax.set_xticklabels(['MSE', '$L^\infty$'], rotation=15)
     ax.set_title('Error Metrics')
     ax.legend(fontsize=8)
     ax.grid(True, linestyle='--', alpha=0.5)
@@ -703,18 +702,18 @@ def plot_curvature_errors_and_stats(curvature_true, curvature_inputs, curvature_
     ax.set_title('Curvature STD')
     ax.grid(True, linestyle='--', alpha=0.5)
 
-    if config.log_dir:
+    if config.log_dir is not None:
         plt.savefig(os.path.join(config.log_dir, "curvature_errors_combined.png"))
     plt.tight_layout()
     plt.show()
 
     results = {
         "error_comparisons": names,
-        "errors": {"MALE": mal, "MSE": mse, "SMAPE_percent": smap, "L_inf": linf},
+        "errors": {"MSE": mse, "SMAPE_percent": smap, "L_inf": linf},
         "curvature_std": {"labels": std_labels, "values": stds}
     }
 
-    if config.log_dir:
+    if config.log_dir is not None:
         with open(os.path.join(config.log_dir, "curvature_errors_stats.json"), "w") as f:
             json.dump(results, f, indent=4)
 
@@ -731,7 +730,6 @@ def _plot_all_curvatures_from_vectors(config, model, recons, latents, inputs, la
         plot_curvatures_2d(labels, curv_true, curv_in, curv_rec, curv_lat, curv_lat_norm, curv_learned, config)
     elif labels.ndim == 2 and labels.shape[1] == 3:
         entity_indices = labels[:, 0]
-        print("labels", labels)
         unique_entities = entity_indices.unique(sorted=True)
         for entity in unique_entities:
             mask = (entity_indices == entity)
@@ -747,7 +745,7 @@ def _plot_all_curvatures_from_vectors(config, model, recons, latents, inputs, la
     else:
         raise NotImplementedError("Label dimension not supported for curvature plotting.")
 
-    # Plot curvature heat maps
+    #Plot curvature heat maps
     scatter_curvature_heatmaps(config, inputs=inputs, latents=latents, recons=recons, curvature_true=curv_true,
                                curvature_inputs=curv_in, curvature_recons=curv_rec, curvature_learned=curv_learned,
                                curvature_latents_normalized=curv_lat_norm, curvature_latents=curv_lat)
@@ -806,7 +804,7 @@ def plot_persistence_diagrams(config, diagrams, homology_dimensions):
         ax.legend()
 
     plt.tight_layout()
-    if config.log_dir:
+    if config.log_dir is not None:
         fname = "persistence_diagrams.png"
         plt.savefig(os.path.join(config.log_dir, fname))
     plt.show()
@@ -836,7 +834,7 @@ def plot_betti_curves(config, betti_curves, homology_dimensions=None):
         ax.ticklabel_format(axis='both', style='sci', scilimits=(0, 0))
 
     plt.tight_layout()
-    if config.log_dir:
+    if config.log_dir is not None:
         fname = "betti_curves.png"
         plt.savefig(os.path.join(config.log_dir, fname))
     plt.show()

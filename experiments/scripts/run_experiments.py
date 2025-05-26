@@ -56,4 +56,5 @@ def run_experiment(name):
         utils.plot_all_curvatures(config=config, model=vae_model, data_loader=train_loader)
         # utils.plot_curvature_persistence(config=config, model=vae_model, data_loader=train_loader)
 
-        generate_experiment_report(config)
+        if config.logging:
+            generate_experiment_report(config)

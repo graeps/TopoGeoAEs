@@ -4,6 +4,7 @@ base_config = {
     # Experiment
     "experiment": "interlocked_tori",
     "random_seed": 40,
+    "logging": False,
 
     # Dataset
     "dataset_name": "interlocked_tori",
@@ -11,7 +12,7 @@ base_config = {
     "rotation": "random",
     "translation": None,
     "deformation_amp": 0.0,
-    "n_times": 2500,
+    "n_times": 5000,
     "major_radius": 2.5,
     "minor_radius": 1,
     "filled": False,
@@ -25,14 +26,14 @@ base_config = {
     'sftbeta': 4.5,
     'device': "cpu",
     'encoder_widths': [50, 50, 50],
-    'decoder_widths': [50, 50, 50],
+    'decoder_widths': [20, 20, 20],
 
     # Optimizer
     "learning_rate": 0.001,
 
     # Trainer
     'verbose': False,
-    'num_epochs': 15,
+    'num_epochs': 1,
     'log_interval': 100,
     'recon_loss': "MSE",
     'topo_loss': True,
@@ -42,11 +43,11 @@ base_config = {
     'gamma': 0.0,  # Weight for topological loss
 
     # Curvature computation
-    "quadric_dim": 2,
     "n_plot_points": 1000,
-    "n_curv_estimation_points": 1000,  # to compute curvature
-    "n_curv_evaluation_points": 1000,
-    "k": 180,
+    "n_curv_estimation_points": 1000,
+    "n_curv_evaluation_points": 100,
+    "k": 460,
+    "smoothing": True,
 
     # Persistent homology
     "scale": False,
@@ -54,11 +55,10 @@ base_config = {
 }
 
 param_grid = {
-    "alpha": [1.0, ] * 14,
-    "gamma": [100.0, ] * 14,
-    "dim_topo_loss": [0, 0, 1, 2, 0, 1, 2] * 2,
-    "deformation_amp": [3] * 14,
-    "k": [40, 50, 60, 70, 80, 90, 100, 120, 150, 200, 250, 300, 350, 400]
+    "alpha": ([1.0] + [1.0] + [1.0] + [0.0]) * 12,
+    "gamma": ([0.0] + [100] + [1000] + [1.0]) * 12,
+    "deformation_amp": [0.0, 0.5] * 6 + [0.7] * 12 + [1.2] * 12 + [2.5] * 12,
+    'dim_topo_loss': ([0] * 4 + [1] * 4 + [2] * 4) * 4,
 }
 
 # param_grid = {

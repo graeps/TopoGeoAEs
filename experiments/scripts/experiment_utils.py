@@ -33,13 +33,15 @@ def generate_experiments(base_configuration, parameter_grid):
         cfg.update(overrides)
         cfg["description"] = _describe_experiment(overrides)
 
-        default_root_log_dir = "./results"
-        if cfg.get("log_dir") is None:
-            log_dir = os.path.join(default_root_log_dir, cfg["dataset_name"], f"results_{name}")
-        else:
-            log_dir = os.path.join(cfg["log_dir"], cfg["dataset_name"], f"results_{name}")
-        os.makedirs(log_dir, exist_ok=True)
-        cfg["log_dir"] = log_dir
+        if cfg.get("logging"):
+            default_root_log_dir = "./results"
+            if cfg.get("log_dir") is None:
+                log_dir = os.path.join(default_root_log_dir, cfg["dataset_name"], f"results_{name}")
+            else:
+                log_dir = os.path.join(cfg["log_dir"], cfg["dataset_name"], f"results_{name}")
+            os.makedirs(log_dir, exist_ok=True)
+            cfg["log_dir"] = log_dir
+        else: cfg["log_dir"] = None
 
         experiments[name] = SimpleNamespace(**cfg)
 
