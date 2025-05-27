@@ -8,7 +8,7 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
-from scipy.interpolate import griddata
+from scipy.interpolate import griddata, RBFInterpolator
 
 from .eval_curvature import compute_curvature_learned, compute_curvature_error, \
     compute_curvature_true, estimate_curvature_1d_quadric, \
@@ -285,7 +285,7 @@ def plot_latent_projections(model, pointcloud, test_loader, device="cpu"):
 def _scatter_datapoints(ax, data, title, colors=None, cmap='hsv'):
     d = data.shape[1]
     pca_applied = False
-    dot_size = 2
+    dot_size = 3
 
     if d == 1:
         sc = ax.scatter(data[:, 0], np.zeros_like(data[:, 0]), c=colors, cmap=cmap, s=dot_size, alpha=0.7)
@@ -311,12 +311,13 @@ def plot_data_latents_recon(config, model, data_loader):
 
     if labels.ndim > 1 and labels.shape[1] == 2:
         colors = (labels[:, 0] + labels[:, 1]) % (2 * np.pi)
+        color_map = "hsv"
     elif config.dataset_name in {"nested_spheres", "interlocked_tori"}:
         colors = labels[:, 0]
+        color_map = "tab10"
     else:
         colors = labels.squeeze()
-
-    color_map = "Set2"
+        color_map = "viridis"
 
     fig = plt.figure(figsize=(18, 5))
 
@@ -532,7 +533,7 @@ def plot_curvature_norms(angles, curvature_norms, config, norm_val, profile_type
 def scatter_curvature_heatmaps(config, inputs, latents, recons, curvature_true, curvature_inputs, curvature_recons,
                                curvature_latents, curvature_latents_normalized, curvature_learned):
     fig = plt.figure(figsize=(18, 10))
-    color_map = 'inferno'
+    color_map = 'rainbow'
 
     # True Curvature on Inputs
     ax1 = fig.add_subplot(2, 3, 1, projection='3d' if inputs.shape[1] == 3 or inputs.shape[1] > 3 else None)
@@ -615,8 +616,10 @@ def plot_curvatures_1d(labels, curvature_true, curvature_inputs, curvature_recon
 def plot_curvatures_2d(labels, curvature_true, curvature_inputs, curvature_recons,
                        curvature_latents, curvature_lat_norm, curvature_learned, config):
     grid_res = 100
-    grid_x, grid_y = np.meshgrid(np.linspace(0, 2 * np.pi, grid_res), np.linspace(0, 2 * np.pi, grid_res))
-
+    if config.dataset_name in {"sphere", "nested_spheres"}:
+        grid_x, grid_y = np.meshgrid(np.linspace(0, np.pi, int(grid_res // 2)), np.linspace(0, 2 * np.pi, grid_res))
+    else:
+        grid_x, grid_y = np.meshgrid(np.linspace(0, 2 * np.pi, grid_res), np.linspace(0, 2 * np.pi, grid_res))
     def interpolate(values):
         return griddata(labels, values, (grid_x, grid_y), method="cubic")
 
@@ -643,7 +646,7 @@ def plot_curvatures_2d(labels, curvature_true, curvature_inputs, curvature_recon
             ax.set_zlabel('Curvature')
             fig.colorbar(surf, ax=ax, shrink=0.6, aspect=10)
         fig.suptitle(suptitle, fontsize=16)
-        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+        plt.tight_layout()
         if config.log_dir is not None:
             fname = f"surface_{tag}.png"
             plt.savefig(os.path.join(config.log_dir, fname))
@@ -722,7 +725,6 @@ def _plot_all_curvatures_from_vectors(config, model, recons, latents, inputs, la
     labels, points, curvatures = compute_all_curvatures(config, model, recons, latents, inputs, labels)
     inputs, latents, recons = points
     curv_true, curv_in, curv_rec, curv_lat, curv_lat_norm, curv_learned = curvatures
-
     # Plot curvatures over angles
     if labels.ndim == 1:
         plot_curvatures_1d(labels, curv_true, curv_in, curv_rec, curv_lat, curv_lat_norm, curv_learned, config)
@@ -745,7 +747,7 @@ def _plot_all_curvatures_from_vectors(config, model, recons, latents, inputs, la
     else:
         raise NotImplementedError("Label dimension not supported for curvature plotting.")
 
-    #Plot curvature heat maps
+    # Plot curvature heat maps
     scatter_curvature_heatmaps(config, inputs=inputs, latents=latents, recons=recons, curvature_true=curv_true,
                                curvature_inputs=curv_in, curvature_recons=curv_rec, curvature_learned=curv_learned,
                                curvature_latents_normalized=curv_lat_norm, curvature_latents=curv_lat)
@@ -842,7 +844,7 @@ def plot_betti_curves(config, betti_curves, homology_dimensions=None):
 
 def plot_curvature_persistence(config, model, data_loader):
     recons, latents, inputs, labels = get_vectors(config, model, data_loader, config.n_curv_estimation_points)
-    # _plot_empirical_curvature_from_vectors(config, model, recons, latents, inputs, labels)
+    _plot_all_curvatures_from_vectors(config, model, recons, latents, inputs, labels)
 
     diagrams, betti_curves, distances = compare_persistent_homology(
         (inputs, latents), config.homology_dimensions, scale=config.scale)

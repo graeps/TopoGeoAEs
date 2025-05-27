@@ -4,7 +4,7 @@ base_config = {
     # Experiment
     "experiment": "nested_spheres",
     "random_seed": 42,
-    "logging": False,
+    "logging": True,
 
     # Dataset
     "dataset_name": "nested_spheres",
@@ -12,7 +12,7 @@ base_config = {
     "rotation": "random",
     "translation": None,
     "deformation_amp": 0.0001,
-    "n_times": 5000,
+    "n_times": 6000,
     "major_radius": 10.0,
     "mid_radius": 5.0,
     "minor_radius": 3.0,
@@ -33,7 +33,7 @@ base_config = {
 
     # Trainer
     'verbose': False,
-    'num_epochs': 2,
+    'num_epochs': 5,
     'log_interval': 100,
     'recon_loss': "MSE",
     'topo_loss': True,
@@ -44,9 +44,9 @@ base_config = {
 
     # Curvature computation
     "n_plot_points": 1000,
-    "n_curv_estimation_points": 5000,  # to compute curvature
-    "n_curv_evaluation_points": 500,
-    "k": 180,
+    "n_curv_estimation_points": 1000,  # to compute curvature
+    "n_curv_evaluation_points": 1000,
+    "k": 80,
     "smoothing": True,
 
     # Persistent homology
@@ -59,7 +59,6 @@ param_grid = {
     "gamma": [100.0, ] * 14,
     "dim_topo_loss": [0, 0, 1, 2, 0, 1, 2] * 2,
     "deformation_amp": [0] * 14,
-    "k": [40, 50, 60, 70, 80, 90, 100, 120, 150, 200, 250, 300, 350, 400]
 }
 
 # param_grid = {

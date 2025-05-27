@@ -3,7 +3,7 @@ from scripts.experiment_utils import generate_experiments
 base_config = {
     # Experiment
     "experiment": "interlocked_tori",
-    "random_seed": 40,
+    "random_seed": 42,
     "logging": False,
 
     # Dataset
@@ -11,11 +11,10 @@ base_config = {
     "batch_size": 64,
     "rotation": "random",
     "translation": None,
-    "deformation_amp": 0.0,
+    "deformation_amp": 0.1,
     "n_times": 5000,
-    "major_radius": 2.5,
+    "major_radius": 5,
     "minor_radius": 1,
-    "filled": False,
     "embedding_dim": 4,
     "noise_var": 0.001,
 
@@ -44,8 +43,8 @@ base_config = {
 
     # Curvature computation
     "n_plot_points": 1000,
-    "n_curv_estimation_points": 1000,
-    "n_curv_evaluation_points": 100,
+    "n_curv_estimation_points": 11000,
+    "n_curv_evaluation_points": 1000,
     "k": 460,
     "smoothing": True,
 

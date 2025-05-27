@@ -12,9 +12,9 @@ base_config = {
     "rotation": "random",
     "translation": None,
     "deformation_amp": 0.0,
-    "n_times": 6000,
-    "major_radius": 2.5,
-    "minor_radius": 1,
+    "n_times": 9000,
+    "major_radius": 4.0,
+    "minor_radius": 1.5,
     "filled": False,
     "embedding_dim": 10,
     "noise_var": 0.001,
@@ -43,11 +43,14 @@ base_config = {
     'gamma': 0.0,  # Weight for topological loss
 
     # Curvature computation
-    "n_plot_points": 1000,
-    "n_curv_estimation_points": 5000,  # to compute curvature
+    "n_plot_points": 2000,
+    "n_curv_estimation_points": 8000,  # to compute curvature
     "n_curv_evaluation_points": 1000,
-    # heuristics for major_radius = 2.5, minor_radius = 1, (estimation_points, k): (1000, 80), (1500, 110), (2000,160), (2500,210)
-    "k": 460,
+    # heuristics (estimation_points, k)
+    #   major_radius = 2.5, minor_radius = 1, n_times = 6000: (5000, 460)
+    #   major_radius = 4, minor_radius = 1, n_times = 10000: (5000, 250)
+    #   major_radius = 4, minor_radius = 1, n_times = 11000: (8000, 440)
+    "k": 440,
     "smoothing": True,
 
     # Persistent homology
@@ -56,11 +59,9 @@ base_config = {
 }
 
 param_grid = {
-    "alpha": ([1.0] + [1.0] + [1.0] + [0.0]) * 12,
-    "gamma": ([0.0] + [100] + [1000] + [1.0]) * 12,
-    "deformation_amp": [2.5] * 12 + [0.7] * 12 + [1.2] * 12 + [2.5] * 12,
-    'dim_topo_loss': ([0] * 4 + [1] * 4 + [2] * 4) * 4,
-
+    "gamma": [1] * 3 + [1000] * 3,
+    "deformation_amp": [4.0] * 6,
+    "dim_topo_loss": [0, 1, 2] * 6,
 }
 
 # param_grid = {

@@ -75,20 +75,20 @@ def get_torus_immersion(major_radius, minor_radius, embedding_dim, deformation_a
         # Standard 3D torus coordinates
         x_coord = (major_radius - minor_radius * gs.cos(theta)) * gs.cos(phi)
         y_coord = (major_radius - minor_radius * gs.cos(theta)) * gs.sin(phi)
-        z_coord = minor_radius * gs.sin(theta)
+        z_coord = minor_radius * gs.sin(theta) + deformation_amp * gs.sin(phi)
 
         point = torch.stack([x_coord, y_coord, z_coord], dim=0)
         point = _embedd(point, embedding_dim)
 
         # Apply sinusoidal wiggles in higher dimensions
-        for i in range(2, embedding_dim):
-            if i == embedding_dim-1:
-                wiggle = deformation_amp * torch.sin(phi)
-            else:
-                wiggle = deformation_amp * torch.cos(phi)
-            point[i] = wiggle
+        if deformation_amp != 0.0:
+            for i in range(3, embedding_dim):
+                if i == embedding_dim - 1:
+                    wiggle = deformation_amp * torch.sin(phi)
+                else:
+                    wiggle = deformation_amp * torch.cos(phi)
+                point[i] = wiggle
 
-        # Optional: apply global rotation and translation
         point = _rotate_translate(point, translation, rotation)
 
         return point
@@ -114,10 +114,11 @@ def load_torus(n_points, major_radius, minor_radius, noise_var, embedding_dim, d
                                     translation=trans, rotation=rot)
 
     sqrt_ntimes = int(gs.sqrt(n_points))
-    thetas = gs.linspace(0, 2 * gs.pi, sqrt_ntimes)
-    phis = gs.linspace(0, 2 * gs.pi, sqrt_ntimes)
-
+    eps = 1e-4
+    thetas = gs.linspace(eps, 2 * gs.pi - eps, sqrt_ntimes)
+    phis = gs.linspace(eps, 2 * gs.pi - eps, sqrt_ntimes)
     angle_grid = torch.cartesian_prod(thetas, phis)
+
     data = torch.stack([immersion(pair) for pair in angle_grid])
 
     if noise_var != 0:
@@ -184,8 +185,8 @@ def load_interlocked_tori(n_points, major_radius, minor_radius, noise_var, embed
     eps = 1e-4
     thetas = gs.linspace(eps, 2 * gs.pi - eps, sqrt_ntimes)
     phis = gs.linspace(eps, 2 * gs.pi - eps, sqrt_ntimes)
-
     angle_grid = torch.cartesian_prod(thetas, phis)
+
     torus1 = torch.stack([immersion(pair) for pair in angle_grid])
     torus2 = torch.stack([immersion(pair) for pair in angle_grid])
     torus2 = torus2 @ R_x90.T
@@ -410,7 +411,8 @@ def load_nested_spheres(n_points, major_radius, mid_radius, minor_radius, noise_
                                            translation=trans, rotation=rot_outer)
 
     sqrt_ntimes = int(gs.sqrt(n_points))
-    thetas = gs.arccos(np.linspace(0.99, -0.99, sqrt_ntimes))  # For more uniform distribution of sample points on sphere
+    thetas = gs.arccos(
+        np.linspace(0.99, -0.99, sqrt_ntimes))  # For more uniform distribution of sample points on sphere
     phis = gs.linspace(0, 2 * np.pi, sqrt_ntimes)
     angle_grid = torch.cartesian_prod(thetas, phis)
 
