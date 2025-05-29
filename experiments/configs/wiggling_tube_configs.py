@@ -4,12 +4,12 @@ base_config = {
     # Experiment
     "experiment": "wiggling_tube",
     "random_seed": 40,
-    "logging": False,
+    "logging": True,
 
     # Dataset
     "dataset_name": "wiggling_tube",
     "batch_size": 64,
-    "deformation_amp": 0.4,
+    "deformation_amp": 0.3,
     "n_phi": 300,
     "n_theta": 30,
     "minor_radius": 0.6,
@@ -40,17 +40,17 @@ base_config = {
     'gamma': 0.0,  # Weight for topological loss
 
     # Curvature computation
-    "n_plot_points": 5000,
-    "n_curv_estimation_points": 5000,  # to compute curvature
-    "n_curv_evaluation_points": 5000,
+    "n_plot_points": 8000,
+    "n_curv_estimation_points": 8000,  # to compute curvature
+    "n_curv_evaluation_points": 8000,
     # heuristics (estimation_points, k)
     #   n_phi=200, n_theta=20, minor_radius = 0.5: (5000, 100)
-    "k": 200,
+    "k": 500,
     "smoothing": False,
 
     # Persistent homology
     "persistent_homology": True,
-    "n_points_pers_hom": 500,
+    "n_points_pers_hom": 200,
     "scale": False,
     "homology_dimensions": [0, 1, 2]
 }

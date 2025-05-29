@@ -17,6 +17,9 @@ from .eval_curvature import compute_curvature_learned, compute_curvature_error, 
     compute_curvature_error_smape
 from .eval_topology import compare_persistent_homology
 
+import plotly.graph_objs as go
+from plotly.subplots import make_subplots
+
 
 def show_training_history(config, history):
     _, axs = plt.subplots(figsize=(14, 4), ncols=4)
@@ -311,7 +314,7 @@ def plot_data_latents_recon(config, model, data_loader):
     recons, latents, inputs, labels = get_vectors(config, model, data_loader, config.n_plot_points)
 
     if labels.ndim > 1 and labels.shape[1] == 2:
-        colors = (labels[:, 0] + labels[:, 1]) % (2 * np.pi)
+        colors = labels[:, 0]
         color_map = "hsv"
     elif config.dataset_name in {"nested_spheres", "interlocked_tori"}:
         colors = labels[:, 0]
@@ -578,6 +581,87 @@ def scatter_curvature_heatmaps(config, inputs, latents, recons, curvature_true, 
     plt.show()
 
 
+def scatter_curvature_heatmaps_plotly(config, inputs, latents, recons, curvature_true, curvature_inputs,
+                                      curvature_recons,
+                                      curvature_latents, curvature_latents_normalized, curvature_learned):
+    color_map = 'Rainbow'
+
+    # Create subplots
+    fig = make_subplots(
+        rows=2, cols=3,
+        subplot_titles=["True Curvature on Inputs", "Empirical Curvature on Inputs",
+                        "Empirical Curvature on Reconstructed Data",
+                        "Empirical Curvature on Latents", "Normalized Empirical Curvature on Latents",
+                        "Pullback Curvature on Latents"],
+        specs=[[{"type": "scatter3d"}, {"type": "scatter3d"}, {"type": "scatter3d"}],
+               [{"type": "scatter3d"}, {"type": "scatter3d"}, {"type": "scatter3d"}]]
+    )
+
+    # True Curvature on Inputs
+    scatter1 = _scatter_datapoints_plotly(inputs, curvature_true, color_map)
+    fig.add_trace(scatter1, row=1, col=1)
+
+    # Empirical Curvature on Inputs
+    scatter2 = _scatter_datapoints_plotly(inputs, curvature_inputs, color_map)
+    fig.add_trace(scatter2, row=1, col=2)
+
+    # Empirical Curvature on Recons
+    scatter3 = _scatter_datapoints_plotly(recons, curvature_recons, color_map)
+    fig.add_trace(scatter3, row=1, col=3)
+
+    # Empirical Curvature on Latents
+    scatter4 = _scatter_datapoints_plotly(latents, curvature_latents, color_map)
+    fig.add_trace(scatter4, row=2, col=1)
+
+    # Normalized Empirical Curvature on Latents
+    scatter5 = _scatter_datapoints_plotly(latents, curvature_latents_normalized, color_map)
+    fig.add_trace(scatter5, row=2, col=2)
+
+    # Pullback Curvature on Latents
+    scatter6 = _scatter_datapoints_plotly(latents, curvature_learned, color_map)
+    fig.add_trace(scatter6, row=2, col=3)
+
+    fig.update_layout(height=800, width=1200, title_text="Curvature Heatmaps", showlegend=False)
+
+    if config.log_dir is not None:
+        save_path = os.path.join(config.log_dir, "curvature_heatmaps_plotly.html")
+        fig.write_html(save_path)
+
+    fig.show()
+
+
+def _scatter_datapoints_plotly(data, colors, color_map='Rainbow'):
+    d = data.shape[1]
+    opacity = 1
+    size = 1
+
+    if d > 3:
+        data = PCA(n_components=3).fit_transform(data)
+
+    if d == 1:
+        scatter = go.Scatter3d(
+            x=data[:, 0], y=np.zeros_like(data[:, 0]), z=np.zeros_like(data[:, 0]),
+            mode='markers', marker=dict(size=size, color=colors, colorscale=color_map, opacity=opacity)
+        )
+    elif d == 2:
+        scatter = go.Scatter3d(
+            x=data[:, 0], y=data[:, 1], z=np.zeros_like(data[:, 0]),
+            mode='markers', marker=dict(size=size, color=colors, colorscale=color_map, opacity=opacity)
+        )
+    elif d == 3:
+        scatter = go.Scatter3d(
+            x=data[:, 0], y=data[:, 1], z=data[:, 2],
+            mode='markers', marker=dict(size=size, color=colors, colorscale=color_map, opacity=opacity)
+        )
+    else:
+        scatter = go.Scatter3d(
+            x=data[:, 0], y=data[:, 1], z=data[:, 2],
+            mode='markers', marker=dict(size=size, color=colors, colorscale=color_map, opacity=opacity)
+        )
+
+    return scatter
+
+
 def plot_curvatures_1d(labels, curvature_true, curvature_inputs, curvature_recons,
                        curvature_latents, curvature_latents_normalized, curvature_learned, config):
     curve_groups = [
@@ -815,9 +899,10 @@ def _plot_all_curvatures_from_vectors(config, model, recons, latents, inputs, la
         raise NotImplementedError("Label dimension not supported for curvature plotting.")
 
     # Plot curvature heat maps
-    scatter_curvature_heatmaps(config, inputs=inputs, latents=latents, recons=recons, curvature_true=curv_true,
-                               curvature_inputs=curv_in, curvature_recons=curv_rec, curvature_learned=curv_learned,
-                               curvature_latents_normalized=curv_lat_norm, curvature_latents=curv_lat)
+    scatter_curvature_heatmaps_plotly(config, inputs=inputs, latents=latents, recons=recons, curvature_true=curv_true,
+                                      curvature_inputs=curv_in, curvature_recons=curv_rec,
+                                      curvature_learned=curv_learned,
+                                      curvature_latents_normalized=curv_lat_norm, curvature_latents=curv_lat)
     plot_curvature_errors_and_stats(curv_true, curv_in, curv_rec, curv_lat, curv_lat_norm, curv_learned, config)
 
 
@@ -883,9 +968,10 @@ def plot_persistence_diagrams(config, suptitle, diagrams, homology_dimensions):
 def plot_betti_curves(config, suptitle, betti_curves, homology_dimensions=None):
     betti_numbers, samplings = betti_curves
     n_plots = len(betti_numbers)
-    titles = ["Betti Curves Input Data", "Betti Curves Latent Space"]
+    titles = ["Normalized Betti Curves Input Data", "Normalized Betti Curves Latent Space"]
     fig, axes = plt.subplots(nrows=1, ncols=n_plots, figsize=(6 * n_plots, 5), squeeze=False)
     fig.suptitle(suptitle, fontsize=16)
+
     for i, betti_numbers in enumerate(betti_numbers):
         if homology_dimensions is None:
             dims = list(range(betti_numbers.shape[0]))
@@ -894,11 +980,13 @@ def plot_betti_curves(config, suptitle, betti_curves, homology_dimensions=None):
 
         ax = axes[0, i]
         for dim in dims:
-            ax.plot(samplings[dim], betti_numbers[dim], label=f"H{dim}", linewidth=1.5)
+            # Normalize each Betti number curve
+            normalized_betti = betti_numbers[dim] / np.max(betti_numbers[dim])  # Normalize to [0, 1]
+            ax.plot(samplings[dim], normalized_betti, label=f"H{dim}", linewidth=1.5)
 
         ax.set_title(titles[i])
         ax.set_xlabel("Filtration parameter")
-        ax.set_ylabel("Betti number")
+        ax.set_ylabel("Normalized Betti number")
         ax.grid(True, linestyle="--", alpha=0.6)
         ax.legend()
         ax.ticklabel_format(axis='both', style='sci', scilimits=(0, 0))

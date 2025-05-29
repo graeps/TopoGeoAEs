@@ -56,8 +56,8 @@ def run_experiment(name):
 
         history = trainer.MVAETrainer(vae_model, data_loader, optimizer, config).train()
 
-        utils.show_training_history(config, history)
-        utils.plot_data_latents_recon(config, vae_model, train_loader)
+        #utils.show_training_history(config, history)
+        #utils.plot_data_latents_recon(config, vae_model, train_loader)
 
         if config.persistent_homology:
             utils.plot_curvature_persistence(config=config, model=vae_model, data_loader=train_loader)

@@ -175,15 +175,21 @@ def load_wiggling_tube(n_phi, n_theta, minor_radius, noise_var, embedding_dim, d
     curve = get_scrunchy_dim_n(deformation_amp, embedding_dim)
 
     data = []
+    angles = []  # To store corresponding (theta, phi) pairs for each point
+
     for phi in phis:
-        frame, _, _ = compute_frenet_frame(curve, phi, embedding_dim, deformation_amp=deformation_amp, is_scrunchy_dim_n=True)
-        e1 = frame[:, 0]
-        e2 = frame[:, 1]
+        frame, _, _ = compute_frenet_frame(curve, phi, embedding_dim, deformation_amp=deformation_amp,
+                                           is_scrunchy_dim_n=True)
+        e1 = frame[:, 1]
+        e2 = frame[:, 2]
         center = curve(phi)
+
         for theta in thetas:
             offset = minor_radius * torch.cos(theta) * e1 + minor_radius * torch.sin(theta) * e2
             point = center + offset
             data.append(point)
+            angles.append((theta.item(), phi.item()))  # Store the angle values as tuples
+
     data = torch.stack(data)
 
     if noise_var != 0:
@@ -193,7 +199,8 @@ def load_wiggling_tube(n_phi, n_theta, minor_radius, noise_var, embedding_dim, d
         ).sample((n_phi * n_theta,))
         data = data + noise
 
-    return data.detach(), torch.cartesian_prod(thetas, phis)
+    # Now return both the generated data and the corresponding angles
+    return data.detach(), torch.tensor(angles)
 
 
 def load_interlocked_tori(n_points, major_radius, minor_radius, noise_var, embedding_dim,
@@ -594,9 +601,7 @@ def get_scrunchy_dim_n(deformation_amp, n):
                 terms.append(torch.sin(k * angle))  # sin(i*angle)
             else:
                 terms.append(torch.cos(k * angle))  # cos(i*angle)
-
-        # Apply deformation amplitude to all sine terms
-        terms = [deformation_amp * term if i  >= 2 else term for i, term in enumerate(terms)]
+        terms = [deformation_amp * term if i >= 2 else term for i, term in enumerate(terms)]
 
         return torch.stack(terms)
 
