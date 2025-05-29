@@ -4,7 +4,7 @@ base_config = {
     # Experiment
     "experiment": "interlocked_tori",
     "random_seed": 42,
-    "logging": False,
+    "logging": True,
 
     # Dataset
     "dataset_name": "interlocked_tori",
@@ -12,16 +12,16 @@ base_config = {
     "rotation": "random",
     "translation": None,
     "deformation_amp": 0.1,
-    "n_times": 5000,
-    "major_radius": 5,
+    "n_times": 9000,
+    "major_radius": 4,
     "minor_radius": 1,
-    "embedding_dim": 4,
+    "embedding_dim": 10,
     "noise_var": 0.001,
 
     # Model
     'model_type': 'EuclideanVAE',
-    'data_dim': 4,
-    'latent_dim': 3,
+    'data_dim': 10,
+    'latent_dim': 4,
     'sftbeta': 4.5,
     'device': "cpu",
     'encoder_widths': [50, 50, 50],
@@ -42,22 +42,24 @@ base_config = {
     'gamma': 0.0,  # Weight for topological loss
 
     # Curvature computation
-    "n_plot_points": 1000,
-    "n_curv_estimation_points": 11000,
-    "n_curv_evaluation_points": 1000,
-    "k": 460,
+    "n_plot_points": 4000,
+    "n_curv_estimation_points": 16000,
+    "n_curv_evaluation_points": 600,
+    "k": 400,
     "smoothing": True,
 
     # Persistent homology
+    "persistent_homology": True,
+    "n_points_pers_hom": 1000,
     "scale": False,
     "homology_dimensions": [0, 1, 2]
 }
 
 param_grid = {
-    "alpha": ([1.0] + [1.0] + [1.0] + [0.0]) * 12,
-    "gamma": ([0.0] + [100] + [1000] + [1.0]) * 12,
-    "deformation_amp": [0.0, 0.5] * 6 + [0.7] * 12 + [1.2] * 12 + [2.5] * 12,
-    'dim_topo_loss': ([0] * 4 + [1] * 4 + [2] * 4) * 4,
+    "alpha": [1] * 7,
+    "gamma": [0] + [1] * 3 + [1000] * 3,
+    "deformation_amp": [0.5] * 7,
+    "dim_topo_loss": [0] + [0, 1, 2] * 2,
 }
 
 # param_grid = {

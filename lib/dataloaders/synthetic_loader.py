@@ -5,7 +5,7 @@ from ..datasets.synthetic_sphere_like import load_s1_synthetic, load_scrunchy, \
     load_interlocking_rings_synthetic, load_s2_synthetic, load_t2_synthetic, load_flower_scrunchy
 
 from ..datasets.topo_datasets import generate_sphere, generate_genus3, generate_three_manifolds, \
-    load_nested_spheres, load_clelia_curve, load_8_curve, load_interlocked_tori, load_torus
+    load_nested_spheres, load_clelia_curve, load_8_curve, load_interlocked_tori, load_torus, load_wiggling_tube
 
 
 def load_synthetic_ds(config):
@@ -88,6 +88,11 @@ def load_synthetic_ds(config):
         dataset, labels = generate_genus3(n_points=config.n_times, noise_var=config.noise_var,
                                           embedding_dim=config.embedding_dim, translation=config.translation,
                                           rotation=config.rotation, random_seed=config.random_seed, )
+    elif config.dataset_name == "wiggling_tube":
+        dataset, labels = load_wiggling_tube(n_phi=config.n_phi, n_theta=config.n_theta,
+                                             minor_radius=config.minor_radius, noise_var=config.noise_var,
+                                             embedding_dim=config.embedding_dim, deformation_amp=config.deformation_amp,
+                                             random_seed=config.random_seed)
     elif config.dataset_name == "sphere_filled":
         dataset, labels = generate_sphere(n_points=config.n_times, radius=config.radius, filled=True,
                                           noise_var=config.noise_var, embedding_dim=config.embedding_dim,

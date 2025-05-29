@@ -10,6 +10,7 @@ from geomstats._backend.pytorch.random import rand
 from geomstats.geometry.special_orthogonal import SpecialOrthogonal  # noqa: E402
 from torch.distributions.multivariate_normal import MultivariateNormal
 
+from .utils import compute_frenet_frame
 
 def generate_three_manifolds(manifold, n_points_per_manifold=1000, noise_var=0.2, embedding_dim=3, translations=None,
                              rotations=None):
@@ -70,24 +71,25 @@ def generate_three_manifolds(manifold, n_points_per_manifold=1000, noise_var=0.2
 
 def get_torus_immersion(major_radius, minor_radius, embedding_dim, deformation_amp, translation, rotation):
     def immersion(angle_pair):
-        theta, phi = angle_pair  # Scalars or 0D tensors
+        theta, phi = angle_pair
 
         # Standard 3D torus coordinates
-        x_coord = (major_radius - minor_radius * gs.cos(theta)) * gs.cos(phi)
+        x_coord = (major_radius - (minor_radius + deformation_amp * gs.cos(phi)) * gs.cos(theta)) * gs.cos(phi)
         y_coord = (major_radius - minor_radius * gs.cos(theta)) * gs.sin(phi)
-        z_coord = minor_radius * gs.sin(theta) + deformation_amp * gs.sin(phi)
+        z_coord = minor_radius * gs.sin(theta)
 
         point = torch.stack([x_coord, y_coord, z_coord], dim=0)
         point = _embedd(point, embedding_dim)
 
         # Apply sinusoidal wiggles in higher dimensions
-        if deformation_amp != 0.0:
-            for i in range(3, embedding_dim):
-                if i == embedding_dim - 1:
-                    wiggle = deformation_amp * torch.sin(phi)
-                else:
-                    wiggle = deformation_amp * torch.cos(phi)
-                point[i] = wiggle
+        for i in range(2, embedding_dim):
+            if i == 2:
+                wiggle = deformation_amp * gs.sin(2 * phi)
+            elif i == embedding_dim - 1:
+                wiggle = deformation_amp / 2 * gs.cos(3 * phi)
+            else:
+                wiggle = deformation_amp / 2 * gs.cos(3 * phi)
+            point[i] = wiggle
 
         point = _rotate_translate(point, translation, rotation)
 
@@ -163,23 +165,52 @@ def generate_torus(n_points=5000, major_radius=5.0, minor_radius=1.0, filled=Fal
     return points, angles
 
 
+def load_wiggling_tube(n_phi, n_theta, minor_radius, noise_var, embedding_dim, deformation_amp, random_seed=42):
+    gs.random.seed(random_seed)
+    torch.manual_seed(random_seed)
+
+    phis = torch.linspace(0, 2 * torch.pi, n_phi, requires_grad=True)
+    thetas = torch.linspace(0, 2 * torch.pi, n_theta, requires_grad=True)
+
+    curve = get_scrunchy_dim_n(deformation_amp, embedding_dim)
+
+    data = []
+    for phi in phis:
+        frame, _, _ = compute_frenet_frame(curve, phi, embedding_dim, deformation_amp=deformation_amp, is_scrunchy_dim_n=True)
+        e1 = frame[:, 0]
+        e2 = frame[:, 1]
+        center = curve(phi)
+        for theta in thetas:
+            offset = minor_radius * torch.cos(theta) * e1 + minor_radius * torch.sin(theta) * e2
+            point = center + offset
+            data.append(point)
+    data = torch.stack(data)
+
+    if noise_var != 0:
+        noise = MultivariateNormal(
+            loc=torch.zeros(embedding_dim),
+            covariance_matrix=minor_radius * noise_var * torch.eye(embedding_dim),
+        ).sample((n_phi * n_theta,))
+        data = data + noise
+
+    return data.detach(), torch.cartesian_prod(thetas, phis)
+
+
 def load_interlocked_tori(n_points, major_radius, minor_radius, noise_var, embedding_dim,
                           deformation_amp, rotation, random_seed=42):
     gs.random.seed(random_seed)
     torch.manual_seed(random_seed)
 
-    rot = torch.eye(3)
-    trans = torch.zeros(3)
+    rot = torch.eye(embedding_dim)
+    trans = torch.zeros(embedding_dim)
 
-    immersion = get_torus_immersion(major_radius=major_radius, minor_radius=minor_radius, embedding_dim=3,
+    immersion = get_torus_immersion(major_radius=major_radius, minor_radius=minor_radius, embedding_dim=embedding_dim,
                                     deformation_amp=deformation_amp,
                                     translation=trans, rotation=rot)
 
-    R_x90 = torch.tensor([
-        [1.0, 0.0, 0.0],
-        [0.0, 0.0, -1.0],
-        [0.0, 1.0, 0.0]
-    ])
+    R_x90 = torch.eye(embedding_dim)
+    R_x90[1, 1], R_x90[1, 2] = 0.0, -1.0
+    R_x90[2, 1], R_x90[2, 2] = 1.0, 0.0
 
     sqrt_ntimes = int(gs.sqrt(n_points))
     eps = 1e-4
@@ -190,13 +221,9 @@ def load_interlocked_tori(n_points, major_radius, minor_radius, noise_var, embed
     torus1 = torch.stack([immersion(pair) for pair in angle_grid])
     torus2 = torch.stack([immersion(pair) for pair in angle_grid])
     torus2 = torus2 @ R_x90.T
-    torus2 += torch.tensor([-major_radius, 0.0, 0.0])
-
-    if embedding_dim > 3:
-        N = torus1.shape[0]
-        zeros = torch.zeros(N, embedding_dim - 3, dtype=torus1.dtype)
-        torus1 = torch.cat([torus1, zeros], dim=1)
-        torus2 = torch.cat([torus2, zeros], dim=1)
+    translation = torch.zeros(embedding_dim)
+    translation[0] = -major_radius
+    torus2 += translation
 
     if rotation == "random":
         rot = SpecialOrthogonal(n=embedding_dim).random_point()
@@ -556,6 +583,24 @@ def load_8_curve(n_points, noise_var, embedding_dim=3, translation="random", rot
         data = data + noise
 
     return data, angles
+
+
+def get_scrunchy_dim_n(deformation_amp, n):
+    def immersion(angle):
+        terms = []
+        for i in range(0, n):
+            k = i // 2 + 1
+            if i % 2 == 0:
+                terms.append(torch.sin(k * angle))  # sin(i*angle)
+            else:
+                terms.append(torch.cos(k * angle))  # cos(i*angle)
+
+        # Apply deformation amplitude to all sine terms
+        terms = [deformation_amp * term if i  >= 2 else term for i, term in enumerate(terms)]
+
+        return torch.stack(terms)
+
+    return immersion
 
 
 def _embedd_rotate_translate(point, embedding_dim, translation, rotation):

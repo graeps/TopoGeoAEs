@@ -2,20 +2,17 @@ from scripts.experiment_utils import generate_experiments
 
 base_config = {
     # Experiment
-    "experiment": "torus",
-    "random_seed": 42,
+    "experiment": "wiggling_tube",
+    "random_seed": 40,
     "logging": False,
 
     # Dataset
-    "dataset_name": "torus",
+    "dataset_name": "wiggling_tube",
     "batch_size": 64,
-    "rotation": "random",
-    "translation": None,
-    "deformation_amp": 0.0,
-    "n_times": 5000,
-    "major_radius": 2,
-    "minor_radius": 1,
-    "filled": False,
+    "deformation_amp": 0.4,
+    "n_phi": 300,
+    "n_theta": 30,
+    "minor_radius": 0.6,
     "embedding_dim": 10,
     "noise_var": 0.001,
 
@@ -25,15 +22,15 @@ base_config = {
     'latent_dim': 3,
     'sftbeta': 4.5,
     'device': "cpu",
-    'encoder_widths': [50, 50, 50],
-    'decoder_widths': [20, 20, 20],
+    'encoder_widths': [100, 100, 100],
+    'decoder_widths': [100, 100, 100],
 
     # Optimizer
     "learning_rate": 0.001,
 
     # Trainer
     'verbose': False,
-    'num_epochs': 1,
+    'num_epochs': 20,
     'log_interval': 100,
     'recon_loss': "MSE",
     'topo_loss': True,
@@ -43,27 +40,25 @@ base_config = {
     'gamma': 0.0,  # Weight for topological loss
 
     # Curvature computation
-    "n_plot_points": 2000,
+    "n_plot_points": 5000,
     "n_curv_estimation_points": 5000,  # to compute curvature
-    "n_curv_evaluation_points": 400,
+    "n_curv_evaluation_points": 5000,
     # heuristics (estimation_points, k)
-    #   major_radius = 2.5, minor_radius = 1, n_times = 6000: (5000, 460)
-    #   major_radius = 4, minor_radius = 1, n_times = 10000: (5000, 250)
-    #   major_radius = 4, minor_radius = 1, n_times = 11000: (8000, 440)
-    "k": 440,
-    "smoothing": True,
+    #   n_phi=200, n_theta=20, minor_radius = 0.5: (5000, 100)
+    "k": 200,
+    "smoothing": False,
 
     # Persistent homology
     "persistent_homology": True,
-    "n_points_pers_hom": 1000,
+    "n_points_pers_hom": 500,
     "scale": False,
     "homology_dimensions": [0, 1, 2]
 }
 
 param_grid = {
-    "alpha": [1] * 7 + [0] * 3,
+    "alpha": [1] * 1 + [1, 1, 0] * 3,
     "gamma": [0] + ([1] * 1 + [1000] * 1 + [1] * 1) * 3,
-    "deformation_amp": [0.1] * 10,
+    "deformation_amp": [0.3] * 10,
     "dim_topo_loss": [0] + [0] * 3 + [1] * 3 + [2] * 3,
 }
 

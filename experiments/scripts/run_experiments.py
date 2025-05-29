@@ -4,6 +4,8 @@ import torch
 import numpy as np
 import torch.optim as optim
 
+import time
+
 # Set paths
 mvae_dir = os.path.split(os.getcwd())[0]
 if mvae_dir not in sys.path:
@@ -23,12 +25,15 @@ CONFIG_MODULES = {
     "flower_scrunchy": "configs.flower_scrunchy_configs",
     "clelia_curve": "configs.clelia_curve_configs",
     "torus": "configs.torus_configs",
+    "wiggling_tube": "configs.wiggling_tube_configs",
     "interlocked_tori": "configs.interlocked_tori_configs",
     "nested_spheres": "configs.nested_spheres_configs",
 }
 
 
 def run_experiment(name):
+    start_time = time.time()
+
     assert name in CONFIG_MODULES, f"Unknown config name: {name}"
 
     # Dynamically import the right config module
@@ -53,8 +58,14 @@ def run_experiment(name):
 
         utils.show_training_history(config, history)
         utils.plot_data_latents_recon(config, vae_model, train_loader)
-        utils.plot_all_curvatures(config=config, model=vae_model, data_loader=train_loader)
-        #utils.plot_curvature_persistence(config=config, model=vae_model, data_loader=train_loader)
+
+        if config.persistent_homology:
+            utils.plot_curvature_persistence(config=config, model=vae_model, data_loader=train_loader)
+        else:
+            utils.plot_all_curvatures(config=config, model=vae_model, data_loader=train_loader)
 
         if config.logging:
             generate_experiment_report(config)
+
+        end_time = time.time()
+        print(f"Execution time {config_name}: {end_time - start_time:.4f} seconds")

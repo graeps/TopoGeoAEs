@@ -471,7 +471,7 @@ def compute_empirical_curvature(config, labels, inputs, latents, recons, k=160):
         curv_in = estimate_curvature_1d_quadric(inputs, k)
         curv_lat = estimate_curvature_1d_quadric(latents, k)
         curv_rec = estimate_curvature_1d_quadric(recons, k)
-    elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "torus", "genus_3", "sphere"}:
+    elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "torus", "genus_3", "sphere", "wiggling_tube"}:
         curv_in = estimate_curvature_2d_quadric(inputs, k)
         curv_lat = estimate_curvature_2d_quadric(latents, k)
         curv_rec = estimate_curvature_2d_quadric(recons, k)
@@ -578,13 +578,12 @@ def compute_all_curvatures(config, model, recons, latents, inputs, labels):
     norm_factor = np.max(curvature_inputs[sampled_indices]) / np.max(curvature_latents[sampled_indices])
     curvature_latents_normalized = curvature_latents[sampled_indices] * norm_factor
 
-    # curvature_latents_normalized = normalize_curvature_to_input_radius(
-    #     config, latents_subset, curvature_latents[sampled_indices]
-    # )
-
-    _, _, _, curvature_learned = compute_curvature_learned(config, model, latents_subset, labels_subset)
-    # curvature_learned = np.zeros(len(labels_subset))
-    _, _, curvature_true = compute_curvature_true(config, labels_subset)
+    if config.dataset_name not in {"wiggling_tube","genus3"}:
+        _, _, _, curvature_learned = compute_curvature_learned(config, model, latents_subset, labels_subset)
+        _, _, curvature_true = compute_curvature_true(config, labels_subset)
+    else:
+        curvature_learned = np.zeros(len(labels_subset))
+        curvature_true = np.zeros(len(labels_subset))
 
     # Subsample empirical curvature to match subset for error computation
     curvature_inputs = curvature_inputs[sampled_indices]
