@@ -12,6 +12,7 @@ from torch.distributions.multivariate_normal import MultivariateNormal
 
 from .utils import compute_frenet_frame
 
+
 def generate_three_manifolds(manifold, n_points_per_manifold=1000, noise_var=0.2, embedding_dim=3, translations=None,
                              rotations=None):
     if translations is None:
@@ -74,7 +75,7 @@ def get_torus_immersion(major_radius, minor_radius, embedding_dim, deformation_a
         theta, phi = angle_pair
 
         # Standard 3D torus coordinates
-        x_coord = (major_radius - (minor_radius + deformation_amp * gs.cos(phi)) * gs.cos(theta)) * gs.cos(phi)
+        x_coord = (major_radius - minor_radius * gs.cos(theta)) * gs.cos(phi)
         y_coord = (major_radius - minor_radius * gs.cos(theta)) * gs.sin(phi)
         z_coord = minor_radius * gs.sin(theta)
 
@@ -85,10 +86,10 @@ def get_torus_immersion(major_radius, minor_radius, embedding_dim, deformation_a
         for i in range(2, embedding_dim):
             if i == 2:
                 wiggle = deformation_amp * gs.sin(2 * phi)
-            elif i == embedding_dim - 1:
-                wiggle = deformation_amp / 2 * gs.cos(3 * phi)
+            # elif i == embedding_dim - 1:
+            #     wiggle = deformation_amp / 2 * gs.cos(3 * phi)
             else:
-                wiggle = deformation_amp / 2 * gs.cos(3 * phi)
+                wiggle = deformation_amp * gs.cos(2 * phi)
             point[i] = wiggle
 
         point = _rotate_translate(point, translation, rotation)
@@ -165,20 +166,21 @@ def generate_torus(n_points=5000, major_radius=5.0, minor_radius=1.0, filled=Fal
     return points, angles
 
 
-def load_wiggling_tube(n_phi, n_theta, minor_radius, noise_var, embedding_dim, deformation_amp, random_seed=42):
+def load_wiggling_tube(n_phi, n_theta, minor_radius, noise_var, wiggling_dim, embedding_dim, deformation_amp,
+                       rotation="random", random_seed=42):
     gs.random.seed(random_seed)
     torch.manual_seed(random_seed)
 
     phis = torch.linspace(0, 2 * torch.pi, n_phi, requires_grad=True)
     thetas = torch.linspace(0, 2 * torch.pi, n_theta, requires_grad=True)
 
-    curve = get_scrunchy_dim_n(deformation_amp, embedding_dim)
+    curve = get_scrunchy_dim_n(deformation_amp, wiggling_dim)
 
     data = []
     angles = []  # To store corresponding (theta, phi) pairs for each point
 
     for phi in phis:
-        frame, _, _ = compute_frenet_frame(curve, phi, embedding_dim, deformation_amp=deformation_amp,
+        frame, _, _ = compute_frenet_frame(curve, phi, wiggling_dim, deformation_amp=deformation_amp,
                                            is_scrunchy_dim_n=True)
         e1 = frame[:, 1]
         e2 = frame[:, 2]
@@ -190,7 +192,15 @@ def load_wiggling_tube(n_phi, n_theta, minor_radius, noise_var, embedding_dim, d
             data.append(point)
             angles.append((theta.item(), phi.item()))  # Store the angle values as tuples
 
-    data = torch.stack(data)
+    data = torch.stack(data).detach()
+
+    if embedding_dim > wiggling_dim:
+        rot = torch.eye(embedding_dim)
+        if rotation == "random":
+            rot = SpecialOrthogonal(n=embedding_dim).random_point()
+        trans = torch.zeros(embedding_dim)
+
+        data = _embedd_rotate_translate(point=data, embedding_dim=embedding_dim, translation=trans, rotation=rot)
 
     if noise_var != 0:
         noise = MultivariateNormal(
@@ -199,8 +209,12 @@ def load_wiggling_tube(n_phi, n_theta, minor_radius, noise_var, embedding_dim, d
         ).sample((n_phi * n_theta,))
         data = data + noise
 
-    # Now return both the generated data and the corresponding angles
-    return data.detach(), torch.tensor(angles)
+    angles_np = np.array(angles)  # shape: (n_phi * n_theta, 2)
+    sort_idx = np.lexsort((angles_np[:, 1], angles_np[:, 0]))  # sort by theta, then by phi
+    angles = angles_np[sort_idx]
+    data = data[sort_idx]
+
+    return data, torch.tensor(angles)
 
 
 def load_interlocked_tori(n_points, major_radius, minor_radius, noise_var, embedding_dim,
@@ -631,7 +645,6 @@ def _embedd(points, embedding_dim):
 
 
 def _rotate_translate(points, translation, rotation):
-    points = gs.array(points)
     if points.ndim == 1:
         points = gs.einsum("ij,j->i", rotation, points)
         points = points + translation
@@ -639,5 +652,5 @@ def _rotate_translate(points, translation, rotation):
         points = gs.einsum("ij,nj->ni", rotation, points)
         points = points + translation
     else:
-        raise ValueError("Input must be a 1D or 2D array.")
+        raise ValueError("Input must be a 1D or 2D tensor.")
     return points

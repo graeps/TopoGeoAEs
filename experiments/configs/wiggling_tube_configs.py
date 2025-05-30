@@ -50,14 +50,14 @@ base_config = {
 
     # Persistent homology
     "persistent_homology": True,
-    "n_points_pers_hom": 200,
+    "n_points_pers_hom": 1000,
     "scale": False,
     "homology_dimensions": [0, 1, 2]
 }
 
 param_grid = {
     "alpha": [1] * 1 + [1, 1, 0] * 3,
-    "gamma": [0] + ([1] * 1 + [1000] * 1 + [1] * 1) * 3,
+    "gamma": [0] + [1, 1000, 1] * 3,
     "deformation_amp": [0.3] * 10,
     "dim_topo_loss": [0] + [0] * 3 + [1] * 3 + [2] * 3,
 }

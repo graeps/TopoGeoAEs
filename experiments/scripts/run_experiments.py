@@ -31,19 +31,21 @@ CONFIG_MODULES = {
 }
 
 
-def run_experiment(name):
+def run_experiment(name=None, all_configs=None):
     start_time = time.time()
 
-    assert name in CONFIG_MODULES, f"Unknown config name: {name}"
-
-    # Dynamically import the right config module
-    config_module = __import__(CONFIG_MODULES[name], fromlist=["all_configs"])
-    all_configs = config_module.all_configs
+    if all_configs is None:
+        assert name in CONFIG_MODULES, f"Unknown config name: {name}"
+        config_module = __import__(CONFIG_MODULES[name], fromlist=["all_configs"])
+        all_configs = config_module.all_configs
+    else:
+        assert isinstance(all_configs, dict), "all_configs must be a dict if provided directly"
 
     for config_name, config in all_configs.items():
-        print("----------------------------------------------------------------")
-        print(f"Running {config_name}. Description: {config.description}")
-        print("----------------------------------------------------------------")
+        print("\n======================================================================================")
+        print("======================================================================================")
+        print(f"Running {config_name}. \nDescription: {config.description}")
+        print("======================================================================================")
 
         torch.manual_seed(config.random_seed)
         np.random.seed(config.random_seed)
@@ -56,8 +58,8 @@ def run_experiment(name):
 
         history = trainer.MVAETrainer(vae_model, data_loader, optimizer, config).train()
 
-        #utils.show_training_history(config, history)
-        #utils.plot_data_latents_recon(config, vae_model, train_loader)
+        utils.show_training_history(config, history)
+        utils.plot_data_latents_recon(config, vae_model, train_loader)
 
         if config.persistent_homology:
             utils.plot_curvature_persistence(config=config, model=vae_model, data_loader=train_loader)

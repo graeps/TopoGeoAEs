@@ -4,7 +4,7 @@ base_config = {
     # Experiment
     "experiment": "torus",
     "random_seed": 42,
-    "logging": False,
+    "logging": True,
 
     # Dataset
     "dataset_name": "torus",
@@ -12,9 +12,9 @@ base_config = {
     "rotation": "random",
     "translation": None,
     "deformation_amp": 0.0,
-    "n_times": 5000,
-    "major_radius": 2,
-    "minor_radius": 1,
+    "n_times": 9000,
+    "major_radius": 1,
+    "minor_radius": 0.9,
     "filled": False,
     "embedding_dim": 10,
     "noise_var": 0.001,
@@ -25,15 +25,15 @@ base_config = {
     'latent_dim': 3,
     'sftbeta': 4.5,
     'device': "cpu",
-    'encoder_widths': [50, 50, 50],
-    'decoder_widths': [20, 20, 20],
+    'encoder_widths': [100, 100, 100],
+    'decoder_widths': [100, 100, 100],
 
     # Optimizer
     "learning_rate": 0.001,
 
     # Trainer
     'verbose': False,
-    'num_epochs': 1,
+    'num_epochs': 20,
     'log_interval': 100,
     'recon_loss': "MSE",
     'topo_loss': True,
@@ -44,27 +44,28 @@ base_config = {
 
     # Curvature computation
     "n_plot_points": 2000,
-    "n_curv_estimation_points": 5000,  # to compute curvature
-    "n_curv_evaluation_points": 400,
+    "n_curv_estimation_points": 8000,  # to compute curvature
+    "n_curv_evaluation_points": 8000,
     # heuristics (estimation_points, k)
     #   major_radius = 2.5, minor_radius = 1, n_times = 6000: (5000, 460)
     #   major_radius = 4, minor_radius = 1, n_times = 10000: (5000, 250)
     #   major_radius = 4, minor_radius = 1, n_times = 11000: (8000, 440)
-    "k": 440,
-    "smoothing": True,
+    "k": 500,
+    "smoothing": False,
 
     # Persistent homology
     "persistent_homology": True,
-    "n_points_pers_hom": 1000,
+    "n_points_pers_hom": 2000,
     "scale": False,
     "homology_dimensions": [0, 1, 2]
 }
 
 param_grid = {
-    "alpha": [1] * 7 + [0] * 3,
-    "gamma": [0] + ([1] * 1 + [1000] * 1 + [1] * 1) * 3,
-    "deformation_amp": [0.1] * 10,
+    "alpha": [1] * 1 + [1, 1, 0] * 3,
+    "gamma": [0] + [1, 1000, 1] * 3,
+    "deformation_amp": [0.3] * 10,
     "dim_topo_loss": [0] + [0] * 3 + [1] * 3 + [2] * 3,
 }
+
 
 all_configs = generate_experiments(base_config, param_grid)

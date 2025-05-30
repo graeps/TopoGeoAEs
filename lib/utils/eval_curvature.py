@@ -555,7 +555,7 @@ def estimate_curvature_2d_quadric(points, k=200):
 
 def compute_all_curvatures(config, model, recons, latents, inputs, labels):
     # Compute empirical curvatures on full data
-    curvature_inputs, curvature_latents, curvature_recons, labels = compute_empirical_curvature(config=config,
+    curv_in, curv_lat, curv_rec, labels = compute_empirical_curvature(config=config,
                                                                                                 labels=labels,
                                                                                                 inputs=inputs,
                                                                                                 latents=latents,
@@ -565,36 +565,40 @@ def compute_all_curvatures(config, model, recons, latents, inputs, labels):
 
     # Compute pullback curvature on (ordered) subset of points to reduce computation time
     n_total = len(labels)
-    n_points = min(config.n_curv_evaluation_points, n_total)
+    n_points = min(config.n_points_pullback_curv, n_total)
     sampled_indices = np.random.choice(n_total, size=n_points, replace=False)
     sampled_indices.sort()
 
     # Subsample data to match subset of curvatures for heat map plotting
-    labels_subset = labels[sampled_indices]
-    inputs_subset = inputs[sampled_indices]
-    latents_subset = latents[sampled_indices]
-    recons_subset = recons[sampled_indices]
+    labels_sub = labels[sampled_indices]
+    inputs_sub = inputs[sampled_indices]
+    latents_sub = latents[sampled_indices]
+    recons_sub = recons[sampled_indices]
 
-    norm_factor = np.max(curvature_inputs[sampled_indices]) / np.max(curvature_latents[sampled_indices])
-    curvature_latents_normalized = curvature_latents[sampled_indices] * norm_factor
+    norm_factor = np.max(curv_in[sampled_indices]) / np.max(curv_lat[sampled_indices])
+    curv_lat_norm = curv_lat * norm_factor
+    curv_lat_norm_sub = [sampled_indices]
 
-    if config.dataset_name not in {"wiggling_tube","genus3"}:
-        _, _, _, curvature_learned = compute_curvature_learned(config, model, latents_subset, labels_subset)
-        _, _, curvature_true = compute_curvature_true(config, labels_subset)
+    if config.compute_true_curv:
+        _, _, curv_true = compute_curvature_true(config, labels_sub)
     else:
-        curvature_learned = np.zeros(len(labels_subset))
-        curvature_true = np.zeros(len(labels_subset))
+        curv_true = np.zeros(len(labels_sub))
+    if config.compute_learned_curv:
+        _, _, _, curv_learned = compute_curvature_learned(config, model, latents_sub, labels_sub)
+    else:
+        curv_learned = np.zeros(len(labels_sub))
 
     # Subsample empirical curvature to match subset for error computation
-    curvature_inputs = curvature_inputs[sampled_indices]
-    curvature_recons = curvature_recons[sampled_indices]
-    curvature_latents = curvature_latents[sampled_indices]
+    curv_in_sub = curv_in[sampled_indices]
+    curv_rec_sub = curv_rec[sampled_indices]
+    curv_lat_sub = curv_lat[sampled_indices]
 
-    points = (inputs_subset, latents_subset, recons_subset)
-    curvatures = (curvature_true, curvature_inputs, curvature_recons, curvature_latents, curvature_latents_normalized,
-                  curvature_learned)
+    points_sub = (inputs_sub, latents_sub, recons_sub)
+    curvatures_sub = (labels_sub, curv_in_sub, curv_rec_sub, curv_lat_sub, curv_lat_norm_sub, curv_true,
+                      curv_learned)
+    curvatures_emp_full = (labels, curv_in, curv_lat, curv_lat_norm, curv_rec)
 
-    return labels_subset, points, curvatures
+    return points_sub, curvatures_sub, curvatures_emp_full
 
 
 class InvalidConfigError(Exception):

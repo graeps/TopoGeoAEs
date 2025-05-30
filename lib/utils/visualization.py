@@ -534,42 +534,45 @@ def plot_curvature_norms(angles, curvature_norms, config, norm_val, profile_type
     return fig
 
 
-def scatter_curvature_heatmaps(config, inputs, latents, recons, curvature_true, curvature_inputs, curvature_recons,
-                               curvature_latents, curvature_latents_normalized, curvature_learned):
+def scatter_curvature_heatmaps(config, points, points_sub, curv_true, curv_in, curv_rec, curv_lat, curv_lat_norm,
+                               curv_learned):
+    inputs, latents, recons = points
+    inputs_sub, latents_sub, recons_sub = points_sub
+
     fig = plt.figure(figsize=(18, 10))
     color_map = 'rainbow'
 
     # True Curvature on Inputs
-    ax1 = fig.add_subplot(2, 3, 1, projection='3d' if inputs.shape[1] == 3 or inputs.shape[1] > 3 else None)
-    sc1 = _scatter_datapoints(ax=ax1, data=inputs, title="True Curvature on Inputs", colors=curvature_true,
+    ax1 = fig.add_subplot(2, 3, 1, projection='3d' if inputs_sub.shape[1] == 3 or inputs_sub.shape[1] > 3 else None)
+    sc1 = _scatter_datapoints(ax=ax1, data=inputs_sub, title="True Curvature on Inputs", colors=curv_true,
                               cmap=color_map)
     fig.colorbar(sc1, ax=ax1, shrink=0.7)
 
     # Empirical Curvature on Inputs
     ax2 = fig.add_subplot(2, 3, 2, projection='3d' if inputs.shape[1] == 3 or inputs.shape[1] > 3 else None)
-    sc2 = _scatter_datapoints(ax2, inputs, "Empirical Curvature on Inputs", curvature_inputs, cmap=color_map)
+    sc2 = _scatter_datapoints(ax2, inputs, "Empirical Curvature on Inputs", curv_in, cmap=color_map)
     fig.colorbar(sc2, ax=ax2, shrink=0.7)
 
     # Empirical Curvature on Recons
     ax3 = fig.add_subplot(2, 3, 3, projection='3d' if recons.shape[1] == 3 or recons.shape[1] > 3 else None)
-    sc3 = _scatter_datapoints(ax3, recons, "Empirical Curvature on Reconstructed Data", curvature_recons,
+    sc3 = _scatter_datapoints(ax3, recons, "Empirical Curvature on Reconstructed Data", curv_rec,
                               cmap=color_map)
     fig.colorbar(sc3, ax=ax3, shrink=0.7)
 
     # Empirical Curvature on Latents
     ax4 = fig.add_subplot(2, 3, 4, projection='3d' if latents.shape[1] == 3 or latents.shape[1] > 3 else None)
-    sc4 = _scatter_datapoints(ax4, latents, "Empirical Curvature on Latents", curvature_latents, cmap=color_map)
+    sc4 = _scatter_datapoints(ax4, latents, "Empirical Curvature on Latents", curv_lat, cmap=color_map)
     fig.colorbar(sc4, ax=ax4, shrink=0.7)
 
     # Normalized Empirical Curvature on Latents
     ax5 = fig.add_subplot(2, 3, 5, projection='3d' if latents.shape[1] == 3 or latents.shape[1] > 3 else None)
-    sc5 = _scatter_datapoints(ax5, latents, "Normalized Empirical Curvature on Latents", curvature_latents_normalized,
+    sc5 = _scatter_datapoints(ax5, latents, "Normalized Empirical Curvature on Latents", curv_lat_norm,
                               cmap=color_map)
     fig.colorbar(sc5, ax=ax5, shrink=0.7)
 
     # Pullback Curvature on Latents
-    ax6 = fig.add_subplot(2, 3, 6, projection='3d' if latents.shape[1] == 3 or latents.shape[1] > 3 else None)
-    sc6 = _scatter_datapoints(ax6, latents, "Pullback Curvature on Latents", curvature_learned, cmap=color_map)
+    ax6 = fig.add_subplot(2, 3, 6, projection='3d' if latents_sub.shape[1] == 3 or latents_sub.shape[1] > 3 else None)
+    sc6 = _scatter_datapoints(ax6, latents_sub, "Pullback Curvature on Latents", curv_learned, cmap=color_map)
     fig.colorbar(sc6, ax=ax6, shrink=0.7)
 
     plt.tight_layout()
@@ -581,9 +584,11 @@ def scatter_curvature_heatmaps(config, inputs, latents, recons, curvature_true, 
     plt.show()
 
 
-def scatter_curvature_heatmaps_plotly(config, inputs, latents, recons, curvature_true, curvature_inputs,
-                                      curvature_recons,
-                                      curvature_latents, curvature_latents_normalized, curvature_learned):
+def scatter_curvature_heatmaps_plotly(config, points, points_sub, curv_true, curv_in, curv_rec, curv_lat,
+                                      curv_lat_norm, curv_learned):
+    inputs, latents, recons = points
+    inputs_sub, latents_sub, recons_sub = points_sub
+
     color_map = 'Rainbow'
 
     # Create subplots
@@ -598,27 +603,27 @@ def scatter_curvature_heatmaps_plotly(config, inputs, latents, recons, curvature
     )
 
     # True Curvature on Inputs
-    scatter1 = _scatter_datapoints_plotly(inputs, curvature_true, color_map)
+    scatter1 = _scatter_datapoints_plotly(inputs_sub, curv_true, color_map)
     fig.add_trace(scatter1, row=1, col=1)
 
     # Empirical Curvature on Inputs
-    scatter2 = _scatter_datapoints_plotly(inputs, curvature_inputs, color_map)
+    scatter2 = _scatter_datapoints_plotly(inputs, curv_in, color_map)
     fig.add_trace(scatter2, row=1, col=2)
 
     # Empirical Curvature on Recons
-    scatter3 = _scatter_datapoints_plotly(recons, curvature_recons, color_map)
+    scatter3 = _scatter_datapoints_plotly(recons, curv_rec, color_map)
     fig.add_trace(scatter3, row=1, col=3)
 
     # Empirical Curvature on Latents
-    scatter4 = _scatter_datapoints_plotly(latents, curvature_latents, color_map)
+    scatter4 = _scatter_datapoints_plotly(latents, curv_lat, color_map)
     fig.add_trace(scatter4, row=2, col=1)
 
     # Normalized Empirical Curvature on Latents
-    scatter5 = _scatter_datapoints_plotly(latents, curvature_latents_normalized, color_map)
+    scatter5 = _scatter_datapoints_plotly(latents, curv_lat_norm, color_map)
     fig.add_trace(scatter5, row=2, col=2)
 
     # Pullback Curvature on Latents
-    scatter6 = _scatter_datapoints_plotly(latents, curvature_learned, color_map)
+    scatter6 = _scatter_datapoints_plotly(latents_sub, curv_learned, color_map)
     fig.add_trace(scatter6, row=2, col=3)
 
     fig.update_layout(height=800, width=1200, title_text="Curvature Heatmaps", showlegend=False)
@@ -627,7 +632,7 @@ def scatter_curvature_heatmaps_plotly(config, inputs, latents, recons, curvature
         save_path = os.path.join(config.log_dir, "curvature_heatmaps_plotly.html")
         fig.write_html(save_path)
 
-    fig.show()
+    # fig.show()
 
 
 def _scatter_datapoints_plotly(data, colors, color_map='Rainbow'):
@@ -698,7 +703,7 @@ def plot_curvatures_1d(labels, curvature_true, curvature_inputs, curvature_recon
     plt.show()
 
 
-def plot_curvatures_2d(labels, curvature_true, curvature_inputs, curvature_recons,
+def plot_curvatures_2d(labels, labels_sub, curvature_true, curvature_inputs, curvature_recons,
                        curvature_latents, curvature_lat_norm, curvature_learned, config, entity=None):
     grid_res = 100
     if config.dataset_name in {"sphere", "nested_spheres"}:
@@ -706,19 +711,19 @@ def plot_curvatures_2d(labels, curvature_true, curvature_inputs, curvature_recon
     else:
         grid_x, grid_y = np.meshgrid(np.linspace(0, 2 * np.pi, grid_res), np.linspace(0, 2 * np.pi, grid_res))
 
-    def interpolate(values):
-        return griddata(labels, values, (grid_x, grid_y), method="cubic")
+    def interpolate(lbls, values):
+        return griddata(lbls, values, (grid_x, grid_y), method="cubic")
 
     surfaces_1 = {
-        "True Curvature on Input Data": interpolate(curvature_true),
-        "Empirical Curvature on Input Data": interpolate(curvature_inputs),
-        "Empirical Curvature on Reconstructed Data": interpolate(curvature_recons),
+        "True Curvature on Input Data": interpolate(labels_sub, curvature_true),
+        "Empirical Curvature on Input Data": interpolate(labels, curvature_inputs),
+        "Empirical Curvature on Reconstructed Data": interpolate(labels, curvature_recons),
     }
 
     surfaces_2 = {
-        "Empirical Curvature on Latent Representation": interpolate(curvature_latents),
-        "Normalized Empirical Curvature on Latent Representation": interpolate(curvature_lat_norm),
-        "Learned Curvature (pullback) on Latent Representation": interpolate(curvature_learned),
+        "Empirical Curvature on Latent Representation": interpolate(labels, curvature_latents),
+        "Normalized Empirical Curvature on Latent Representation": interpolate(labels, curvature_lat_norm),
+        "Learned Curvature (pullback) on Latent Representation": interpolate(labels_sub, curvature_learned),
     }
 
     def plot_surface_group(surfaces, suptitle, tag):
@@ -749,123 +754,97 @@ def plot_curvatures_2d(labels, curvature_true, curvature_inputs, curvature_recon
         plot_surface_group(surfaces_2, 'Latent Representation Curvature Comparison', 'true_learned_latent')
 
 
+def compute_all_error_metrics(pairs):
+    names = [name for name, _, _ in pairs]
+    smape = [compute_curvature_error_smape(a, b) for _, a, b in pairs]
+    mse = [compute_curvature_error_mse(a, b) for _, a, b in pairs]
+    linf = [compute_curvature_error_linf(a, b) for _, a, b in pairs]
+    return names, mse, smape, linf
+
+
+def compute_stds(*arrays):
+    stds = [np.std(np.asarray(arr)) for arr in arrays]
+    labels = [name for name in ['True', 'Input', 'Latent', 'Reconstructed', 'Learned'][:len(stds)]]
+    return stds, labels
+
+
+def plot_error_bars(ax, names, mse, linf, bar_width=0.2):
+    x = np.arange(len(['MSE', '$L^\infty$']))
+    for i, name in enumerate(names):
+        offsets = x + (i - len(names) / 2) * bar_width
+        heights = [mse[i], linf[i]]
+        ax.bar(offsets, heights, bar_width, label=name)
+    ax.set_xticks(x)
+    ax.set_xticklabels(['MSE', '$L^\infty$'], rotation=15)
+    ax.set_title('Error Metrics')
+    ax.legend(fontsize=8)
+    ax.grid(True, linestyle='--', alpha=0.5)
+
+
+def plot_smape(ax, names, smape):
+    ax.bar(np.arange(len(smape)), smape, color='tab:cyan', width=0.4)
+    ax.set_xticks(np.arange(len(smape)))
+    ax.set_xticklabels(names, rotation=15)
+    ax.set_title('SMAPE')
+    ax.grid(True, linestyle='--', alpha=0.5)
+
+
+def plot_std(ax, labels, stds):
+    ax.bar(np.arange(len(stds)), stds, color='tab:gray', width=0.4)
+    ax.set_xticks(np.arange(len(stds)))
+    ax.set_xticklabels(labels, rotation=15)
+    ax.set_title('Curvature STD')
+    ax.grid(True, linestyle='--', alpha=0.5)
+
+
 def plot_curvature_errors_and_stats(curvature_true, curvature_inputs, curvature_recons,
                                     curvature_latents, curv_lat_norm, curvature_learned, config):
-    if config.dataset_name in {"wiggling_tube", "genus_3"}:
-        pairs = [
-            ("Empirical on Inputs vs Empirical on Latents", curvature_true, curvature_latents),
-            ("Empirical on Inputs vs Empirical on Latents Normalized", curvature_inputs, curv_lat_norm),
+    pairs = [
+        ("Empirical Inputs vs Latents", curvature_inputs, curvature_latents),
+        ("Empirical Inputs vs Latents Normalized", curvature_inputs, curv_lat_norm),
+    ]
+    std_arrays = [curvature_inputs, curvature_latents, curvature_recons]
+    std_labels = ['Input', 'Latent', 'Reconstructed']
+
+    if config.compute_true_curv:
+        pairs += [
+            ("True vs Empirical on Inputs", curvature_true, curvature_inputs),
+            ("True vs Empirical on Latent", curvature_true, curvature_latents),
+            ("True vs Normalized Empirical on Latent", curvature_true, curv_lat_norm),
         ]
-        names = [name for name, _, _ in pairs]
-        smap = [compute_curvature_error_smape(a, b) for _, a, b in pairs]
-        mse = [compute_curvature_error_mse(a, b) for _, a, b in pairs]
-        linf = [compute_curvature_error_linf(a, b) for _, a, b in pairs]
+        std_arrays.append(curvature_true)
+        std_labels.append('True')
 
-        stds = [np.std(np.asarray(x)) for x in
-                [curvature_inputs, curvature_latents, curvature_recons]]
-        std_labels = ['Input', 'Latent', 'Reconstructed']
+    if config.compute_learned_curv:
+        pairs += [
+            ("Learned vs Empirical on Inputs", curvature_learned, curvature_inputs),
+        ]
+        std_arrays.append(curvature_learned)
+        std_labels.append('Learned')
 
-        fig, axes = plt.subplots(1, 3, figsize=(18, 5))
-        bar_width = 0.2
-        x = np.arange(2)
-
-        # MSE, L_inf
-        ax = axes[0]
-        for i in range(2):
-            offsets = x + (i - 1.5) * bar_width
-            heights = [group[i] for group in [mse, linf]]
-            ax.bar(offsets, heights, bar_width, label=names[i])
-        ax.set_xticks(x)
-        ax.set_xticklabels(['MSE', '$L^\infty$'], rotation=15)
-        ax.set_title('Error Metrics')
-        ax.legend(fontsize=8)
-        ax.grid(True, linestyle='--', alpha=0.5)
-
-        # SMAPE
-        ax = axes[1]
-        ax.bar(np.arange(len(smap)), smap, color='tab:cyan', width=0.4)
-        ax.set_xticks(np.arange(len(smap)))
-        ax.set_xticklabels(names, rotation=15)
-        ax.set_title('SMAPE')
-        ax.grid(True, linestyle='--', alpha=0.5)
-
-        # STD
-        ax = axes[2]
-        ax.bar(np.arange(len(stds)), stds, color='tab:gray', width=0.4)
-        ax.set_xticks(np.arange(len(stds)))
-        ax.set_xticklabels(std_labels, rotation=15)
-        ax.set_title('Curvature STD')
-        ax.grid(True, linestyle='--', alpha=0.5)
-
-        if config.log_dir is not None:
-            plt.savefig(os.path.join(config.log_dir, "curvature_errors_combined.png"))
-        plt.tight_layout()
-        plt.show()
-
-        results = {
-            "error_comparisons": names,
-            "errors": {"MSE": mse, "SMAPE_percent": smap, "L_inf": linf},
-            "curvature_std": {"labels": std_labels, "values": stds}
-        }
-    else:
-        pairs = [
-            ("True vs Input", curvature_true, curvature_inputs),
+    if config.compute_true_curv and config.compute_learned_curv:
+        pairs += [
             ("True vs Learned", curvature_true, curvature_learned),
-            ("True vs Latent", curvature_true, curvature_latents),
-            ("True vs Latent Normalized", curvature_true, curv_lat_norm),
-            ("Empirical on Inputs vs Latent Normalized", curvature_inputs, curv_lat_norm),
         ]
-        names = [name for name, _, _ in pairs]
-        smap = [compute_curvature_error_smape(a, b) for _, a, b in pairs]
-        mse = [compute_curvature_error_mse(a, b) for _, a, b in pairs]
-        linf = [compute_curvature_error_linf(a, b) for _, a, b in pairs]
 
-        stds = [np.std(np.asarray(x)) for x in
-                [curvature_true, curvature_inputs, curvature_latents, curvature_recons, curvature_learned]]
-        std_labels = ['True', 'Input', 'Latent', 'Reconstructed', 'Learned']
+    names, mse, smape, linf = compute_all_error_metrics(pairs)
+    stds, _ = compute_stds(*std_arrays)
 
-        fig, axes = plt.subplots(1, 3, figsize=(18, 5))
-        bar_width = 0.2
-        x = np.arange(2)
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+    plot_error_bars(axes[0], names, mse, linf)
+    plot_smape(axes[1], names, smape)
+    plot_std(axes[2], std_labels, stds)
 
-        # MSE, L_inf
-        ax = axes[0]
-        for i in range(5):
-            offsets = x + (i - 1.5) * bar_width
-            heights = [group[i] for group in [mse, linf]]
-            ax.bar(offsets, heights, bar_width, label=names[i])
-        ax.set_xticks(x)
-        ax.set_xticklabels(['MSE', '$L^\infty$'], rotation=15)
-        ax.set_title('Error Metrics')
-        ax.legend(fontsize=8)
-        ax.grid(True, linestyle='--', alpha=0.5)
+    if config.log_dir is not None:
+        plt.savefig(os.path.join(config.log_dir, "curvature_errors_combined.png"))
+    plt.tight_layout()
+    plt.show()
 
-        # SMAPE
-        ax = axes[1]
-        ax.bar(np.arange(len(smap)), smap, color='tab:cyan', width=0.4)
-        ax.set_xticks(np.arange(len(smap)))
-        ax.set_xticklabels(names, rotation=15)
-        ax.set_title('SMAPE')
-        ax.grid(True, linestyle='--', alpha=0.5)
-
-        # STD
-        ax = axes[2]
-        ax.bar(np.arange(len(stds)), stds, color='tab:gray', width=0.4)
-        ax.set_xticks(np.arange(len(stds)))
-        ax.set_xticklabels(std_labels, rotation=15)
-        ax.set_title('Curvature STD')
-        ax.grid(True, linestyle='--', alpha=0.5)
-
-        if config.log_dir is not None:
-            plt.savefig(os.path.join(config.log_dir, "curvature_errors_combined.png"))
-        plt.tight_layout()
-        plt.show()
-
-        results = {
-            "error_comparisons": names,
-            "errors": {"MSE": mse, "SMAPE_percent": smap, "L_inf": linf},
-            "curvature_std": {"labels": std_labels, "values": stds}
-        }
+    results = {
+        "error_comparisons": names,
+        "errors": {"MSE": mse, "SMAPE_percent": smape, "L_inf": linf},
+        "curvature_std": {"labels": std_labels, "values": stds}
+    }
 
     if config.log_dir is not None:
         with open(os.path.join(config.log_dir, "curvature_errors_stats.json"), "w") as f:
@@ -873,25 +852,30 @@ def plot_curvature_errors_and_stats(curvature_true, curvature_inputs, curvature_
 
 
 def _plot_all_curvatures_from_vectors(config, model, recons, latents, inputs, labels):
-    labels, points, curvatures = compute_all_curvatures(config, model, recons, latents, inputs, labels)
-    inputs, latents, recons = points
-    curv_true, curv_in, curv_rec, curv_lat, curv_lat_norm, curv_learned = curvatures
+    points_sub, curvatures_sub, curvatures_emp_full = compute_all_curvatures(config, model, recons, latents, inputs,
+                                                                             labels)
+    points = (inputs, latents, recons)
+    labels_sub, curv_in_sub, curv_rec_sub, curv_lat_sub, curv_lat_norm_sub, curv_true, curv_learned = curvatures_sub
+    labels, curv_in, curv_lat, curv_lat_norm, curv_rec = curvatures_emp_full
+
     # Plot curvatures over angles
     if labels.ndim == 1:
-        plot_curvatures_1d(labels, curv_true, curv_in, curv_rec, curv_lat, curv_lat_norm, curv_learned, config)
+        plot_curvatures_1d(labels_sub, curv_true, curv_in_sub, curv_rec_sub, curv_lat_sub, curv_lat_norm_sub,
+                           curv_learned, config)
     elif labels.ndim == 2 and labels.shape[1] == 2:
-        plot_curvatures_2d(labels, curv_true, curv_in, curv_rec, curv_lat, curv_lat_norm, curv_learned, config)
+        plot_curvatures_2d(labels, labels_sub, curv_true, curv_in, curv_rec, curv_lat, curv_lat_norm, curv_learned,
+                           config)
     elif labels.ndim == 2 and labels.shape[1] == 3:
-        entity_indices = labels[:, 0]
+        entity_indices = labels_sub[:, 0]
         unique_entities = entity_indices.unique(sorted=True)
         for entity in unique_entities:
             mask = (entity_indices == entity)
-            angels = labels[mask][:, 1:]
+            angels = labels_sub[mask][:, 1:]
             curv_true_sub = curv_true[mask]
-            curv_in_sub = curv_in[mask]
-            curv_rec_sub = curv_rec[mask]
-            curv_lat_sub = curv_lat[mask]
-            curv_lat_norm_sub = curv_lat_norm[mask]
+            curv_in_sub = curv_in_sub[mask]
+            curv_rec_sub = curv_rec_sub[mask]
+            curv_lat_sub = curv_lat_sub[mask]
+            curv_lat_norm_sub = curv_lat_norm_sub[mask]
             curv_learned_sub = curv_learned[mask]
             plot_curvatures_2d(angels, curv_true_sub, curv_in_sub, curv_rec_sub, curv_lat_sub, curv_lat_norm_sub,
                                curv_learned_sub, config, entity)
@@ -899,15 +883,18 @@ def _plot_all_curvatures_from_vectors(config, model, recons, latents, inputs, la
         raise NotImplementedError("Label dimension not supported for curvature plotting.")
 
     # Plot curvature heat maps
-    scatter_curvature_heatmaps_plotly(config, inputs=inputs, latents=latents, recons=recons, curvature_true=curv_true,
-                                      curvature_inputs=curv_in, curvature_recons=curv_rec,
-                                      curvature_learned=curv_learned,
-                                      curvature_latents_normalized=curv_lat_norm, curvature_latents=curv_lat)
-    plot_curvature_errors_and_stats(curv_true, curv_in, curv_rec, curv_lat, curv_lat_norm, curv_learned, config)
+    scatter_curvature_heatmaps_plotly(config, points=points, points_sub=points_sub, curv_true=curv_true,
+                                      curv_in=curv_in, curv_rec=curv_rec, curv_learned=curv_learned,
+                                      curv_lat_norm=curv_lat_norm, curv_lat=curv_lat)
+    scatter_curvature_heatmaps(config, points=points, points_sub=points_sub, curv_true=curv_true,
+                               curv_in=curv_in, curv_rec=curv_rec, curv_learned=curv_learned,
+                               curv_lat_norm=curv_lat_norm, curv_lat=curv_lat)
+    plot_curvature_errors_and_stats(curv_true, curv_in_sub, curv_rec_sub, curv_lat_sub, curv_lat_norm_sub, curv_learned,
+                                    config)
 
 
 def plot_all_curvatures(config, model, data_loader):
-    recons, latents, inputs, labels = get_vectors(config, model, data_loader, config.n_curv_estimation_points)
+    recons, latents, inputs, labels = get_vectors(config, model, data_loader, config.n_points_emp_curv)
     _plot_all_curvatures_from_vectors(config, model, recons, latents, inputs, labels)
 
 
@@ -999,7 +986,7 @@ def plot_betti_curves(config, suptitle, betti_curves, homology_dimensions=None):
 
 
 def plot_curvature_persistence(config, model, data_loader):
-    recons, latents, inputs, labels = get_vectors(config, model, data_loader, config.n_curv_estimation_points)
+    recons, latents, inputs, labels = get_vectors(config, model, data_loader, config.n_points_emp_curv)
     _plot_all_curvatures_from_vectors(config, model, recons, latents, inputs, labels)
 
     # Subsample before persistent homology
@@ -1037,6 +1024,7 @@ def plot_curvature_persistence(config, model, data_loader):
             title_betti_curve = f"Betti Curve Comparison - Connected Component {entity}"
             plot_persistence_diagrams(config, title_diagram, diagrams, config.homology_dimensions)
             plot_betti_curves(config, title_betti_curve, betti_curves)
+        print("Bottleneck Distances", distances)
     else:
         n = config.n_points_pers_hom
         idx = np.random.choice(inputs.shape[0], n, replace=False)
@@ -1048,8 +1036,9 @@ def plot_curvature_persistence(config, model, data_loader):
         title_betti_curve = f"Betti Curve Comparison"
         plot_persistence_diagrams(config, title_diagram, diagrams, config.homology_dimensions)
         plot_betti_curves(config, title_betti_curve, betti_curves)
+        print("Bottleneck Distances", distances)
     end_time = time.time()
-    print(f"Execution time: {end_time - start_time:.4f} seconds")
+    print(f"Execution time persistent homology: {end_time - start_time:.4f} seconds")
 
     results = {
         "bottleneck distances": distances.tolist()

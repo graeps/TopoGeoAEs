@@ -91,7 +91,8 @@ def load_synthetic_ds(config):
     elif config.dataset_name == "wiggling_tube":
         dataset, labels = load_wiggling_tube(n_phi=config.n_phi, n_theta=config.n_theta,
                                              minor_radius=config.minor_radius, noise_var=config.noise_var,
-                                             embedding_dim=config.embedding_dim, deformation_amp=config.deformation_amp,
+                                             wiggling_dim=config.wiggling_dim, embedding_dim=config.embedding_dim,
+                                             deformation_amp=config.deformation_amp, rotation=config.rotation,
                                              random_seed=config.random_seed)
     elif config.dataset_name == "sphere_filled":
         dataset, labels = generate_sphere(n_points=config.n_times, radius=config.radius, filled=True,
