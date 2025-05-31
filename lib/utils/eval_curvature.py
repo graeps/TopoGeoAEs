@@ -345,9 +345,9 @@ def compute_curvature_true(config, labels=None, n_grid_points=2000):
         manifold_dim = 2
         immersion = get_true_immersion(config)
         curv, curv_norm = _compute_curvature(angles, immersion, manifold_dim, config.embedding_dim)
-    elif config.dataset_name in {"nested_spheres", "interlocked_tori"}:
+    elif config.dataset_name in {"nested_spheres", "nested_spheres_high_dim", "interlocked_tori"}:
         manifold_dim = 2
-        if config.dataset_name == "nested_spheres":
+        if config.dataset_name in {"nested_spheres", "nested_spheres_high_dim"}:
             immersion_inner, immersion_mid, immersion_outer = get_true_immersion(config)
             immersions = [immersion_inner, immersion_mid, immersion_outer]
         elif config.dataset_name == "interlocked_tori":
@@ -450,21 +450,6 @@ def compute_curvature_error(z_grid, learned, true, config):
         raise InvalidConfigError(f"Unknown dataset: {config.dataset_name}")
 
 
-def normalize_curvature_to_input_radius(config, points, curvatures):
-    if config.dataset_name in {"sphere", "scruchny", "flower", "flower_scrunchy"}:
-        max_dist = np.max(pdist(points, metric='euclidean')) - 2 * config.noise_var
-        normed_curvatures = max_dist / config.radius * curvatures
-    elif config.dataset_name in {"nested_spheres"}:
-        max_dist = np.max(pdist(points, metric='euclidean')) - 2 * config.noise_var * config.major_radius
-        normed_curvatures = max_dist / config.major_radius * curvatures
-    elif config.dataset_name in {"torus", "interlocked_torus"}:
-        max_dist = np.max(pdist(points, metric='euclidean')) - 2 * config.noise_var
-        normed_curvatures = max_dist / config.major_radius * curvatures
-    else:
-        raise NotImplementedError(f"Unknown dataset: {config.dataset_name}")
-    return normed_curvatures
-
-
 # Empiric curvature estimate
 def compute_empirical_curvature(config, labels, inputs, latents, recons, k=160):
     if config.dataset_name in {"8_curve", "clelia_curve", "flower_curve", "scrunchy", "flower_scrunchy"}:
@@ -475,7 +460,7 @@ def compute_empirical_curvature(config, labels, inputs, latents, recons, k=160):
         curv_in = estimate_curvature_2d_quadric(inputs, k)
         curv_lat = estimate_curvature_2d_quadric(latents, k)
         curv_rec = estimate_curvature_2d_quadric(recons, k)
-    elif config.dataset_name in {"interlocked_tori", "nested_spheres"}:
+    elif config.dataset_name in {"interlocked_tori", "nested_spheres", "nested_spheres_high_dim"}:
         entity_indices = labels[:, 0]
         unique_entities = entity_indices.unique(sorted=True)
         curv_in, curv_lat, curv_rec = [], [], []
@@ -577,7 +562,7 @@ def compute_all_curvatures(config, model, recons, latents, inputs, labels):
 
     norm_factor = np.max(curv_in[sampled_indices]) / np.max(curv_lat[sampled_indices])
     curv_lat_norm = curv_lat * norm_factor
-    curv_lat_norm_sub = [sampled_indices]
+    curv_lat_norm_sub = curv_lat_norm[sampled_indices]
 
     if config.compute_true_curv:
         _, _, curv_true = compute_curvature_true(config, labels_sub)

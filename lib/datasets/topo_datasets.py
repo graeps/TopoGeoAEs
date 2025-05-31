@@ -82,18 +82,15 @@ def get_torus_immersion(major_radius, minor_radius, embedding_dim, deformation_a
         point = torch.stack([x_coord, y_coord, z_coord], dim=0)
         point = _embedd(point, embedding_dim)
 
-        # Apply sinusoidal wiggles in higher dimensions
-        for i in range(2, embedding_dim):
-            if i == 2:
-                wiggle = deformation_amp * gs.sin(2 * phi)
-            # elif i == embedding_dim - 1:
-            #     wiggle = deformation_amp / 2 * gs.cos(3 * phi)
-            else:
-                wiggle = deformation_amp * gs.cos(2 * phi)
-            point[i] = wiggle
+        if deformation_amp != 0.0:
+            for i in range(3, embedding_dim):
+                if i == embedding_dim - 1:
+                    wiggle = 0
+                else:
+                    wiggle = deformation_amp * torch.cos(phi)
+                point[i] = wiggle
 
         point = _rotate_translate(point, translation, rotation)
-
         return point
 
     return immersion
@@ -499,34 +496,90 @@ def load_nested_spheres(n_points, major_radius, mid_radius, minor_radius, noise_
     return data, labels
 
 
-def generate_nested_spheres(n_points=5000, radii=None, noise_var=0.01, embedding_dim=3, translation=None,
-                            rotation=None, random_seed=42):
+def get_sphere_high_dim_bump_immersion(radius, deformation_amp, bump_dim, bump_center, embedding_dim,
+                                       translation, rotation):
+    def immersion(angle_pair):
+        theta, phi = angle_pair
+        theta_center, phi_center = bump_center
+
+        x = radius * gs.sin(theta) * gs.cos(phi)
+        y = radius * gs.sin(theta) * gs.sin(phi)
+        z = radius * gs.cos(theta)
+
+        point = gs.array([x, y, z])
+        point = gs.squeeze(point, axis=-1)
+        point = _embedd(point, embedding_dim)
+
+        delta_theta = (theta - theta_center) % (2 * torch.pi)
+        if delta_theta > torch.pi:
+            delta_theta -= 2 * torch.pi
+        delta_phi = (phi - phi_center) % (2 * torch.pi)
+        if delta_phi > torch.pi:
+            delta_phi -= 2 * torch.pi
+
+        if abs(theta - theta_center) < 1 and abs(phi - phi_center) < 1:
+            bump_theta = torch.exp(-1 / (1 - delta_theta ** 2))
+            bump_phi = torch.exp(-1 / (1 - delta_phi ** 2))
+            bump = radius * deformation_amp * bump_theta * bump_phi
+        else:
+            bump = 0
+        point[bump_dim] += bump
+
+        point = _rotate_translate(point, translation, rotation)
+
+        return point
+
+    return immersion
+
+
+def load_nested_spheres_high_dim_bump(n_points, major_radius, mid_radius, minor_radius, noise_var, embedding_dim,
+                                      deformation_amp, rotation=None, translation=None, random_seed=42):
     gs.random.seed(random_seed)
     torch.manual_seed(random_seed)
-    if radii is None:
-        radii = torch.tensor([1.0, 4.0, 8.0])
-    else:
-        radii = torch.tensor(radii)
 
-    volumes = radii ** 3
-    proportions = volumes / volumes.sum()
-    n_points_sphere = (proportions * n_points).long()
+    rot = torch.eye(n=embedding_dim)
+    trans = torch.zeros(embedding_dim)
 
-    all_points = []
-    all_labels = []
+    bump_dims = [embedding_dim - 3, embedding_dim - 2, embedding_dim - 1]
+    bump_centers = [(torch.pi / 4, torch.pi / 2), (torch.pi / 4, 3 * torch.pi / 2), (torch.pi / 2, torch.pi / 2)]
 
-    for i, radius in enumerate(radii):
-        points, _ = generate_sphere(n_points=n_points_sphere[i].item(), radius=radius.item(), filled=(i == 0),
-                                    noise_var=noise_var)
-        all_points.append(points)
-        all_labels.append(torch.full((n_points_sphere[i],), i))
+    immersion_inner = get_sphere_high_dim_bump_immersion(radius=minor_radius, bump_dim=bump_dims[0],
+                                                         bump_center=bump_centers[0],
+                                                         embedding_dim=embedding_dim, deformation_amp=deformation_amp,
+                                                         translation=trans, rotation=rot)
+    immersion_mid = get_sphere_high_dim_bump_immersion(radius=mid_radius, bump_dim=bump_dims[1],
+                                                       bump_center=bump_centers[1],
+                                                       embedding_dim=embedding_dim, deformation_amp=deformation_amp,
+                                                       translation=trans, rotation=rot)
+    immersion_outer = get_sphere_high_dim_bump_immersion(radius=major_radius, bump_dim=bump_dims[2],
+                                                         bump_center=bump_centers[2],
+                                                         embedding_dim=embedding_dim, deformation_amp=deformation_amp,
+                                                         translation=trans, rotation=rot)
 
-    points = torch.cat(all_points, dim=0)
-    labels = torch.cat(all_labels, dim=0).unsqueeze(dim=1)
+    sqrt_ntimes = int(gs.sqrt(n_points))
+    eps = 1e-4
+    thetas = gs.arccos(
+        np.linspace(1 - eps, -1 + eps, sqrt_ntimes))  # For more uniform distribution of sample points on sphere
+    phis = gs.linspace(eps, 2 * np.pi - eps, sqrt_ntimes)
+    angle_grid = torch.cartesian_prod(thetas, phis)
 
-    points = _embedd_rotate_translate(points, embedding_dim, translation, rotation)
+    sphere_inner = torch.stack([immersion_inner(pair) for pair in angle_grid])
+    sphere_mid = torch.stack([immersion_mid(pair) for pair in angle_grid])
+    sphere_outer = torch.stack([immersion_outer(pair) for pair in angle_grid])
 
-    return points, labels
+    data = torch.cat([sphere_inner, sphere_mid, sphere_outer])
+    angles = torch.cat([angle_grid, angle_grid, angle_grid])
+    n_samples = angle_grid.shape[0]
+    sphere_index = torch.tensor([0] * n_samples + [1] * n_samples + [2] * n_samples, dtype=torch.long)
+    labels = (sphere_index, angles)
+
+    rot = torch.eye(n=embedding_dim)
+    if rotation == "random":
+        rot = SpecialOrthogonal(n=embedding_dim).random_point()
+    trans = torch.zeros(embedding_dim)
+    data = _rotate_translate(points=data, translation=trans, rotation=rot)
+
+    return data, labels
 
 
 def get_clelia_immersion(r, c, embedding_dim, translation, rotation):

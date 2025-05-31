@@ -312,11 +312,13 @@ def _scatter_datapoints(ax, data, title, colors=None, cmap='hsv'):
 
 def plot_data_latents_recon(config, model, data_loader):
     recons, latents, inputs, labels = get_vectors(config, model, data_loader, config.n_plot_points)
+    if torch.isnan(latents).any():
+        print("NaNs detected in the dataset!")
 
     if labels.ndim > 1 and labels.shape[1] == 2:
         colors = labels[:, 0]
         color_map = "hsv"
-    elif config.dataset_name in {"nested_spheres", "interlocked_tori"}:
+    elif config.dataset_name in {"nested_spheres", "nested_spheres_high_dim", "interlocked_tori"}:
         colors = labels[:, 0]
         color_map = "tab10"
     else:
@@ -534,137 +536,51 @@ def plot_curvature_norms(angles, curvature_norms, config, norm_val, profile_type
     return fig
 
 
-def scatter_curvature_heatmaps(config, points, points_sub, curv_true, curv_in, curv_rec, curv_lat, curv_lat_norm,
-                               curv_learned):
+def scatter_curvature_heatmaps(config, points, points_sub, curv_true, curv_in, curv_rec, curv_lat,
+                               curv_learned, entity=None):
     inputs, latents, recons = points
-    inputs_sub, latents_sub, recons_sub = points_sub
+    inputs_sub, latents_sub = points_sub
 
     fig = plt.figure(figsize=(18, 10))
     color_map = 'rainbow'
 
-    # True Curvature on Inputs
-    ax1 = fig.add_subplot(2, 3, 1, projection='3d' if inputs_sub.shape[1] == 3 or inputs_sub.shape[1] > 3 else None)
-    sc1 = _scatter_datapoints(ax=ax1, data=inputs_sub, title="True Curvature on Inputs", colors=curv_true,
-                              cmap=color_map)
-    fig.colorbar(sc1, ax=ax1, shrink=0.7)
+    def plot_heatmap_group(heatmaps, suptitle, tag):
+        num_heatmaps = len(heatmaps)
+        num_cols = 3  # Maximum number of plots per row
+        num_rows = (num_heatmaps + num_cols - 1) // num_cols  # Calculate number of rows required
 
-    # Empirical Curvature on Inputs
-    ax2 = fig.add_subplot(2, 3, 2, projection='3d' if inputs.shape[1] == 3 or inputs.shape[1] > 3 else None)
-    sc2 = _scatter_datapoints(ax2, inputs, "Empirical Curvature on Inputs", curv_in, cmap=color_map)
-    fig.colorbar(sc2, ax=ax2, shrink=0.7)
+        fig = plt.figure(figsize=(18, 6 * num_rows))
+        for i, (title, (curv, points)) in enumerate(heatmaps.items(), 1):
+            ax = fig.add_subplot(num_rows, num_cols, i,
+                                 projection='3d' if inputs_sub.shape[1] == 3 or inputs_sub.shape[1] > 3 else None)
+            sc = _scatter_datapoints(ax=ax, data=points, title=title, colors=curv, cmap=color_map)
+            fig.colorbar(sc, ax=ax, shrink=0.7)
+        fig.suptitle(suptitle, fontsize=16)
+        plt.tight_layout(rect=[0, 0, 1, 0.96])  # Adjust layout to make room for the suptitle
 
-    # Empirical Curvature on Recons
-    ax3 = fig.add_subplot(2, 3, 3, projection='3d' if recons.shape[1] == 3 or recons.shape[1] > 3 else None)
-    sc3 = _scatter_datapoints(ax3, recons, "Empirical Curvature on Reconstructed Data", curv_rec,
-                              cmap=color_map)
-    fig.colorbar(sc3, ax=ax3, shrink=0.7)
+        if config.log_dir is not None:
+            fname = f"heatmap_{tag}.png"
+            plt.savefig(os.path.join(config.log_dir, fname))
 
-    # Empirical Curvature on Latents
-    ax4 = fig.add_subplot(2, 3, 4, projection='3d' if latents.shape[1] == 3 or latents.shape[1] > 3 else None)
-    sc4 = _scatter_datapoints(ax4, latents, "Empirical Curvature on Latents", curv_lat, cmap=color_map)
-    fig.colorbar(sc4, ax=ax4, shrink=0.7)
+        plt.show()
 
-    # Normalized Empirical Curvature on Latents
-    ax5 = fig.add_subplot(2, 3, 5, projection='3d' if latents.shape[1] == 3 or latents.shape[1] > 3 else None)
-    sc5 = _scatter_datapoints(ax5, latents, "Normalized Empirical Curvature on Latents", curv_lat_norm,
-                              cmap=color_map)
-    fig.colorbar(sc5, ax=ax5, shrink=0.7)
+    heatmaps = {
+        "Empirical Curvature on Inputs": (curv_in, inputs),
+        "Empirical Curvature on Latents": (curv_lat, latents),
+    }
 
-    # Pullback Curvature on Latents
-    ax6 = fig.add_subplot(2, 3, 6, projection='3d' if latents_sub.shape[1] == 3 or latents_sub.shape[1] > 3 else None)
-    sc6 = _scatter_datapoints(ax6, latents_sub, "Pullback Curvature on Latents", curv_learned, cmap=color_map)
-    fig.colorbar(sc6, ax=ax6, shrink=0.7)
+    if config.compute_true_curv:
+        heatmaps["True Curvature on Inputs"] = (curv_true, inputs_sub)
+    if config.compute_learned_curv:
+        heatmaps["Pullback Curvature on Latents"] = (curv_learned, latents_sub)
+    if config.compute_rec_curv:
+        heatmaps["Empirical Curvature on Reconstructed Data"] = (curv_rec, recons)
 
-    plt.tight_layout()
-
-    if config.log_dir is not None:
-        save_path = os.path.join(config.log_dir, "curvature_heatmaps.png")
-        plt.savefig(save_path)
-
-    plt.show()
-
-
-def scatter_curvature_heatmaps_plotly(config, points, points_sub, curv_true, curv_in, curv_rec, curv_lat,
-                                      curv_lat_norm, curv_learned):
-    inputs, latents, recons = points
-    inputs_sub, latents_sub, recons_sub = points_sub
-
-    color_map = 'Rainbow'
-
-    # Create subplots
-    fig = make_subplots(
-        rows=2, cols=3,
-        subplot_titles=["True Curvature on Inputs", "Empirical Curvature on Inputs",
-                        "Empirical Curvature on Reconstructed Data",
-                        "Empirical Curvature on Latents", "Normalized Empirical Curvature on Latents",
-                        "Pullback Curvature on Latents"],
-        specs=[[{"type": "scatter3d"}, {"type": "scatter3d"}, {"type": "scatter3d"}],
-               [{"type": "scatter3d"}, {"type": "scatter3d"}, {"type": "scatter3d"}]]
-    )
-
-    # True Curvature on Inputs
-    scatter1 = _scatter_datapoints_plotly(inputs_sub, curv_true, color_map)
-    fig.add_trace(scatter1, row=1, col=1)
-
-    # Empirical Curvature on Inputs
-    scatter2 = _scatter_datapoints_plotly(inputs, curv_in, color_map)
-    fig.add_trace(scatter2, row=1, col=2)
-
-    # Empirical Curvature on Recons
-    scatter3 = _scatter_datapoints_plotly(recons, curv_rec, color_map)
-    fig.add_trace(scatter3, row=1, col=3)
-
-    # Empirical Curvature on Latents
-    scatter4 = _scatter_datapoints_plotly(latents, curv_lat, color_map)
-    fig.add_trace(scatter4, row=2, col=1)
-
-    # Normalized Empirical Curvature on Latents
-    scatter5 = _scatter_datapoints_plotly(latents, curv_lat_norm, color_map)
-    fig.add_trace(scatter5, row=2, col=2)
-
-    # Pullback Curvature on Latents
-    scatter6 = _scatter_datapoints_plotly(latents_sub, curv_learned, color_map)
-    fig.add_trace(scatter6, row=2, col=3)
-
-    fig.update_layout(height=800, width=1200, title_text="Curvature Heatmaps", showlegend=False)
-
-    if config.log_dir is not None:
-        save_path = os.path.join(config.log_dir, "curvature_heatmaps_plotly.html")
-        fig.write_html(save_path)
-
-    # fig.show()
-
-
-def _scatter_datapoints_plotly(data, colors, color_map='Rainbow'):
-    d = data.shape[1]
-    opacity = 1
-    size = 1
-
-    if d > 3:
-        data = PCA(n_components=3).fit_transform(data)
-
-    if d == 1:
-        scatter = go.Scatter3d(
-            x=data[:, 0], y=np.zeros_like(data[:, 0]), z=np.zeros_like(data[:, 0]),
-            mode='markers', marker=dict(size=size, color=colors, colorscale=color_map, opacity=opacity)
-        )
-    elif d == 2:
-        scatter = go.Scatter3d(
-            x=data[:, 0], y=data[:, 1], z=np.zeros_like(data[:, 0]),
-            mode='markers', marker=dict(size=size, color=colors, colorscale=color_map, opacity=opacity)
-        )
-    elif d == 3:
-        scatter = go.Scatter3d(
-            x=data[:, 0], y=data[:, 1], z=data[:, 2],
-            mode='markers', marker=dict(size=size, color=colors, colorscale=color_map, opacity=opacity)
-        )
+    if entity is not None:
+        plot_heatmap_group(heatmaps, f'Curvature Heatmap Comparison - Connected Components {int(entity)}',
+                           'curvature_heatmaps')
     else:
-        scatter = go.Scatter3d(
-            x=data[:, 0], y=data[:, 1], z=data[:, 2],
-            mode='markers', marker=dict(size=size, color=colors, colorscale=color_map, opacity=opacity)
-        )
-
-    return scatter
+        plot_heatmap_group(heatmaps, 'Curvature Heatmap Comparison', 'curvature_heatmaps')
 
 
 def plot_curvatures_1d(labels, curvature_true, curvature_inputs, curvature_recons,
@@ -703,10 +619,9 @@ def plot_curvatures_1d(labels, curvature_true, curvature_inputs, curvature_recon
     plt.show()
 
 
-def plot_curvatures_2d(labels, labels_sub, curvature_true, curvature_inputs, curvature_recons,
-                       curvature_latents, curvature_lat_norm, curvature_learned, config, entity=None):
+def plot_curvatures_2d(labels, labels_sub, curv_true, curv_in, curv_rec, curv_lat, curv_learned, config, entity=None):
     grid_res = 100
-    if config.dataset_name in {"sphere", "nested_spheres"}:
+    if config.dataset_name in {"sphere", "nested_spheres", "nested_spheres_high_dim"}:
         grid_x, grid_y = np.meshgrid(np.linspace(0, np.pi, int(grid_res // 2)), np.linspace(0, 2 * np.pi, grid_res))
     else:
         grid_x, grid_y = np.meshgrid(np.linspace(0, 2 * np.pi, grid_res), np.linspace(0, 2 * np.pi, grid_res))
@@ -714,44 +629,49 @@ def plot_curvatures_2d(labels, labels_sub, curvature_true, curvature_inputs, cur
     def interpolate(lbls, values):
         return griddata(lbls, values, (grid_x, grid_y), method="cubic")
 
-    surfaces_1 = {
-        "True Curvature on Input Data": interpolate(labels_sub, curvature_true),
-        "Empirical Curvature on Input Data": interpolate(labels, curvature_inputs),
-        "Empirical Curvature on Reconstructed Data": interpolate(labels, curvature_recons),
-    }
-
-    surfaces_2 = {
-        "Empirical Curvature on Latent Representation": interpolate(labels, curvature_latents),
-        "Normalized Empirical Curvature on Latent Representation": interpolate(labels, curvature_lat_norm),
-        "Learned Curvature (pullback) on Latent Representation": interpolate(labels_sub, curvature_learned),
-    }
-
     def plot_surface_group(surfaces, suptitle, tag):
-        fig = plt.figure(figsize=(18, 6))
+        num_surfaces = len(surfaces)
+        num_cols = 3  # Maximum number of plots per row
+        num_rows = (num_surfaces + num_cols - 1) // num_cols  # Calculate number of rows required
+
+        fig = plt.figure(figsize=(18, 6 * num_rows))  # Adjust the figure height based on the number of rows
+
+        # Iterate over the surfaces and create subplots
         for i, (title, surface) in enumerate(surfaces.items(), 1):
-            ax = fig.add_subplot(1, 3, i, projection='3d')
+            ax = fig.add_subplot(num_rows, num_cols, i, projection='3d')
             surf = ax.plot_surface(grid_x, grid_y, surface, cmap='viridis')
             ax.set_title(title)
             ax.set_xlabel(r'$\theta_1$')
             ax.set_ylabel(r'$\theta_2$')
             ax.set_zlabel('Curvature')
             fig.colorbar(surf, ax=ax, shrink=0.6, aspect=10)
+
         fig.suptitle(suptitle, fontsize=16)
-        plt.tight_layout()
+        plt.tight_layout(rect=[0, 0, 1, 0.96])  # Adjust layout to make room for the suptitle
+
         if config.log_dir is not None:
             fname = f"surface_{tag}.png"
             plt.savefig(os.path.join(config.log_dir, fname))
+
         plt.show()
 
-    if entity:
-        plot_surface_group(surfaces_1, f'Input Data Curvature Comparison Connected Component {int(entity)}',
-                           'true_input_reconstructed')
-        plot_surface_group(surfaces_2,
-                           f'Latent Representation Curvature Comparison - Connected Component {int(entity)}',
-                           'true_learned_latent')
+    surfaces = {
+        "Empirical Curvature on Input Data": interpolate(labels, curv_in),
+        "Empirical Curvature on Latent Representation": interpolate(labels, curv_lat),
+
+    }
+    if config.compute_true_curv:
+        surfaces["True Curvature on Input Data"] = interpolate(labels_sub, curv_true)
+    if config.compute_learned_curv:
+        surfaces["Learned Curvature (pullback) on Latent Representation"] = interpolate(labels_sub, curv_learned)
+    if config.compute_rec_curv:
+        surfaces["Empirical Curvature on Reconstructed Data"] = interpolate(labels, curv_rec)
+
+    if entity is not None:
+        plot_surface_group(surfaces, f'Curvature Comparison - Connected Component {int(entity)}',
+                           'curvature_plots')
     else:
-        plot_surface_group(surfaces_1, 'Input Data Curvature Comparison', 'true_input_reconstructed')
-        plot_surface_group(surfaces_2, 'Latent Representation Curvature Comparison', 'true_learned_latent')
+        plot_surface_group(surfaces, 'Input Data Curvature Comparison', 'true_input_reconstructed')
 
 
 def compute_all_error_metrics(pairs):
@@ -797,34 +717,34 @@ def plot_std(ax, labels, stds):
     ax.grid(True, linestyle='--', alpha=0.5)
 
 
-def plot_curvature_errors_and_stats(curvature_true, curvature_inputs, curvature_recons,
-                                    curvature_latents, curv_lat_norm, curvature_learned, config):
+def plot_curvature_errors_and_stats(curv_true, curv_in, curv_rec,
+                                    curv_lat, curv_lat_norm, curv_learned, config):
     pairs = [
-        ("Empirical Inputs vs Latents", curvature_inputs, curvature_latents),
-        ("Empirical Inputs vs Latents Normalized", curvature_inputs, curv_lat_norm),
+        ("Empirical Inputs vs Latents", curv_in, curv_lat),
+        ("Empirical Inputs vs Latents Normalized", curv_in, curv_lat_norm),
     ]
-    std_arrays = [curvature_inputs, curvature_latents, curvature_recons]
+    std_arrays = [curv_in, curv_lat, curv_rec]
     std_labels = ['Input', 'Latent', 'Reconstructed']
 
     if config.compute_true_curv:
         pairs += [
-            ("True vs Empirical on Inputs", curvature_true, curvature_inputs),
-            ("True vs Empirical on Latent", curvature_true, curvature_latents),
-            ("True vs Normalized Empirical on Latent", curvature_true, curv_lat_norm),
+            ("True vs Empirical on Inputs", curv_true, curv_in),
+            ("True vs Empirical on Latent", curv_true, curv_lat),
+            ("True vs Normalized Empirical on Latent", curv_true, curv_lat_norm),
         ]
-        std_arrays.append(curvature_true)
+        std_arrays.append(curv_true)
         std_labels.append('True')
 
     if config.compute_learned_curv:
         pairs += [
-            ("Learned vs Empirical on Inputs", curvature_learned, curvature_inputs),
+            ("Learned vs Empirical on Inputs", curv_learned, curv_in),
         ]
-        std_arrays.append(curvature_learned)
+        std_arrays.append(curv_learned)
         std_labels.append('Learned')
 
     if config.compute_true_curv and config.compute_learned_curv:
         pairs += [
-            ("True vs Learned", curvature_true, curvature_learned),
+            ("True vs Learned", curv_true, curv_learned),
         ]
 
     names, mse, smape, linf = compute_all_error_metrics(pairs)
@@ -855,6 +775,7 @@ def _plot_all_curvatures_from_vectors(config, model, recons, latents, inputs, la
     points_sub, curvatures_sub, curvatures_emp_full = compute_all_curvatures(config, model, recons, latents, inputs,
                                                                              labels)
     points = (inputs, latents, recons)
+    inputs_sub, latents_sub, recons_sub = points_sub
     labels_sub, curv_in_sub, curv_rec_sub, curv_lat_sub, curv_lat_norm_sub, curv_true, curv_learned = curvatures_sub
     labels, curv_in, curv_lat, curv_lat_norm, curv_rec = curvatures_emp_full
 
@@ -862,40 +783,59 @@ def _plot_all_curvatures_from_vectors(config, model, recons, latents, inputs, la
     if labels.ndim == 1:
         plot_curvatures_1d(labels_sub, curv_true, curv_in_sub, curv_rec_sub, curv_lat_sub, curv_lat_norm_sub,
                            curv_learned, config)
+        scatter_curvature_heatmaps(config, points=points, points_sub=points_sub, curv_true=curv_true,
+                                   curv_in=curv_in, curv_rec=curv_rec, curv_learned=curv_learned, curv_lat=curv_lat)
     elif labels.ndim == 2 and labels.shape[1] == 2:
-        plot_curvatures_2d(labels, labels_sub, curv_true, curv_in, curv_rec, curv_lat, curv_lat_norm, curv_learned,
-                           config)
+        plot_curvatures_2d(labels=labels, labels_sub=labels_sub, curv_true=curv_true, curv_in=curv_in,
+                           curv_rec=curv_rec, curv_lat=curv_lat, curv_learned=curv_learned,
+                           config=config)
+        scatter_curvature_heatmaps(config, points=points, points_sub=points_sub, curv_true=curv_true,
+                                   curv_in=curv_in, curv_rec=curv_rec, curv_learned=curv_learned, curv_lat=curv_lat)
     elif labels.ndim == 2 and labels.shape[1] == 3:
-        entity_indices = labels_sub[:, 0]
+        entity_indices = labels[:, 0]
+        entity_indices_sub = labels_sub[:, 0]
         unique_entities = entity_indices.unique(sorted=True)
         for entity in unique_entities:
             mask = (entity_indices == entity)
-            angels = labels_sub[mask][:, 1:]
-            curv_true_sub = curv_true[mask]
-            curv_in_sub = curv_in_sub[mask]
-            curv_rec_sub = curv_rec_sub[mask]
-            curv_lat_sub = curv_lat_sub[mask]
-            curv_lat_norm_sub = curv_lat_norm_sub[mask]
-            curv_learned_sub = curv_learned[mask]
-            plot_curvatures_2d(angels, curv_true_sub, curv_in_sub, curv_rec_sub, curv_lat_sub, curv_lat_norm_sub,
-                               curv_learned_sub, config, entity)
+            mask_sub = (entity_indices_sub == entity)
+            angels = labels[mask][:, 1:]
+            angels_sub = labels_sub[mask_sub][:, 1:]
+
+            inputs_entity = inputs[mask]
+            latents_entity = latents[mask]
+            recons_entity = recons[mask]
+            points_entity = (inputs_entity, latents_entity, recons_entity)
+
+            inputs_sub_entity = inputs_sub[mask_sub]
+            latents_sub_entity = latents_sub[mask_sub]
+            points_sub_entity = (inputs_sub_entity, latents_sub_entity)
+
+            curv_true_entity = curv_true[mask_sub]
+            curv_in_entity = curv_in[mask]
+            curv_rec_entity = curv_rec[mask]
+            curv_lat_entity = curv_lat[mask]
+            curv_learned_entity = curv_learned[mask_sub]
+            plot_curvatures_2d(labels=angels, labels_sub=angels_sub, curv_true=curv_true_entity,
+                               curv_in=curv_in_entity, curv_rec=curv_rec_entity, curv_lat=curv_lat_entity,
+                               curv_learned=curv_learned_entity, config=config, entity=entity)
+            scatter_curvature_heatmaps(config, points=points_entity, points_sub=points_sub_entity,
+                                       curv_true=curv_true_entity,
+                                       curv_in=curv_in_entity, curv_rec=curv_rec_entity,
+                                       curv_learned=curv_learned_entity, curv_lat=curv_lat_entity, entity=entity)
     else:
         raise NotImplementedError("Label dimension not supported for curvature plotting.")
 
     # Plot curvature heat maps
-    scatter_curvature_heatmaps_plotly(config, points=points, points_sub=points_sub, curv_true=curv_true,
-                                      curv_in=curv_in, curv_rec=curv_rec, curv_learned=curv_learned,
-                                      curv_lat_norm=curv_lat_norm, curv_lat=curv_lat)
-    scatter_curvature_heatmaps(config, points=points, points_sub=points_sub, curv_true=curv_true,
-                               curv_in=curv_in, curv_rec=curv_rec, curv_learned=curv_learned,
-                               curv_lat_norm=curv_lat_norm, curv_lat=curv_lat)
-    plot_curvature_errors_and_stats(curv_true, curv_in_sub, curv_rec_sub, curv_lat_sub, curv_lat_norm_sub, curv_learned,
-                                    config)
+
+    plot_curvature_errors_and_stats(curv_true=curv_true, curv_in=curv_in_sub, curv_rec=curv_rec_sub,
+                                    curv_lat=curv_lat_sub, curv_lat_norm=curv_lat_norm_sub, curv_learned=curv_learned,
+                                    config=config)
 
 
 def plot_all_curvatures(config, model, data_loader):
     recons, latents, inputs, labels = get_vectors(config, model, data_loader, config.n_points_emp_curv)
-    _plot_all_curvatures_from_vectors(config, model, recons, latents, inputs, labels)
+    _plot_all_curvatures_from_vectors(config=config, model=model, recons=recons, latents=latents, inputs=inputs,
+                                      labels=labels)
 
 
 def plot_persistence_diagrams(config, suptitle, diagrams, homology_dimensions):
@@ -987,13 +927,14 @@ def plot_betti_curves(config, suptitle, betti_curves, homology_dimensions=None):
 
 def plot_curvature_persistence(config, model, data_loader):
     recons, latents, inputs, labels = get_vectors(config, model, data_loader, config.n_points_emp_curv)
-    _plot_all_curvatures_from_vectors(config, model, recons, latents, inputs, labels)
+    _plot_all_curvatures_from_vectors(config=config, model=model, recons=recons, latents=latents, inputs=inputs,
+                                      labels=labels)
 
     # Subsample before persistent homology
 
     start_time = time.time()
 
-    if config.dataset_name in {"nested_spheres", "interlocked_tori"}:
+    if config.dataset_name in {"nested_spheres", "nested_spheres_high_dim", "interlocked_tori"}:
         n = config.n_points_pers_hom
         idx = np.random.choice(inputs.shape[0], n, replace=False)
         inputs_subsampled = inputs[idx]
@@ -1009,9 +950,7 @@ def plot_curvature_persistence(config, model, data_loader):
         unique_entities = entity_indices.unique(sorted=True)
         for entity in unique_entities:
             mask = (entity_indices == entity)
-            print("inputs.shape", inputs.shape)
             inputs_for_entity = inputs[mask]
-            print("inputs masked.shape", inputs_for_entity.shape)
             latents_for_entity = latents[mask]
             n = config.n_points_pers_hom
             idx = np.random.choice(inputs_for_entity.shape[0], n, replace=False)
