@@ -289,7 +289,6 @@ def _compute_curvature(z_grid, immersion, dim, embedding_dim):
                 curv[i, :] = neural_manifold.metric.mean_curvature_vector(z)
             except Exception as e:
                 print(f"An error occurred for i={i}: {e}")
-                print(neural_manifold.metric.metric_matrix(z))
     curv_norm = torch.linalg.norm(curv, dim=1, keepdim=True).squeeze()
     return curv, curv_norm
 
@@ -317,7 +316,7 @@ def _old_compute_curvature_true(config, n_grid_points=2000):
     if config.dataset_name in {"s1_synthetic", "interlocking_rings_synthetic", "scrunchy", "clelia_curve", "8_curve",
                                "flower_scrunchy"}:
         manifold_dim = 1
-    elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "torus", "interlocked_tori"}:
+    elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "torus", "interlocked_tori", "interlocked_tubes"}:
         manifold_dim = 2
     else:
         raise InvalidConfigError(f"Unknown dataset: {config.dataset_name}")
@@ -345,7 +344,7 @@ def compute_curvature_true(config, labels=None, n_grid_points=2000):
         manifold_dim = 2
         immersion = get_true_immersion(config)
         curv, curv_norm = _compute_curvature(angles, immersion, manifold_dim, config.embedding_dim)
-    elif config.dataset_name in {"nested_spheres", "nested_spheres_high_dim", "interlocked_tori"}:
+    elif config.dataset_name in {"nested_spheres", "nested_spheres_high_dim", "interlocked_tori", "interlocked_tubes"}:
         manifold_dim = 2
         if config.dataset_name in {"nested_spheres", "nested_spheres_high_dim"}:
             immersion_inner, immersion_mid, immersion_outer = get_true_immersion(config)
@@ -452,7 +451,8 @@ def compute_curvature_error(z_grid, learned, true, config):
 
 # Empiric curvature estimate
 def compute_empirical_curvature(config, labels, inputs, latents, recons, k=160):
-    if config.dataset_name in {"8_curve", "clelia_curve", "flower_curve", "scrunchy", "flower_scrunchy"}:
+    if config.dataset_name in {"8_curve", "clelia_curve", "flower_curve", "scrunchy", "flower_scrunchy",
+                               "s1_synthetic"}:
         curv_in = estimate_curvature_1d_quadric(inputs, k)
         curv_lat = estimate_curvature_1d_quadric(latents, k)
         curv_rec = estimate_curvature_1d_quadric(recons, k)
@@ -460,7 +460,7 @@ def compute_empirical_curvature(config, labels, inputs, latents, recons, k=160):
         curv_in = estimate_curvature_2d_quadric(inputs, k)
         curv_lat = estimate_curvature_2d_quadric(latents, k)
         curv_rec = estimate_curvature_2d_quadric(recons, k)
-    elif config.dataset_name in {"interlocked_tori", "nested_spheres", "nested_spheres_high_dim"}:
+    elif config.dataset_name in {"interlocked_tori", "nested_spheres", "nested_spheres_high_dim", "interlocked_tubes"}:
         entity_indices = labels[:, 0]
         unique_entities = entity_indices.unique(sorted=True)
         curv_in, curv_lat, curv_rec = [], [], []
@@ -470,9 +470,14 @@ def compute_empirical_curvature(config, labels, inputs, latents, recons, k=160):
             latents_sub = latents[mask]
             recons_sub = recons[mask]
 
-            curv_in_sub = estimate_curvature_2d_quadric(inputs_sub, k)
-            curv_lat_sub = estimate_curvature_2d_quadric(latents_sub, k)
-            curv_rec_sub = estimate_curvature_2d_quadric(recons_sub, k)
+            if entity == 100:
+                curv_in_sub = torch.full((inputs_sub.shape[0],), 0.0)
+                curv_lat_sub = curv_in_sub
+                curv_rec_sub = curv_in_sub
+            else:
+                curv_in_sub = estimate_curvature_2d_quadric(inputs_sub, k)
+                curv_lat_sub = estimate_curvature_2d_quadric(latents_sub, k)
+                curv_rec_sub = estimate_curvature_2d_quadric(recons_sub, k)
 
             curv_in.append(curv_in_sub)
             curv_lat.append(curv_lat_sub)
@@ -540,13 +545,9 @@ def estimate_curvature_2d_quadric(points, k=200):
 
 def compute_all_curvatures(config, model, recons, latents, inputs, labels):
     # Compute empirical curvatures on full data
-    curv_in, curv_lat, curv_rec, labels = compute_empirical_curvature(config=config,
-                                                                                                labels=labels,
-                                                                                                inputs=inputs,
-                                                                                                latents=latents,
-                                                                                                recons=recons,
-                                                                                                k=config.k
-                                                                                                )
+    curv_in, curv_lat, curv_rec, labels = compute_empirical_curvature(config=config, labels=labels, inputs=inputs,
+                                                                      latents=latents, recons=recons, k=config.k
+                                                                      )
 
     # Compute pullback curvature on (ordered) subset of points to reduce computation time
     n_total = len(labels)

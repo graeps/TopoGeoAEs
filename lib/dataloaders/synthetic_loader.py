@@ -6,7 +6,7 @@ from ..datasets.synthetic_sphere_like import load_s1_synthetic, load_scrunchy, \
 
 from ..datasets.topo_datasets import generate_sphere, generate_genus3, generate_three_manifolds, \
     load_nested_spheres, load_clelia_curve, load_8_curve, load_interlocked_tori, load_torus, load_wiggling_tube, \
-    load_nested_spheres_high_dim_bump
+    load_nested_spheres_high_dim_bump, load_interlocked_tubes
 
 
 def load_synthetic_ds(config):
@@ -85,6 +85,12 @@ def load_synthetic_ds(config):
                                                 noise_var=config.noise_var, embedding_dim=config.embedding_dim,
                                                 deformation_amp=config.deformation_amp, rotation=config.rotation,
                                                 random_seed=config.random_seed, )
+    elif config.dataset_name == "interlocked_tubes":
+        dataset, labels = load_interlocked_tubes(n_phi=config.n_phi, n_theta=config.n_theta,
+                                             minor_radius=config.minor_radius, noise_var=config.noise_var,
+                                             wiggling_dim=config.wiggling_dim, embedding_dim=config.embedding_dim,
+                                             deformation_amp=config.deformation_amp, rotation=config.rotation,
+                                             random_seed=config.random_seed)
     elif config.dataset_name == "genus_3":
         dataset, labels = generate_genus3(n_points=config.n_times, noise_var=config.noise_var,
                                           embedding_dim=config.embedding_dim, translation=config.translation,
@@ -120,7 +126,7 @@ def load_synthetic_ds(config):
                                                             deformation_amp=config.deformation_amp,
                                                             embedding_dim=config.embedding_dim,
                                                             translation=config.translation, rotation=config.rotation,
-                                                            random_seed=config.random_seed, )
+                                                            enclosing_sphere=config.enclosing_sphere, random_seed=config.random_seed, )
     elif config.dataset_name == "clelia_curve":
         dataset, labels = load_clelia_curve(n_points=config.n_times, r=config.radius, c=config.clelia_c,
                                             noise_var=config.noise_var,
@@ -139,7 +145,7 @@ def load_synthetic_ds(config):
     else:
         raise InvalidConfigError(f"Unknown dataset: {config['dataset_name']}")
 
-    if config.dataset_name in {"nested_spheres", "nested_spheres_high_dim", "interlocked_tori"}:
+    if config.dataset_name in {"nested_spheres", "nested_spheres_high_dim", "interlocked_tori", "interlocked_tubes"}:
         entity_index, angles = labels
         entity_index = entity_index.unsqueeze(1).float()  # shape [N, 1]
         combined_label = torch.cat([entity_index, angles], dim=1)  # shape [N, 3]

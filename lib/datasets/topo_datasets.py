@@ -270,6 +270,55 @@ def load_interlocked_tori(n_points, major_radius, minor_radius, noise_var, embed
     return data, labels
 
 
+def load_interlocked_tubes(n_phi, n_theta, minor_radius, noise_var, wiggling_dim, embedding_dim, deformation_amp,
+                           rotation="random", random_seed=42):
+    gs.random.seed(random_seed)
+    torch.manual_seed(random_seed)
+
+    rot = torch.eye(embedding_dim)
+
+    tube1, angles1 = load_wiggling_tube(n_phi, n_theta, minor_radius, noise_var, wiggling_dim, embedding_dim,
+                                        deformation_amp, rotation=None, random_seed=42)
+    tube2, angles2 = load_wiggling_tube(n_phi, n_theta, minor_radius, noise_var, wiggling_dim + 1, embedding_dim,
+                                        deformation_amp, rotation=None, random_seed=42)
+
+    R_x90 = torch.eye(embedding_dim)
+    R_x90[1, 1], R_x90[1, 2] = 0.0, -1.0
+    R_x90[2, 1], R_x90[2, 2] = 1.0, 0.0
+
+    tube2 = tube2 @ R_x90.T
+    translation = torch.zeros(embedding_dim)
+    translation[0] = -1
+    tube2 += translation
+
+    if rotation == "random":
+        rot = SpecialOrthogonal(n=embedding_dim).random_point()
+
+    tube1 = torch.stack([gs.einsum("ij,j->i", rot, point) for point in tube1])
+    tube2 = torch.stack([gs.einsum("ij,j->i", rot, point) for point in tube2])
+
+    n_points_per_tube = angles1.shape[0]
+
+    if noise_var != 0:
+        noise1 = MultivariateNormal(
+            loc=torch.zeros(embedding_dim),
+            covariance_matrix=noise_var * torch.eye(embedding_dim),
+        ).sample((n_points_per_tube,))
+        noise2 = MultivariateNormal(
+            loc=torch.zeros(embedding_dim),
+            covariance_matrix=noise_var * torch.eye(embedding_dim),
+        ).sample((n_points_per_tube,))
+        tube1 = tube1 + noise1
+        tube2 = tube2 + noise2
+
+    data = torch.cat([tube1, tube2])
+    angles = torch.cat([angles1, angles2])
+    entity_index = torch.tensor([0] * n_points_per_tube + [1] * n_points_per_tube, dtype=torch.long)
+    labels = (entity_index, angles)
+
+    return data, labels
+
+
 def generate_entangled_tori(n_points=5000, major_radius=5.0, minor_radius=1.0, filled1=False, filled2=False,
                             noise_var=0.01, embedding_dim=3,
                             translation=None, rotation=None):
@@ -438,8 +487,7 @@ def get_sphere_immersion(radius, deformation_amp, embedding_dim, translation, ro
 
 
 def load_nested_spheres(n_points, major_radius, mid_radius, minor_radius, noise_var, embedding_dim, deformation_amp,
-                        translation=None,
-                        rotation=None, random_seed=42):
+                        translation=None, rotation=None, random_seed=42):
     gs.random.seed(random_seed)
     torch.manual_seed(random_seed)
 
@@ -533,7 +581,7 @@ def get_sphere_high_dim_bump_immersion(radius, deformation_amp, bump_dim, bump_c
 
 
 def load_nested_spheres_high_dim_bump(n_points, major_radius, mid_radius, minor_radius, noise_var, embedding_dim,
-                                      deformation_amp, rotation=None, translation=None, random_seed=42):
+                                      deformation_amp, rotation=None, translation=None, enclosing_sphere=False, random_seed=42):
     gs.random.seed(random_seed)
     torch.manual_seed(random_seed)
 
@@ -578,6 +626,34 @@ def load_nested_spheres_high_dim_bump(n_points, major_radius, mid_radius, minor_
         rot = SpecialOrthogonal(n=embedding_dim).random_point()
     trans = torch.zeros(embedding_dim)
     data = _rotate_translate(points=data, translation=trans, rotation=rot)
+
+    if enclosing_sphere:
+        # generate sphere S^(embedding_dim-1)
+        n_samples = n_points * 2
+        enclosing_sphere = torch.randn(n_samples, embedding_dim)
+        enclosing_sphere = enclosing_sphere / enclosing_sphere.norm(dim=1, keepdim=True)
+        enclosing_sphere = enclosing_sphere * (2 * major_radius)
+        data = torch.cat([data, enclosing_sphere])
+        sphere_index, angles = labels
+        enclosing_sphere_index = torch.tensor([100] * n_samples, dtype=torch.long)
+        dummy_angles = torch.full((n_samples, 2), 1.0)
+        sphere_index = torch.cat([sphere_index, enclosing_sphere_index])
+        angles = torch.cat([angles, dummy_angles])
+        labels = (sphere_index, angles)
+
+    return data, labels
+
+
+def load_multi_dim_spheres(n_points, major_radius, mid_radius, minor_radius, noise_var, embedding_dim,
+                           deformation_amp, rotation=None, translation=None, random_seed=42):
+    gs.random.seed(random_seed)
+    torch.manual_seed(random_seed)
+
+    nested_spheres, labels = load_nested_spheres_high_dim_bump(n_points, major_radius, mid_radius, minor_radius,
+                                                               noise_var, embedding_dim,
+                                                               deformation_amp, rotation="random", translation=None,
+                                                               random_seed=42)
+
 
     return data, labels
 
@@ -664,7 +740,9 @@ def get_scrunchy_dim_n(deformation_amp, n):
         terms = []
         for i in range(0, n):
             k = i // 2 + 1
-            if i % 2 == 0:
+            if i == 2:
+                terms.append(torch.tensor(0))
+            elif i % 2 == 0:
                 terms.append(torch.sin(k * angle))  # sin(i*angle)
             else:
                 terms.append(torch.cos(k * angle))  # cos(i*angle)

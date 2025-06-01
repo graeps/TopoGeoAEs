@@ -296,8 +296,8 @@ def _scatter_datapoints(ax, data, title, colors=None, cmap='hsv'):
         ax.set_yticks([])
     elif d == 2:
         sc = ax.scatter(data[:, 0], data[:, 1], c=colors, cmap=cmap, s=dot_size, alpha=0.7)
-    elif d == 3:
-        sc = ax.scatter(data[:, 0], data[:, 1], data[:, 2], c=colors, cmap=cmap, s=dot_size, alpha=0.7)
+    # elif d == 3:
+    #    sc = ax.scatter(data[:, 0], data[:, 1], data[:, 2], c=colors, cmap=cmap, s=dot_size, alpha=0.7)
     else:
         data = PCA(n_components=3).fit_transform(data)
         sc = ax.scatter(data[:, 0], data[:, 1], data[:, 2], c=colors, cmap=cmap, s=dot_size, alpha=0.7)
@@ -318,9 +318,10 @@ def plot_data_latents_recon(config, model, data_loader):
     if labels.ndim > 1 and labels.shape[1] == 2:
         colors = labels[:, 0]
         color_map = "hsv"
-    elif config.dataset_name in {"nested_spheres", "nested_spheres_high_dim", "interlocked_tori"}:
-        colors = labels[:, 0]
-        color_map = "tab10"
+    elif config.dataset_name in {"nested_spheres", "nested_spheres_high_dim", "interlocked_tori", "interlocked_tubes"}:
+        tab10_colors = plt.cm.get_cmap('tab10', 10)
+        colors = np.array([tab10_colors(int(label)) for label in labels[:, 0]])
+        color_map = None
     else:
         colors = labels.squeeze()
         color_map = "viridis"
@@ -552,7 +553,7 @@ def scatter_curvature_heatmaps(config, points, points_sub, curv_true, curv_in, c
         fig = plt.figure(figsize=(18, 6 * num_rows))
         for i, (title, (curv, points)) in enumerate(heatmaps.items(), 1):
             ax = fig.add_subplot(num_rows, num_cols, i,
-                                 projection='3d' if inputs_sub.shape[1] == 3 or inputs_sub.shape[1] > 3 else None)
+                                 projection='3d' if points.shape[1] >= 3 else None)
             sc = _scatter_datapoints(ax=ax, data=points, title=title, colors=curv, cmap=color_map)
             fig.colorbar(sc, ax=ax, shrink=0.7)
         fig.suptitle(suptitle, fontsize=16)
@@ -569,12 +570,12 @@ def scatter_curvature_heatmaps(config, points, points_sub, curv_true, curv_in, c
         "Empirical Curvature on Latents": (curv_lat, latents),
     }
 
+    if config.compute_rec_curv:
+        heatmaps["Empirical Curvature on Reconstructed Data"] = (curv_rec, recons)
     if config.compute_true_curv:
         heatmaps["True Curvature on Inputs"] = (curv_true, inputs_sub)
     if config.compute_learned_curv:
         heatmaps["Pullback Curvature on Latents"] = (curv_learned, latents_sub)
-    if config.compute_rec_curv:
-        heatmaps["Empirical Curvature on Reconstructed Data"] = (curv_rec, recons)
 
     if entity is not None:
         plot_heatmap_group(heatmaps, f'Curvature Heatmap Comparison - Connected Components {int(entity)}',
@@ -751,7 +752,7 @@ def plot_curvature_errors_and_stats(curv_true, curv_in, curv_rec,
     stds, _ = compute_stds(*std_arrays)
 
     fig, axes = plt.subplots(1, 3, figsize=(18, 5))
-    plot_error_bars(axes[0], names, mse, linf)
+    plot_error_bars(axes[0], names, mse, linf, bar_width=0.1)
     plot_smape(axes[1], names, smape)
     plot_std(axes[2], std_labels, stds)
 
@@ -781,11 +782,13 @@ def _plot_all_curvatures_from_vectors(config, model, recons, latents, inputs, la
 
     # Plot curvatures over angles
     if labels.ndim == 1:
+        points_sub = (inputs_sub, latents_sub)
         plot_curvatures_1d(labels_sub, curv_true, curv_in_sub, curv_rec_sub, curv_lat_sub, curv_lat_norm_sub,
                            curv_learned, config)
         scatter_curvature_heatmaps(config, points=points, points_sub=points_sub, curv_true=curv_true,
                                    curv_in=curv_in, curv_rec=curv_rec, curv_learned=curv_learned, curv_lat=curv_lat)
     elif labels.ndim == 2 and labels.shape[1] == 2:
+        points_sub = (inputs_sub, latents_sub)
         plot_curvatures_2d(labels=labels, labels_sub=labels_sub, curv_true=curv_true, curv_in=curv_in,
                            curv_rec=curv_rec, curv_lat=curv_lat, curv_learned=curv_learned,
                            config=config)
@@ -795,6 +798,7 @@ def _plot_all_curvatures_from_vectors(config, model, recons, latents, inputs, la
         entity_indices = labels[:, 0]
         entity_indices_sub = labels_sub[:, 0]
         unique_entities = entity_indices.unique(sorted=True)
+        unique_entities = unique_entities[unique_entities != 100]
         for entity in unique_entities:
             mask = (entity_indices == entity)
             mask_sub = (entity_indices_sub == entity)

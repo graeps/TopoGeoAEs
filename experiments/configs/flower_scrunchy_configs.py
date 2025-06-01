@@ -1,4 +1,3 @@
-from types import SimpleNamespace
 from scripts.experiment_utils import generate_experiments
 
 base_config = {
