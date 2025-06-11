@@ -22,35 +22,25 @@ from plotly.subplots import make_subplots
 
 
 def show_training_history(config, history):
-    _, axs = plt.subplots(figsize=(14, 4), ncols=4)
+    loss_keys = [key.replace('train_', '') for key in history.keys() if key.startswith('train_')]
+    unique_losses = sorted(set(loss_keys))
 
-    axs[0].plot(history['train_loss'], color='orange', label='train')
-    axs[0].plot(history['test_loss'], color='blue', label='val')
-    axs[0].set_xlabel('epoch')
-    axs[0].set_ylabel('loss')
-    axs[0].set_title('Loss History')
-    axs[0].legend()
+    # Plot setup
+    n_losses = len(unique_losses)
+    _, axs = plt.subplots(figsize=(4 * n_losses, 4), ncols=n_losses)
 
-    axs[1].plot(history['train_recon_loss'], color='orange', label='train')
-    axs[1].plot(history['test_recon_loss'], color='blue', label='val')
-    axs[1].set_xlabel('epoch')
-    axs[1].set_ylabel('loss')
-    axs[1].set_title('Recon Loss History')
-    axs[1].legend()
+    if n_losses == 1:
+        axs = [axs]
 
-    axs[2].plot(history['train_kl_loss'], color='orange', label='train')
-    axs[2].plot(history['test_kl_loss'], color='blue', label='val')
-    axs[2].set_xlabel('epoch')
-    axs[2].set_ylabel('loss')
-    axs[2].set_title('KL Loss History')
-    axs[2].legend()
-
-    axs[3].plot(history['train_topo_loss'], color='orange', label='train')
-    axs[3].plot(history['test_topo_loss'], color='blue', label='val')
-    axs[3].set_xlabel('epoch')
-    axs[3].set_ylabel('loss')
-    axs[3].set_title('Topo Loss History')
-    axs[3].legend()
+    for i, loss_name in enumerate(unique_losses):
+        train_key = f'train_{loss_name}'
+        test_key = f'test_{loss_name}'
+        axs[i].plot(history[train_key], color='orange', label='train')
+        axs[i].plot(history[test_key], color='blue', label='val')
+        axs[i].set_xlabel('epoch')
+        axs[i].set_ylabel('loss')
+        axs[i].set_title(f'{loss_name.replace("_", " ").title()} History')
+        axs[i].legend()
 
     if config.log_dir is not None:
         os.makedirs(config.log_dir, exist_ok=True)

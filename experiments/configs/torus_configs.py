@@ -43,9 +43,12 @@ base_config = {
     'gamma': 0.0,  # Weight for topological loss
 
     # Curvature computation
+    "compute_true_curv": False,
+    "compute_learned_curv": False,
+    "compute_rec_curv": True,
     "n_plot_points": 2000,
-    "n_curv_estimation_points": 8000,  # to compute curvature
-    "n_curv_evaluation_points": 8000,
+    "n_points_emp_curv": 8000,  # to compute curvature
+    "n_points_pullback_curv": 8000,
     # heuristics (estimation_points, k)
     #   major_radius = 2.5, minor_radius = 1, n_times = 6000: (5000, 460)
     #   major_radius = 4, minor_radius = 1, n_times = 10000: (5000, 250)
@@ -63,7 +66,7 @@ base_config = {
 param_grid = {
     "alpha": [1] * 1 + [1, 1, 0] * 3,
     "gamma": [0] + [1, 1000, 1] * 3,
-    "deformation_amp": [0.3] * 10,
+    "deformation_amp": [0.5] * 10,
     "dim_topo_loss": [0] + [0] * 3 + [1] * 3 + [2] * 3,
 }
 

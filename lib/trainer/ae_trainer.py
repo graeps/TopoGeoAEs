@@ -1,136 +1,103 @@
 import torch
-import matplotlib.pyplot as plt
-import numpy as np
+from tqdm import tqdm
+from ..utils.loss_functions import topo_ae_loss
 
 
 class AETrainer:
     def __init__(self, model, data_loader, optimizer, config):
-        self.num_epochs = config.get('num_epochs', 10)
-        self.log_interval = config.get('log_interval', 100)
-        self.device = config.get('device', torch.device("cuda" if torch.cuda.is_available() else "cpu"))
-        self.dataset = config.get("dataset", "MNIST")
-        self.show_latents = config.get("show_latents", False)
+        self.config = config
+        self.num_epochs = config.num_epochs
+        self.log_interval = config.log_interval
+        self.verbose = config.verbose
+        self.device = config.device
+        self.recon_loss = config.recon_loss
         self.train_loader, self.test_loader = data_loader
         self.model = model
         self.optimizer = optimizer
-        self.recon_loss = torch.nn.MSELoss()
-        self.history = {'train_recon_loss': [], 'test_recon_loss': []}
-        print("Trainer successfully initialized.")
+        self.history = {'train_loss': [], 'train_recon_loss': [], 'train_topo_loss': [], 'test_loss': [],
+                        'test_recon_loss': [], 'test_topo_loss': []}
 
-    def train_epoch(self):
-        self.model.train()
-        total_loss = 0
-        latent_angles = []
-
-        if self.dataset == "synthetic":
-            for batch_idx, x in enumerate(self.train_loader):
-                x = x[0].to(self.device)
-                if self.model.type == "euclidean_ae":
-                    z, x_recon = self.model(x)
-                    A = "not defined"
-                    A_inv_T = "not defined"
-                elif self.model.type == "shape_toroidal_ae":
-                    theta, x_recon, (A, A_inv_T), theta = self.model(x)
-                    latent_angles.append(theta)
-                else:
-                    raise ValueError(f"Unknown model type: {self.model.type}")
-
-                loss = self.recon_loss(x_recon, x)
-
-                self.optimizer.zero_grad()
-                loss.backward()
-                self.optimizer.step()
-
-                total_loss += loss.item()
-
-                if (batch_idx + 1) % self.log_interval == 0:
-                    print(
-                        f"Step [{batch_idx + 1}/{len(self.train_loader)}], Loss: {loss.item():.4f}, Shape matrix A:{A}, A_inv_T:{A_inv_T}"
-                    )
-            if self.model.type == "shape_toroidal_ae" and self.show_latents:
-                plot_angles(latent_angles)
-
-            return total_loss / len(self.train_loader)
-
-        else:
-            for batch_idx, (x, _) in enumerate(self.train_loader):
-                x = x.to(self.device)
-                if self.model.type == "euclidean_ae":
-                    z, x_recon = self.model(x)
-                    A = "not defined"
-                    A_inv_T = "not defined"
-                elif self.model.type == "shape_toroidal_ae":
-                    theta, x_recon, (A, A_inv_T), theta = self.model(x)
-                else:
-                    raise ValueError(f"Unknown model type: {self.model.type}")
-                loss = self.recon_loss(x_recon, x)
-
-                self.optimizer.zero_grad()
-                loss.backward()
-                self.optimizer.step()
-
-                total_loss += loss.item()
-
-                if (batch_idx + 1) % self.log_interval == 0:
-                    print(
-                        f"Step [{batch_idx + 1}/{len(self.train_loader)}], Loss: {loss.item():.4f}, Shape matrix A:{A}, A_inv_T:{A_inv_T}"
-                    )
-            return total_loss / len(self.train_loader)
-
-    def evaluate(self):
-        self.model.eval()
-        total_loss = 0
-        with torch.no_grad():
-            for x in self.test_loader:
-                if self.dataset == "synthetic":
-                    x = x[0].to(self.device)
-                else:
-                    x = x.to(self.device)
-                if self.model.type == "euclidean_ae":
-                    z, x_recon = self.model(x)
-                    A = "not defined"
-                    A_inv_T = "not defined"
-                elif self.model.type == "shape_toroidal_ae":
-                    theta, x_recon, A, A_inv_T = self.model(x)
-                loss = self.recon_loss(x_recon, x)
-                total_loss += loss.item()
-        return total_loss / len(self.test_loader)
+        if config.verbose:
+            print("Trainer successfully initialized.")
 
     def train(self):
-        print("Start training...")
+        if self.verbose:
+            print(f"Training the {self.model.posterior_type} AE model.")
+
         for epoch in range(self.num_epochs):
-            print(f"Epoch {epoch}")
-            train_loss = self.train_epoch()
-            test_loss = self.evaluate()
-            print(f"Epoch {epoch + 1}/{self.num_epochs}, Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}")
+            train_loss, train_recon_loss, train_topo_loss = self.train_one_epoch(epoch, self.verbose)
+            test_loss, test_recon_loss, test_topo_loss = self.test_one_epoch()
 
+            self.history['train_loss'].append(train_loss)
+            self.history['train_recon_loss'].append(train_recon_loss)
+            self.history['train_topo_loss'].append(train_topo_loss)
+            self.history['test_loss'].append(test_loss)
+            self.history['test_recon_loss'].append(test_recon_loss)
+            self.history['test_topo_loss'].append(test_topo_loss)
 
+            if self.verbose:
+                print(f"Epoch {epoch + 1}/{self.num_epochs}, Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}")
+                print("-" * 50)
 
-def plot_angles(latent_angles):
-    latent_angles = torch.cat(latent_angles, dim=0).detach().numpy()
+        return self.history
 
-    if latent_angles.shape[1] == 1:  # Case d = 1
-        fig, ax = plt.subplots(figsize=(5, 3))
-        theta = latent_angles[:, 0]
-        ax.scatter(theta, np.arange(len(theta)), s=2)
-        ax.set_title("Latent Angles (1D)")
-        ax.set_xlabel("θ")
-        ax.set_ylabel("Index")
-        ax.grid(True, linestyle='--', alpha=0.5)
+    def train_one_epoch(self, epoch, verbose):
+        self.model.train()
+        train_loss = 0
+        train_recon_loss = 0
+        train_topo_loss = 0
 
-    elif latent_angles.shape[1] == 2:  # Case d = 2
-        fig, ax = plt.subplots(figsize=(5, 5))
-        theta1 = latent_angles[:, 0]
-        theta2 = latent_angles[:, 1]
-        ax.scatter(theta1, theta2, s=2)
-        ax.set_title("Latent Angles (2D)")
-        ax.set_xlabel("θ_1")
-        ax.set_ylabel("θ_2")
-        ax.set_aspect('equal', adjustable='datalim')
-        ax.autoscale()
-        ax.grid(True, linestyle='--', alpha=0.5)
+        if verbose:
+            print(f"Starting epoch {epoch + 1}/{self.num_epochs}")
+            dataloader = self.train_loader
+        else:
+            dataloader = tqdm(self.train_loader, desc=f"Epoch {epoch + 1}/{self.num_epochs}", leave=False)
 
-    else:
-        raise ValueError(f"Unsupported latent dimension: {latent_angles.shape[1]}")
+        for batch_idx, (x, _) in enumerate(dataloader):
+            x = x.to(self.device)
+            self.optimizer.zero_grad()
+            z, x_recon = self.model(x)
 
-    plt.show()
+            loss, recon_loss, topo_loss = topo_ae_loss(self.config, x, z, x_recon)
+            loss.backward()
+            self.optimizer.step()
+
+            train_loss += loss.item()
+            train_recon_loss += recon_loss.item()
+            train_topo_loss += topo_loss.item() if hasattr(topo_loss, 'item') else topo_loss
+
+            if ((batch_idx + 1) % self.log_interval == 0) and verbose:
+                print(
+                    f"Epoch [{epoch + 1}/{self.num_epochs}], Batch [{batch_idx + 1}/{len(self.train_loader)}], Loss: {loss.item():.4f}")
+
+        n_samples = len(self.train_loader.dataset)
+        return (train_loss / n_samples,
+                train_recon_loss / n_samples,
+                train_topo_loss / n_samples)
+
+    def test_one_epoch(self):
+        """
+        Evaluates the Euclidean VAE model on the test dataset.
+
+        Returns:
+            float: Average test loss.
+        """
+        self.model.eval()
+        test_loss = 0
+        test_recon_loss = 0
+        test_topo_loss = 0
+
+        with torch.no_grad():
+            for x, _ in self.test_loader:
+                x = x.to(self.device)
+                z, x_recon = self.model(x)
+                loss, recon_loss, topo_loss = topo_ae_loss(self.config, x, z, x_recon)
+                test_loss += loss.item()
+                test_recon_loss += recon_loss.item()
+                test_topo_loss += topo_loss.item() if hasattr(topo_loss, 'item') else topo_loss
+
+        avg_test_loss = test_loss / len(self.test_loader.dataset)
+        avg_test_recon_loss = test_recon_loss / len(self.test_loader.dataset)
+        avg_test_topo_loss = test_topo_loss / len(self.test_loader.dataset)
+
+        return avg_test_loss, avg_test_recon_loss, avg_test_topo_loss

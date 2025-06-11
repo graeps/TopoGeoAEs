@@ -11,8 +11,11 @@ mvae_dir = os.path.split(os.getcwd())[0]
 if mvae_dir not in sys.path:
     sys.path.append(mvae_dir)
 
-import lib.dataloaders.synthetic_loader as dataloader
-import lib.models.vae.euclidean_vae as model
+import lib.dataloaders.synthetic_loader as synthetic_loader
+import lib.dataloaders.flat_torus_loader as flat_torus_loader
+import lib.models.vae.euclidean_vae as vae_model
+import lib.models.ae.euclidean_ae as ae_model
+import lib.models.ae.param_ae as param_model
 import lib.trainer as trainer
 import lib.utils as utils
 
@@ -50,21 +53,34 @@ def run_experiment(name=None, all_configs=None):
         torch.manual_seed(config.random_seed)
         np.random.seed(config.random_seed)
 
-        data_loader = dataloader.load_synthetic_ds(config)
+        if config.dataset_name == "flat_torus_embedding":
+            data_loader = flat_torus_loader.load_flat_torus_embedding(config)
+        else:
+            data_loader = synthetic_loader.load_synthetic_ds(config)
         train_loader, test_loader = data_loader
 
-        vae_model = model.EuclideanVAE(config)
-        optimizer = optim.Adam(vae_model.parameters(), lr=config.learning_rate)
-
-        history = trainer.MVAETrainer(vae_model, data_loader, optimizer, config).train()
+        if config.model_type == "EuclideanVAE":
+            model = vae_model.EuclideanVAE(config)
+            optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
+            history = trainer.MVAETrainer(model, data_loader, optimizer, config).train()
+        elif config.model_type == "EuclideanAE":
+            model = ae_model.EuclideanAE(config)
+            optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
+            history = trainer.AETrainer(model, data_loader, optimizer, config).train()
+        elif config.model_type == "ParamAE":
+            model = param_model.ParamAE(config)
+            optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
+            history = trainer.AETrainer(model, data_loader, optimizer, config).train()
+        else:
+            raise NotImplementedError
 
         utils.show_training_history(config, history)
-        utils.plot_data_latents_recon(config, vae_model, train_loader)
+        utils.plot_data_latents_recon(config, model, train_loader)
 
         if config.persistent_homology:
-            utils.plot_curvature_persistence(config=config, model=vae_model, data_loader=train_loader)
+            utils.plot_curvature_persistence(config=config, model=model, data_loader=train_loader)
         else:
-            utils.plot_all_curvatures(config=config, model=vae_model, data_loader=train_loader)
+            utils.plot_all_curvatures(config=config, model=model, data_loader=train_loader)
 
         if config.logging:
             generate_experiment_report(config)

@@ -20,7 +20,7 @@ from ..datasets.synthetic_sphere_like import (
     get_t2_synthetic_immersion,
     get_scrunchy_immersion,
     get_interlocking_rings_immersion,
-    get_flower_scrunchy_immersion
+    get_flower_scrunchy_immersion,
 )
 
 from ..datasets.topo_datasets import (
@@ -28,6 +28,7 @@ from ..datasets.topo_datasets import (
     get_8_curve_immersion,
     get_torus_immersion,
     get_sphere_immersion,
+    get_scrunchy_dim_n,
 )
 
 os.environ["GEOMSTATS_BACKEND"] = "pytorch"
@@ -115,6 +116,13 @@ def get_true_immersion(config):
             config.geodesic_distortion_amp,
             config.embedding_dim,
             rot,
+        )
+    elif config.dataset_name == "scrunchy_dim_n":
+        return get_scrunchy_dim_n(
+            deformation_amp=config.geodesic_distortion_amp,
+            embedding_dim=config.embedding_dim,
+            translation=trans,
+            rotation=rot
         )
     elif config.dataset_name == "torus":
         return get_torus_immersion(
@@ -213,7 +221,12 @@ def get_vectors(config, model, data_loader, n_samples):
             x = x.to(config.device)
             y = y.to(config.device)
 
-            z, x_recon, _ = model(x)
+            if config.model_type == "EuclideanVAE":
+                z, x_recon, _ = model(x)
+            elif config.model_type in {"EuclideanAE", "ParamAE"}:
+                z, x_recon = model(x)
+            else:
+                raise NotImplementedError
 
             inputs.append(x.cpu())
             latents.append(z.cpu())
@@ -334,7 +347,7 @@ def compute_curvature_true(config, labels=None, n_grid_points=2000):
             print("Computing true curvature of input dataset on given angles...")
 
     if config.dataset_name in {"s1_synthetic", "interlocking_rings_synthetic", "scrunchy", "clelia_curve", "8_curve",
-                               "flower_scrunchy"}:
+                               "flower_scrunchy", "scrunchy_dim_n"}:
         angles = labels
         manifold_dim = 1
         immersion = get_true_immersion(config)
@@ -452,11 +465,12 @@ def compute_curvature_error(z_grid, learned, true, config):
 # Empiric curvature estimate
 def compute_empirical_curvature(config, labels, inputs, latents, recons, k=160):
     if config.dataset_name in {"8_curve", "clelia_curve", "flower_curve", "scrunchy", "flower_scrunchy",
+                               "scrunchy_dim_n",
                                "s1_synthetic"}:
         curv_in = estimate_curvature_1d_quadric(inputs, k)
         curv_lat = estimate_curvature_1d_quadric(latents, k)
         curv_rec = estimate_curvature_1d_quadric(recons, k)
-    elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "torus", "genus_3", "sphere", "wiggling_tube"}:
+    elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "torus", "genus_3", "sphere", "wiggling_tube", "flat_torus_embedding"}:
         curv_in = estimate_curvature_2d_quadric(inputs, k)
         curv_lat = estimate_curvature_2d_quadric(latents, k)
         curv_rec = estimate_curvature_2d_quadric(recons, k)
