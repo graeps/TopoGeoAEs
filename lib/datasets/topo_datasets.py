@@ -161,8 +161,9 @@ def load_wiggling_tube(n_phi, n_theta, minor_radius, noise_var, wiggling_dim, em
     thetas = torch.linspace(0, 2 * torch.pi, n_theta, requires_grad=True)
 
     rot = torch.eye(wiggling_dim)
+    trans = torch.zeros(wiggling_dim)
 
-    curve = get_scrunchy_dim_n(deformation_amp=deformation_amp, embedding_dim=wiggling_dim, translation=None,
+    curve = get_scrunchy_dim_n(deformation_amp=deformation_amp, embedding_dim=wiggling_dim, translation=trans,
                                rotation=rot)
 
     data = []
@@ -729,20 +730,31 @@ def load_8_curve(n_points, noise_var, embedding_dim=3, translation="random", rot
     return data, angles
 
 
-def get_scrunchy_dim_n(deformation_amp, embedding_dim, translation, rotation):
+def get_scrunchy_dim_n(deformation_amp, embedding_dim, translation, rotation, deformation="peaks"):
     def immersion(angle):
-        x1 = gs.sin(angle)
-        x2 = gs.cos(angle)
-        x3 = gs.sin(0 * angle)
-        x4 = deformation_amp * gs.cos(2 * angle)
-        x5 = deformation_amp * gs.sin(3 * angle)
-        x6 = deformation_amp * gs.cos(4 * angle)
-        x7 = deformation_amp * gs.sin(5 * angle)
-        x8 = deformation_amp * gs.cos(6 * angle)
-        x9 = deformation_amp * gs.sin(7 * angle)
-        x10 = deformation_amp * gs.cos(7 * angle)
+        if deformation == "peaks":
+            x1 = gs.sin(angle)
+            x2 = gs.cos(angle)
+            x3 = gs.sin(0 * angle)
+            x4 = deformation_amp * gs.cos(2 * angle)
+            x5 = deformation_amp * gs.sin(3 * angle)
+            x6 = deformation_amp * gs.cos(4 * angle)
+            x7 = deformation_amp * gs.sin(5 * angle)
+            x8 = deformation_amp * gs.cos(6 * angle)
+            x9 = deformation_amp * gs.sin(7 * angle)
+            x10 = deformation_amp * gs.cos(7 * angle)
+        else:
+            x1 = gs.sin(angle)
+            x2 = gs.cos(angle)
+            x3 = gs.sin(2 * angle)
+            x4 = deformation_amp * gs.cos(2 * angle)
+            x5 = deformation_amp * gs.sin(3 * angle)
+            x6 = deformation_amp * gs.cos(3 * angle)
+            x7 = deformation_amp * gs.sin(4 * angle)
+            x8 = deformation_amp * gs.cos(4 * angle)
+            x9 = deformation_amp * gs.sin(5 * angle)
+            x10 = deformation_amp * gs.cos(5 * angle)
 
-        # point = gs.array(terms)  # shape: [embedding_dim]
         point = gs.array([x1, x2, x3, x4, x5, x6, x7, x8, x9, x10])[:embedding_dim]
         point = gs.squeeze(point, axis=-1)
         point = _rotate_translate(point, translation, rotation)

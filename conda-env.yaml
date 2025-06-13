@@ -11,6 +11,7 @@ dependencies:
   - geomstats
   - plotly
   - scikit-image
+  - tqdm
   - pip
   - pip:
       - --extra-index-url https://download.pytorch.org/whl/cpu
