@@ -8,9 +8,14 @@ class EuclideanVAE(nn.Module):
         super().__init__()
         self.posterior_type = "gaussian"
         self.data_dim = config.data_dim
-        self.sftbeta = config.sftbeta
         self.latent_dim = config.latent_dim
-        self.activation = F.softplus
+        if config.activation == "relu":
+            self.activation = F.relu
+        elif config.activation == "softplus":
+            self.sftbeta = config.sftbeta
+            self.activation = lambda x: F.softplus(x, beta=self.sftbeta)
+        else:
+            raise NotImplementedError
 
         encoder_widths = config.encoder_widths
         decoder_widths = config.decoder_widths

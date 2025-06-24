@@ -10,7 +10,7 @@ class EuclideanAE(nn.Module):
         self.data_dim = config.data_dim
         self.sftbeta = config.sftbeta
         self.latent_dim = config.latent_dim
-        self.activation = F.softplus
+        self.activation = lambda x: F.softplus(x, beta=self.sftbeta)
 
         encoder_widths = config.encoder_widths
         decoder_widths = config.decoder_widths
@@ -45,7 +45,8 @@ class EuclideanAE(nn.Module):
         return h
 
     def forward(self, x):
-        z = self.encode(x)
+        angles = self.encode(x)
+        z = angles  # Identity embedding, to align with spherical and toroidal ae
         x_recon = self.decode(z)
 
-        return z, x_recon
+        return angles, z, x_recon

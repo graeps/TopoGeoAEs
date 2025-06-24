@@ -13,10 +13,15 @@ class VMToroidalVAE(torch.nn.Module):
     ):
         super().__init__()
         self.posterior_type = "vm_toroidal"
-        self.data_dim = config.data_dim
+        self.data_dim = config.embedding_dim
         self.latent_dim = config.latent_dim  # Here latent_dim = d for T^d latent space (manifold dim)
-        self.sftbeta = config.sftbeta
-        self.activation = F.softplus  # TODO: chose activation as parameter in config
+        if config.activation == "relu":
+            self.activation = F.relu
+        elif config.activation == "softplus":
+            self.sftbeta = config.sftbeta
+            self.activation = lambda x: F.softplus(x, beta=self.sftbeta)
+        else:
+            raise NotImplementedError
 
         encoder_widths = config.encoder_widths
         decoder_widths = config.decoder_widths
@@ -31,7 +36,11 @@ class VMToroidalVAE(torch.nn.Module):
         self.fc_z_kappa = nn.Linear(in_dim, self.latent_dim)
 
         self.decoder_linears = nn.ModuleList()
-        in_dim = self.latent_dim * 2
+
+        if self.latent_dim == 2:
+            in_dim = 3
+        else:
+            in_dim = self.latent_dim * 2
         for out_dim in decoder_widths:
             self.decoder_linears.append(nn.Linear(in_dim, out_dim))
             in_dim = out_dim
@@ -41,26 +50,33 @@ class VMToroidalVAE(torch.nn.Module):
     def encode(self, x):
         h = x
         for layer in self.encoder_linears:
-            h = self.activation(layer(h), beta=self.sftbeta)
+            h = self.activation(layer(h))
 
         mu = self.fc_z_mu(h).view(-1, self.latent_dim, 2)  # [batch_size, latent_dim, 2]
-        kappa = self.activation(self.fc_z_kappa(h), beta=self.sftbeta) + 1  # [batch_size, latent_dim]
+        kappa = self.activation(self.fc_z_kappa(h)) + 1  # [batch_size, latent_dim]
 
         posterior_params = torch.cat((mu, kappa.unsqueeze(-1)), dim=-1)  # [batch_size, latent_dim, 3]
         return posterior_params
 
     def reparameterize(self, posterior_params):
-        # Split into mu and kappa. mu.shape=[batch_size, latent_dim, 2], kappa.shape=[batch_size, latent_dim, 1]
         mu, kappa = posterior_params[:, :, :2], posterior_params[:, :, 2:]
-        q_z = VonMisesFisher(mu, kappa)  # 2D vMF distribution
-        z = q_z.rsample()  # [batch_size,latent_dim,2]
-        z = z.view(-1, self.latent_dim * 2)  # Flatten latent dimensions [batch_size, latent_dim*2]
-        return z
+        q_z = VonMisesFisher(mu, kappa)
+        z = q_z.rsample()  # shape: [batch_size, latent_dim, 2]
+        z_flat = z.view(-1, self.latent_dim * 2)
+
+        # Apply torus embedding only when latent_dim == 2
+        if self.latent_dim == 2:
+            z_theta = z[:, 0, :]  # [batch_size, 2]
+            z_phi = z[:, 1, :]  # [batch_size, 2]
+            z_torus = self._build_torus(z_theta, z_phi)
+            return z_torus  # shape: [batch_size, 3] – embedded in ℝ³
+
+        return z_flat  # shape: [batch_size, latent_dim * 2]
 
     def decode(self, z):
         h = z
         for layer in self.decoder_linears:
-            h = self.activation(layer(h), beta=self.sftbeta)
+            h = self.activation(layer(h))
 
         x_recon = self.fc_x_recon(h)
         return x_recon
@@ -69,7 +85,6 @@ class VMToroidalVAE(torch.nn.Module):
         posterior_params = self.encode(x)
         z = self.reparameterize(posterior_params)
         x_recon = self.decode(z)
-
         return z, x_recon, posterior_params
 
     def _build_torus(self, z_theta, z_phi):

@@ -56,7 +56,7 @@ class AETrainer:
         for batch_idx, (x, _) in enumerate(dataloader):
             x = x.to(self.device)
             self.optimizer.zero_grad()
-            z, x_recon = self.model(x)
+            angles, z, x_recon = self.model(x)
 
             loss, recon_loss, topo_loss = topo_ae_loss(self.config, x, z, x_recon)
             loss.backward()
@@ -90,7 +90,7 @@ class AETrainer:
         with torch.no_grad():
             for x, _ in self.test_loader:
                 x = x.to(self.device)
-                z, x_recon = self.model(x)
+                angles, z, x_recon = self.model(x)
                 loss, recon_loss, topo_loss = topo_ae_loss(self.config, x, z, x_recon)
                 test_loss += loss.item()
                 test_recon_loss += recon_loss.item()

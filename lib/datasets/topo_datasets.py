@@ -667,8 +667,8 @@ def get_clelia_immersion(r, c, embedding_dim, translation, rotation):
     return immersion
 
 
-def load_clelia_curve(n_points=5000, r=3.0, c=3.0, noise_var=0.01, embedding_dim=3, translation="random",
-                      rotation="random", random_seed=42):
+def load_clelia_curve(n_points, r, c, noise_var, embedding_dim, translation,
+                      rotation, random_seed=42):
     gs.random.seed(random_seed)
     torch.manual_seed(random_seed)
 

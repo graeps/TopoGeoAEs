@@ -140,7 +140,7 @@ def load_synthetic_ds(config):
     elif config.dataset_name == "clelia_curve":
         dataset, labels = load_clelia_curve(n_points=config.n_times, r=config.radius, c=config.clelia_c,
                                             noise_var=config.noise_var,
-                                            embedding_dim=config.embedding_dim, translation=config.rotation,
+                                            embedding_dim=config.embedding_dim, translation=config.translation,
                                             rotation=config.rotation, random_seed=config.random_seed, )
     elif config.dataset_name == "8_curve":
         dataset, labels = load_8_curve(n_points=config.n_times, noise_var=config.noise_var,

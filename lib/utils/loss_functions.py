@@ -28,6 +28,12 @@ def elbo(posterior_type, x, z, x_recon, posterior_params, config):
         )
         kl_loss = torch.distributions.kl.kl_divergence(q_z, p_z).mean()
 
+    elif posterior_type == "vmf_spherical":
+        z_theta, z_kappa = posterior_params
+        q_z = VonMisesFisher(z_theta, z_kappa)
+        p_z = HypersphericalUniform(latent_dim, device=device)
+        kl_loss = torch.distributions.kl.kl_divergence(q_z, p_z).mean()
+
     elif posterior_type == "vmf_toroidal":
         z_theta_mu, z_theta_kappa, z_phi_mu, z_phi_kappa = posterior_params
         q_z_theta = VonMisesFisher(z_theta_mu, z_theta_kappa)

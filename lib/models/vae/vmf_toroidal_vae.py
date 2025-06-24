@@ -7,11 +7,7 @@ from ...distributions import VonMisesFisher
 
 
 class VMFToroidalVAE(torch.nn.Module):
-    def __init__(
-            self,
-            config
-    ):
-        is_valid_model_config(config)
+    def __init__(self, config):
         super().__init__()
         self.posterior_type = "vmf_toroidal"
         self.data_dim = config["data_dim"]

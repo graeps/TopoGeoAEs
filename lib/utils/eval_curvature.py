@@ -80,7 +80,7 @@ def get_learned_immersion(model, config):
 
     if config.model_type == 'EuclideanVAE':
         return immersion_euclidean
-    if config.model_type == 'VonMisesVAE':
+    if config.model_type in {'VonMisesVAE', 'SphericalAE', 'ToroidalAE'}:
         return immersion_vm
     else:
         raise InvalidConfigError(f"Unknown model type: {config.model_type}")
@@ -221,10 +221,10 @@ def get_vectors(config, model, data_loader, n_samples):
             x = x.to(config.device)
             y = y.to(config.device)
 
-            if config.model_type == "EuclideanVAE":
+            if config.model_type in {"EuclideanVAE", "VMToroidalVAE", "VMFSphericalVAE"}:
                 z, x_recon, _ = model(x)
-            elif config.model_type in {"EuclideanAE", "ParamAE"}:
-                z, x_recon = model(x)
+            elif config.model_type in {"EuclideanAE", "ParamAE", "SphericalAE", "ToroidalAE"}:
+                angles, z, x_recon = model(x)
             else:
                 raise NotImplementedError
 
@@ -311,7 +311,7 @@ def compute_curvature_learned(config, model, latent_vectors=None, labels=None, n
         print("Computing learned curvature...")
     if config.model_type == 'EuclideanVAE':
         z_grid = latent_vectors
-    elif config.model_type == 'VonMisesVAE':
+    elif config.model_type in {'VonMisesVAE', 'SphericalAE', 'ToroidalAE'}:
         z_grid = get_z_grid(config, n_grid_points)
     else:
         raise InvalidConfigError(f"Unknown model type: {config.model_type}")

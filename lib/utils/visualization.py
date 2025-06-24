@@ -276,7 +276,7 @@ def plot_latent_projections(model, pointcloud, test_loader, device="cpu"):
         plt.show()
 
 
-def _scatter_datapoints(ax, data, title, colors=None, cmap='hsv'):
+def _scatter_datapoints(ax, data, title, colors=None, cmap='hsv', pca_dim=3):
     d = data.shape[1]
     pca_applied = False
     dot_size = 2
@@ -286,11 +286,14 @@ def _scatter_datapoints(ax, data, title, colors=None, cmap='hsv'):
         ax.set_yticks([])
     elif d == 2:
         sc = ax.scatter(data[:, 0], data[:, 1], c=colors, cmap=cmap, s=dot_size, alpha=0.7)
-    # elif d == 3:
-    #    sc = ax.scatter(data[:, 0], data[:, 1], data[:, 2], c=colors, cmap=cmap, s=dot_size, alpha=0.7)
-    else:
-        data = PCA(n_components=3).fit_transform(data)
+    elif d == 3:
         sc = ax.scatter(data[:, 0], data[:, 1], data[:, 2], c=colors, cmap=cmap, s=dot_size, alpha=0.7)
+    else:
+        data = PCA(n_components=pca_dim).fit_transform(data)
+        if pca_dim == 2:
+            sc = ax.scatter(data[:, 0], data[:, 1], c=colors, cmap=cmap, s=dot_size, alpha=0.7)
+        else:
+            sc = ax.scatter(data[:, 0], data[:, 1], data[:, 2], c=colors, cmap=cmap, s=dot_size, alpha=0.7)
         pca_applied = True
 
     title_suffix = " (PCA)" if pca_applied else ""
@@ -318,19 +321,21 @@ def plot_data_latents_recon(config, model, data_loader):
 
     fig = plt.figure(figsize=(18, 5))
 
+    if config.dataset_name == "s1_synthetic":
+        pca_dim = 2
+    else:
+        pca_dim = 3
     # Dataset plot
-    ax1 = fig.add_subplot(1, 3, 1, projection='3d' if inputs.shape[1] == 3 or inputs.shape[1] > 3 else None)
-    _scatter_datapoints(ax1, inputs, "Input Data", colors, cmap=color_map)
+    ax1 = fig.add_subplot(1, 3, 1, projection='3d' if inputs.shape[1] >= 3 and pca_dim == 3 else None)
+    _scatter_datapoints(ax1, inputs, "Input Data", colors, cmap=color_map, pca_dim=pca_dim)
 
     # Latent space plot
-    ax2 = fig.add_subplot(1, 3, 2,
-                          projection='3d' if latents.shape[1] == 3 or latents.shape[1] > 3 else None)
-    _scatter_datapoints(ax2, latents, "Latent Space", colors, cmap=color_map)
+    ax2 = fig.add_subplot(1, 3, 2, projection='3d' if inputs.shape[1] >= 3 and pca_dim == 3 else None)
+    _scatter_datapoints(ax2, latents, "Latent Space", colors, cmap=color_map, pca_dim=pca_dim)
 
     # Reconstruction plot
-    ax3 = fig.add_subplot(1, 3, 3,
-                          projection='3d' if recons.shape[1] == 3 or recons.shape[1] > 3 else None)
-    _scatter_datapoints(ax3, recons, "Reconstructed Data", colors, cmap=color_map)
+    ax3 = fig.add_subplot(1, 3, 3, projection='3d' if inputs.shape[1] >= 3 and pca_dim == 3 else None)
+    _scatter_datapoints(ax3, recons, "Reconstructed Data", colors, cmap=color_map, pca_dim=pca_dim)
 
     plt.tight_layout()
 
