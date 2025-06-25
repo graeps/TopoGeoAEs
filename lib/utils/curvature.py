@@ -29,6 +29,7 @@ from ..datasets.topo_datasets import (
     get_torus_immersion,
     get_sphere_immersion,
     get_scrunchy_dim_n,
+    get_sphere_high_dim_bump_immersion
 )
 
 os.environ["GEOMSTATS_BACKEND"] = "pytorch"
@@ -101,6 +102,13 @@ def get_true_immersion(config):
             config.embedding_dim,
             rot,
         )
+    elif config.dataset_name == "sphere_high_dim":
+        bump_dims = [config.embedding_dim - 3, config.embedding_dim - 2, config.embedding_dim - 1]
+        bump_centers = [(torch.pi / 4, torch.pi / 2), (torch.pi / 4, 3 * torch.pi / 2), (torch.pi / 2, torch.pi / 2)]
+        return get_sphere_high_dim_bump_immersion(radius=config.radius, deformation_amp=config.deformation_amp,
+                                                  bump_dim=bump_dims, bump_center=bump_centers,
+                                                  embedding_dim=config.embedding_dim, translation=trans,
+                                                  rotation=rot)
     elif config.dataset_name == "scrunchy":
         return get_scrunchy_immersion(
             config.radius,
@@ -360,7 +368,7 @@ def compute_curvature_true(config, labels=None, n_grid_points=2000, cache_dir=".
         immersion = get_true_immersion(config)
         curv, curv_norm = _compute_curvature(angles, immersion, 1, config.embedding_dim)
 
-    elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "torus"}:
+    elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "torus", "sphere_high_dim"}:
         immersion = get_true_immersion(config)
         curv, curv_norm = _compute_curvature(angles, immersion, 2, config.embedding_dim)
 
@@ -468,7 +476,8 @@ def compute_empirical_curvature(config, labels, inputs, latents, recons, k=160):
         curv_in = estimate_curvature_1d_quadric(inputs, k)
         curv_lat = estimate_curvature_1d_quadric(latents, k)
         curv_rec = estimate_curvature_1d_quadric(recons, k)
-    elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "torus", "genus_3", "sphere", "wiggling_tube", "flat_torus_embedding"}:
+    elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "torus", "genus_3", "sphere", "sphere_high_dim",
+                                 "wiggling_tube", "flat_torus_embedding"}:
         curv_in = estimate_curvature_2d_quadric(inputs, k)
         curv_lat = estimate_curvature_2d_quadric(latents, k)
         curv_rec = estimate_curvature_2d_quadric(recons, k)

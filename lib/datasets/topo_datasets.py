@@ -543,8 +543,6 @@ def get_sphere_high_dim_bump_immersion(radius, deformation_amp, bump_dim, bump_c
                                        translation, rotation):
     def immersion(angle_pair):
         theta, phi = angle_pair
-        theta_center, phi_center = bump_center
-
         x = radius * gs.sin(theta) * gs.cos(phi)
         y = radius * gs.sin(theta) * gs.sin(phi)
         z = radius * gs.cos(theta)
@@ -553,26 +551,82 @@ def get_sphere_high_dim_bump_immersion(radius, deformation_amp, bump_dim, bump_c
         point = gs.squeeze(point, axis=-1)
         point = _embedd(point, embedding_dim)
 
-        delta_theta = (theta - theta_center) % (2 * torch.pi)
-        if delta_theta > torch.pi:
-            delta_theta -= 2 * torch.pi
-        delta_phi = (phi - phi_center) % (2 * torch.pi)
-        if delta_phi > torch.pi:
-            delta_phi -= 2 * torch.pi
-
-        if abs(theta - theta_center) < 1 and abs(phi - phi_center) < 1:
-            bump_theta = torch.exp(-1 / (1 - delta_theta ** 2))
-            bump_phi = torch.exp(-1 / (1 - delta_phi ** 2))
-            bump = radius * deformation_amp * bump_theta * bump_phi
+        # Ensure bump_dims is a list
+        if isinstance(bump_dim, (list, tuple)):
+            bump_dims = list(bump_dim)
         else:
-            bump = 0
-        point[bump_dim] += bump
+            bump_dims = [bump_dim]
+
+        if isinstance(bump_center, tuple) and len(bump_center) == 2 and all(
+                isinstance(x, (float, gs.Tensor)) for x in bump_center):
+            bump_centers = [bump_center]
+        else:
+            bump_centers = list(bump_center)
+
+        for dim, center in zip(bump_dims, bump_centers):
+            theta_center, phi_center = center
+
+            delta_theta = (theta - theta_center) % (2 * gs.pi)
+            if delta_theta > gs.pi:
+                delta_theta -= 2 * gs.pi
+            delta_phi = (phi - phi_center) % (2 * gs.pi)
+            if delta_phi > gs.pi:
+                delta_phi -= 2 * gs.pi
+
+            if abs(theta - theta_center) < 1 and abs(phi - phi_center) < 1:
+                bump_theta = gs.exp(-1 / (1 - delta_theta ** 2))
+                bump_phi = gs.exp(-1 / (1 - delta_phi ** 2))
+                bump = radius * deformation_amp * bump_theta * bump_phi
+            else:
+                bump = 0
+
+            point[dim] += bump
 
         point = _rotate_translate(point, translation, rotation)
-
         return point
 
     return immersion
+
+
+def load_sphere_high_dim_bump(n_points, radius, noise_var, embedding_dim,
+                              deformation_amp, rotation=None, translation=None, random_seed=42):
+    gs.random.seed(random_seed)
+    torch.manual_seed(random_seed)
+
+    rot = torch.eye(n=embedding_dim)
+    trans = torch.zeros(embedding_dim)
+
+    bump_dims = [embedding_dim - 3, embedding_dim - 2, embedding_dim - 1]
+    bump_centers = [(torch.pi / 4, torch.pi / 2), (torch.pi / 4, 3 * torch.pi / 2), (torch.pi / 2, torch.pi / 2)]
+
+    immersion = get_sphere_high_dim_bump_immersion(radius=radius, bump_dim=bump_dims,
+                                                   bump_center=bump_centers,
+                                                   embedding_dim=embedding_dim, deformation_amp=deformation_amp,
+                                                   translation=trans, rotation=rot)
+
+    sqrt_ntimes = int(gs.sqrt(n_points))
+    eps = 1e-4
+    thetas = gs.arccos(
+        np.linspace(1 - eps, -1 + eps, sqrt_ntimes))  # For more uniform distribution of sample points on sphere
+    phis = gs.linspace(eps, 2 * np.pi - eps, sqrt_ntimes)
+    angle_grid = torch.cartesian_prod(thetas, phis)
+
+    sphere = torch.stack([immersion(pair) for pair in angle_grid])
+
+    if noise_var != 0:
+        noise = MultivariateNormal(
+            loc=torch.zeros(embedding_dim),
+            covariance_matrix=noise_var * torch.eye(embedding_dim),
+        ).sample((sphere.shape[0],))
+        sphere = sphere + noise
+
+    rot = torch.eye(n=embedding_dim)
+    if rotation == "random":
+        rot = SpecialOrthogonal(n=embedding_dim).random_point()
+    trans = torch.zeros(embedding_dim)
+    data = _rotate_translate(points=sphere, translation=trans, rotation=rot)
+
+    return data, angle_grid
 
 
 def load_nested_spheres_high_dim_bump(n_points, major_radius, mid_radius, minor_radius, noise_var, embedding_dim,
@@ -612,6 +666,13 @@ def load_nested_spheres_high_dim_bump(n_points, major_radius, mid_radius, minor_
     sphere_outer = torch.stack([immersion_outer(pair) for pair in angle_grid])
 
     data = torch.cat([sphere_inner, sphere_mid, sphere_outer])
+    if noise_var != 0:
+        noise = MultivariateNormal(
+            loc=torch.zeros(embedding_dim),
+            covariance_matrix=noise_var * torch.eye(embedding_dim),
+        ).sample((data.shape[0],))
+        data = data + noise
+
     angles = torch.cat([angle_grid, angle_grid, angle_grid])
     n_samples = angle_grid.shape[0]
     sphere_index = torch.tensor([0] * n_samples + [1] * n_samples + [2] * n_samples, dtype=torch.long)
@@ -636,19 +697,6 @@ def load_nested_spheres_high_dim_bump(n_points, major_radius, mid_radius, minor_
         sphere_index = torch.cat([sphere_index, enclosing_sphere_index])
         angles = torch.cat([angles, dummy_angles])
         labels = (sphere_index, angles)
-
-    return data, labels
-
-
-def load_multi_dim_spheres(n_points, major_radius, mid_radius, minor_radius, noise_var, embedding_dim,
-                           deformation_amp, rotation=None, translation=None, random_seed=42):
-    gs.random.seed(random_seed)
-    torch.manual_seed(random_seed)
-
-    nested_spheres, labels = load_nested_spheres_high_dim_bump(n_points, major_radius, mid_radius, minor_radius,
-                                                               noise_var, embedding_dim,
-                                                               deformation_amp, rotation="random", translation=None,
-                                                               random_seed=42)
 
     return data, labels
 

@@ -8,6 +8,7 @@ import pandas as pd
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FuncFormatter
 from sklearn.decomposition import PCA
 from scipy.interpolate import griddata, RBFInterpolator
 
@@ -330,11 +331,11 @@ def plot_data_latents_recon(config, model, data_loader):
     _scatter_datapoints(ax1, inputs, "Input Data", colors, cmap=color_map, pca_dim=pca_dim)
 
     # Latent space plot
-    ax2 = fig.add_subplot(1, 3, 2, projection='3d' if inputs.shape[1] >= 3 and pca_dim == 3 else None)
+    ax2 = fig.add_subplot(1, 3, 2, projection='3d' if latents.shape[1] >= 3 and pca_dim == 3 else None)
     _scatter_datapoints(ax2, latents, "Latent Representation", colors, cmap=color_map, pca_dim=pca_dim)
 
     # Reconstruction plot
-    ax3 = fig.add_subplot(1, 3, 3, projection='3d' if inputs.shape[1] >= 3 and pca_dim == 3 else None)
+    ax3 = fig.add_subplot(1, 3, 3, projection='3d' if recons.shape[1] >= 3 and pca_dim == 3 else None)
     _scatter_datapoints(ax3, recons, "Reconstructed Data", colors, cmap=color_map, pca_dim=pca_dim)
 
     plt.tight_layout()
@@ -649,7 +650,7 @@ def plot_curvatures_1d(labels, curvature_true, curvature_inputs, curvature_recon
 
 def plot_curvatures_2d(labels, labels_sub, curv_true, curv_in, curv_rec, curv_lat, curv_learned, config, entity=None):
     grid_res = 100
-    if config.dataset_name in {"sphere", "nested_spheres", "nested_spheres_high_dim"}:
+    if config.dataset_name in {"sphere", "sphere_high_dim", "nested_spheres", "nested_spheres_high_dim"}:
         grid_x, grid_y = np.meshgrid(np.linspace(0, np.pi, int(grid_res // 2)), np.linspace(0, 2 * np.pi, grid_res))
     else:
         grid_x, grid_y = np.meshgrid(np.linspace(0, 2 * np.pi, grid_res), np.linspace(0, 2 * np.pi, grid_res))
@@ -659,27 +660,50 @@ def plot_curvatures_2d(labels, labels_sub, curv_true, curv_in, curv_rec, curv_la
 
     def plot_surface_group(surfaces, suptitle, tag):
         num_surfaces = len(surfaces)
-        num_cols = 3  # Maximum number of plots per row
-        num_rows = (num_surfaces + num_cols - 1) // num_cols  # Calculate number of rows required
+        num_cols = 3
+        num_rows = (num_surfaces + num_cols - 1) // num_cols
 
-        fig = plt.figure(figsize=(18, 6 * num_rows))  # Adjust the figure height based on the number of rows
+        fig = plt.figure(figsize=(18, 6 * num_rows))
 
-        # Iterate over the surfaces and create subplots
+        # Custom formatters for axis ticks
+        def pi_formatter(x, pos):
+            if np.isclose(x, 0):
+                return "0"
+            elif np.isclose(x, np.pi / 2):
+                return r"$\frac{\pi}{2}$"
+            elif np.isclose(x, np.pi):
+                return r"$\pi$"
+            elif np.isclose(x, 2 * np.pi):
+                return r"$2\pi$"
+            else:
+                return ""
+
         for i, (title, surface) in enumerate(surfaces.items(), 1):
             ax = fig.add_subplot(num_rows, num_cols, i, projection='3d')
             surf = ax.plot_surface(grid_x, grid_y, surface, cmap='viridis')
-            ax.set_title(title)
+
+            ax.set_title(title, fontsize=12)
+
             ax.set_xlabel(r'$\theta_1$')
             ax.set_ylabel(r'$\theta_2$')
-            ax.set_zlabel('Curvature')
-            fig.colorbar(surf, ax=ax, shrink=0.6, aspect=10)
+            ax.set_zlabel('Curvature', labelpad=10)
 
-        fig.suptitle(suptitle, fontsize=16)
-        plt.tight_layout(rect=[0, 0, 1, 0.96])  # Adjust layout to make room for the suptitle
+            ax.xaxis.set_major_locator(plt.MultipleLocator(np.pi / 2))
+            ax.yaxis.set_major_locator(plt.MultipleLocator(np.pi))
+
+            ax.xaxis.set_major_formatter(FuncFormatter(pi_formatter))
+            ax.yaxis.set_major_formatter(FuncFormatter(pi_formatter))
+
+            # Add colorbar with extra padding
+            cbar = fig.colorbar(surf, ax=ax, shrink=0.6, aspect=10, pad=0.1)
+            cbar.ax.tick_params(labelsize=10)
+
+        fig.suptitle(suptitle, fontsize=18)
+        fig.tight_layout(rect=[0, 0, 1, 0.96])  # Leave space for suptitle
 
         if config.log_dir is not None:
             fname = f"surface_{tag}.png"
-            plt.savefig(os.path.join(config.log_dir, fname))
+            plt.savefig(os.path.join(config.log_dir, fname), dpi=300, bbox_inches='tight')
 
         plt.show()
 
