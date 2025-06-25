@@ -11,11 +11,11 @@ import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 from scipy.interpolate import griddata, RBFInterpolator
 
-from .eval_curvature import compute_curvature_learned, compute_curvature_error, \
+from .curvature import compute_curvature_learned, compute_curvature_error, \
     compute_curvature_true, estimate_curvature_1d_quadric, \
     compute_all_curvatures, get_vectors, compute_curvature_error_mse, compute_curvature_error_linf, \
     compute_curvature_error_smape
-from .eval_topology import compare_persistent_homology
+from .topology import compare_persistent_homology
 
 import plotly.graph_objs as go
 from plotly.subplots import make_subplots
@@ -331,7 +331,7 @@ def plot_data_latents_recon(config, model, data_loader):
 
     # Latent space plot
     ax2 = fig.add_subplot(1, 3, 2, projection='3d' if inputs.shape[1] >= 3 and pca_dim == 3 else None)
-    _scatter_datapoints(ax2, latents, "Latent Space", colors, cmap=color_map, pca_dim=pca_dim)
+    _scatter_datapoints(ax2, latents, "Latent Representation", colors, cmap=color_map, pca_dim=pca_dim)
 
     # Reconstruction plot
     ax3 = fig.add_subplot(1, 3, 3, projection='3d' if inputs.shape[1] >= 3 and pca_dim == 3 else None)
@@ -545,11 +545,16 @@ def scatter_curvature_heatmaps(config, points, points_sub, curv_true, curv_in, c
         num_cols = 3  # Maximum number of plots per row
         num_rows = (num_heatmaps + num_cols - 1) // num_cols  # Calculate number of rows required
 
+        if config.dataset_name == "s1_synthetic":
+            pca_dim = 2
+        else:
+            pca_dim = 3
+
         fig = plt.figure(figsize=(18, 6 * num_rows))
         for i, (title, (curv, points)) in enumerate(heatmaps.items(), 1):
             ax = fig.add_subplot(num_rows, num_cols, i,
-                                 projection='3d' if points.shape[1] >= 3 else None)
-            sc = _scatter_datapoints(ax=ax, data=points, title=title, colors=curv, cmap=color_map)
+                                 projection='3d' if points.shape[1] >= 3 and pca_dim == 3 else None)
+            sc = _scatter_datapoints(ax=ax, data=points, title=title, colors=curv, cmap=color_map, pca_dim=pca_dim)
             fig.colorbar(sc, ax=ax, shrink=0.7)
         fig.suptitle(suptitle, fontsize=16)
         plt.tight_layout(rect=[0, 0, 1, 0.96])  # Adjust layout to make room for the suptitle
@@ -561,16 +566,16 @@ def scatter_curvature_heatmaps(config, points, points_sub, curv_true, curv_in, c
         plt.show()
 
     heatmaps = {
-        "Empirical Curvature on Inputs": (curv_in, inputs),
-        "Empirical Curvature on Latents": (curv_lat, latents),
+        "Quadric Fit Curvature Estimation on Inputs": (curv_in, inputs),
+        "Quadric Fit Curvature Estimation on Latents": (curv_lat, latents),
     }
 
     if config.compute_rec_curv:
-        heatmaps["Empirical Curvature on Reconstructed Data"] = (curv_rec, recons)
+        heatmaps["Quadric Fit Curvature Estimation on Recons"] = (curv_rec, recons)
     if config.compute_true_curv:
-        heatmaps["True Curvature on Inputs"] = (curv_true, inputs_sub)
+        heatmaps["True Curvature on Data Manifold"] = (curv_true, inputs_sub)
     if config.compute_learned_curv:
-        heatmaps["Pullback Curvature on Latents"] = (curv_learned, latents_sub)
+        heatmaps["Param. Curvature from Decoder"] = (curv_learned, latents_sub)
 
     if entity is not None:
         plot_heatmap_group(heatmaps, f'Curvature Heatmap Comparison - Connected Components {int(entity)}',
@@ -581,33 +586,60 @@ def scatter_curvature_heatmaps(config, points, points_sub, curv_true, curv_in, c
 
 def plot_curvatures_1d(labels, curvature_true, curvature_inputs, curvature_recons,
                        curvature_latents, curvature_latents_normalized, curvature_learned, config):
-    curve_groups = [
-        [
+    curve_groups = []
+    if config.compute_true_curv:
+        curve_groups.append([
             ('True Curvature', curvature_true, 'tab:green'),
             ('Input Curvature', curvature_inputs, 'tab:blue'),
             ('Reconstructed Curvature', curvature_recons, 'tab:red')
-        ],
-        [
+        ])
+    else:
+        curve_groups.append([
+            ('Input Curvature', curvature_inputs, 'tab:blue'),
+            ('Reconstructed Curvature', curvature_recons, 'tab:red')
+        ])
+    if config.compute_learned_curv and config.compute_true_curv:
+        curve_groups.append([
             ('True Curvature', curvature_true, 'tab:green'),
+            ('Input Curvature', curvature_inputs, 'tab:blue'),
             ('Learned Curvature', curvature_learned, 'tab:pink'),
             ('Latent Curvature', curvature_latents, 'tab:orange')
-        ],
-        [
+        ])
+    elif config.compute_true_curv:
+        curve_groups.append([
+            ('True Curvature', curvature_true, 'tab:green'),
+            ('Input Curvature', curvature_inputs, 'tab:blue'),
+            ('Latent Curvature', curvature_latents, 'tab:orange')
+        ])
+    else:
+        curve_groups.append([
+            ('Input Curvature', curvature_inputs, 'tab:blue'),
+            ('Latent Curvature', curvature_latents, 'tab:orange')
+        ])
+    if config.compute_true_curv:
+        curve_groups.append([
             ('True Curvature', curvature_true, 'tab:green'),
             ('Input Curvature', curvature_inputs, 'tab:blue'),
             ('Normalized Learned Curvature', curvature_latents_normalized, 'tab:orange')
-        ]
-    ]
-    titles = ['True, Input, Reconstructed', 'True, Learned, Latent', 'True, Normalized Learned, Latent + Learned']
+        ])
+    else:
+        curve_groups.append([
+            ('Input Curvature', curvature_inputs, 'tab:blue'),
+            ('Normalized Learned Curvature', curvature_latents_normalized, 'tab:orange')
+        ])
+    titles = ['Sanity Check', 'Compare to Inputs I', 'Compare to Inputs II']
 
     fig, axes = plt.subplots(1, 3, figsize=(18, 5), sharex=True)
     for ax, curves, title in zip(axes, curve_groups, titles):
         for label, curve, color in curves:
-            ax.plot(labels, curve, label=label, color=color, linewidth=1.5, alpha=0.8)
+            linestyle = '--' if label == 'True Curvature' else '-'  # dashed line for True Curvature
+            ax.plot(labels, curve, label=label, color=color, linestyle=linestyle, linewidth=2, alpha=0.8)
         ax.set_title(title)
-        ax.set_xlabel('Angle (radians)')
-        ax.grid(True, linestyle='--', alpha=0.5)
-        ax.legend(fontsize=8)
+        ax.set_xlabel('Angle')
+        ax.set_xticks([0, np.pi, 2 * np.pi])
+        ax.set_xticklabels(['0', r'$\pi$', r'$2\pi$'])
+        ax.grid(False)
+        ax.legend(loc='upper right', fontsize=8)
     axes[0].set_ylabel('Curvature')
     plt.tight_layout()
     if config.log_dir is not None:
