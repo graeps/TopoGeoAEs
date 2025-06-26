@@ -558,7 +558,7 @@ def get_sphere_high_dim_bump_immersion(radius, deformation_amp, bump_dim, bump_c
             bump_dims = [bump_dim]
 
         if isinstance(bump_center, tuple) and len(bump_center) == 2 and all(
-                isinstance(x, (float, gs.Tensor)) for x in bump_center):
+                isinstance(x, (float, torch.Tensor)) for x in bump_center):
             bump_centers = [bump_center]
         else:
             bump_centers = list(bump_center)
