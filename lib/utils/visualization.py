@@ -880,8 +880,6 @@ def _plot_all_curvatures_from_vectors(config, model, recons, latents, inputs, la
     else:
         raise NotImplementedError("Label dimension not supported for curvature plotting.")
 
-    # Plot curvature heat maps
-
     plot_curvature_errors_and_stats(curv_true=curv_true, curv_in=curv_in_sub, curv_rec=curv_rec_sub,
                                     curv_lat=curv_lat_sub, curv_lat_norm=curv_lat_norm_sub, curv_learned=curv_learned,
                                     config=config)

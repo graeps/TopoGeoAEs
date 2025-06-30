@@ -243,12 +243,10 @@ def get_s1_synthetic_immersion(
 
 def get_s2_synthetic_immersion(radius, geodesic_distortion_amp, embedding_dim, rot):
     """Returns a function mapping S² angles to R^embedding_dim with distortion."""
-
     def immersion(angle_pair):
         theta, phi = angle_pair
         amplitude = (
-                1
-                + geodesic_distortion_amp * gs.exp(-5 * theta ** 2)
+                1 + geodesic_distortion_amp * gs.exp(-5 * theta ** 2)
                 + geodesic_distortion_amp * gs.exp(-5 * (theta - gs.pi) ** 2)
         )
 

@@ -157,6 +157,10 @@ def get_true_immersion(config):
                                          rotation=torch.eye(n=3),
                                          )
         return immersion1, immersion2
+    elif config.dataset_name == "sphere":
+        return get_sphere_immersion(radius=config.radius, embedding_dim=config.embedding_dim,
+                                    deformation_amp=config.deformation_amp,
+                                    translation=trans, rotation=rot)
     elif config.dataset_name == "nested_spheres":
         immersion_inner = get_sphere_immersion(radius=config.minor_radius, embedding_dim=3,
                                                deformation_amp=config.deformation_amp,
@@ -368,7 +372,7 @@ def compute_curvature_true(config, labels=None, n_grid_points=2000, cache_dir=".
         immersion = get_true_immersion(config)
         curv, curv_norm = _compute_curvature(angles, immersion, 1, config.embedding_dim)
 
-    elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "torus", "sphere_high_dim"}:
+    elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "torus", "sphere_high_dim", "sphere"}:
         immersion = get_true_immersion(config)
         curv, curv_norm = _compute_curvature(angles, immersion, 2, config.embedding_dim)
 
@@ -431,18 +435,6 @@ def compute_curvature_error_mse(curv1, curv2, eps=1e-12):
     diff = (curv1 - curv2) ** 2
     mean = diff.sum() / len(curv1)
     return mean
-
-
-def compute_curvature_error_male(true_curv, approx_curv, eps=1e-12):
-    # Computes mean absolute log error
-
-    true_curv = np.asarray(true_curv)
-    approx_curv = np.asarray(approx_curv)
-    true_curv = np.clip(true_curv, eps, None)
-    approx_curv = np.clip(approx_curv, eps, None)
-
-    log_error = np.log(approx_curv / true_curv)
-    return np.mean(np.abs(log_error))
 
 
 def compute_curvature_error_smape(true_curv, approx_curv, eps=1e-12):

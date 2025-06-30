@@ -4,9 +4,10 @@ import torch
 from ..datasets.synthetic_sphere_like import load_s1_synthetic, load_scrunchy, \
     load_interlocking_rings_synthetic, load_s2_synthetic, load_t2_synthetic, load_flower_scrunchy
 
-from ..datasets.topo_datasets import generate_sphere, generate_genus3, generate_three_manifolds, \
+from ..datasets.topo_datasets import generate_genus3, \
     load_nested_spheres, load_clelia_curve, load_8_curve, load_interlocked_tori, load_torus, load_wiggling_tube, \
-    load_nested_spheres_high_dim_bump, load_interlocked_tubes, load_scrunchy_dim_n, load_sphere_high_dim_bump
+    load_nested_spheres_high_dim_bump, load_interlocked_tubes, load_scrunchy_dim_n, load_sphere_high_dim_bump, \
+    load_sphere
 
 
 def load_synthetic_ds(config):
@@ -111,16 +112,12 @@ def load_synthetic_ds(config):
                                              wiggling_dim=config.wiggling_dim, embedding_dim=config.embedding_dim,
                                              deformation_amp=config.deformation_amp, rotation=config.rotation,
                                              random_seed=config.random_seed)
-    elif config.dataset_name == "sphere_filled":
-        dataset, labels = generate_sphere(n_points=config.n_times, radius=config.radius, filled=True,
-                                          noise_var=config.noise_var, embedding_dim=config.embedding_dim,
-                                          translation=config.translation, rotation=config.rotation,
-                                          random_seed=config.random_seed, )
-    elif config.dataset_name == "sphere_hollowed":
-        dataset, labels = generate_sphere(n_points=config.n_times, radius=config.radius, filled=False,
-                                          noise_var=config.noise_var, embedding_dim=config.embedding_dim,
-                                          translation=config.translation, rotation=config.rotation,
-                                          random_seed=config.random_seed, )
+    elif config.dataset_name == "sphere":
+        dataset, labels = load_sphere(n_points=config.n_times, radius=config.radius,
+                                      noise_var=config.noise_var, deformation_amp=config.deformation_amp,
+                                      embedding_dim=config.embedding_dim,
+                                      translation=config.translation, rotation=config.rotation,
+                                      random_seed=config.random_seed, )
     elif config.dataset_name == "nested_spheres":
         dataset, labels = load_nested_spheres(n_points=config.n_times, minor_radius=config.minor_radius,
                                               mid_radius=config.mid_radius, major_radius=config.major_radius,
@@ -155,12 +152,6 @@ def load_synthetic_ds(config):
         dataset, labels = load_8_curve(n_points=config.n_times, noise_var=config.noise_var,
                                        embedding_dim=config.embedding_dim, translation=config.rotation,
                                        rotation=config.rotation, random_seed=config.random_seed, )
-    elif config.dataset_name == "three_entangled_tori":
-        dataset, labels = generate_three_manifolds("entangled_tori")
-    elif config.dataset_name == "three_nested_spheres":
-        dataset, labels = generate_three_manifolds("three_nested_spheres")
-    elif config.dataset_name == "spheres":
-        dataset, labels = generate_three_manifolds("spheres")
     else:
         raise InvalidConfigError(f"Unknown dataset: {config['dataset_name']}")
 
