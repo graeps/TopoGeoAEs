@@ -28,7 +28,7 @@ def show_training_history(config, history):
 
     # Plot setup
     n_losses = len(unique_losses)
-    _, axs = plt.subplots(figsize=(4 * n_losses, 4), ncols=n_losses)
+    fig, axs = plt.subplots(figsize=(5 * n_losses, 4), ncols=n_losses)
 
     if n_losses == 1:
         axs = [axs]
@@ -42,6 +42,8 @@ def show_training_history(config, history):
         axs[i].set_ylabel('loss')
         axs[i].set_title(f'{loss_name.replace("_", " ").title()} History')
         axs[i].legend()
+
+    fig.subplots_adjust(wspace=0.4)
 
     if config.log_dir is not None:
         os.makedirs(config.log_dir, exist_ok=True)
@@ -599,12 +601,17 @@ def plot_curvatures_1d(labels, curvature_true, curvature_inputs, curvature_recon
             ('Input Curvature', curvature_inputs, 'tab:blue'),
             ('Reconstructed Curvature', curvature_recons, 'tab:red')
         ])
-    if config.compute_learned_curv and config.compute_true_curv:
+    if config.compute_learned_curv and config.compute_true_curv and config.compute_emp_curv:
         curve_groups.append([
             ('True Curvature', curvature_true, 'tab:green'),
             ('Input Curvature', curvature_inputs, 'tab:blue'),
             ('Learned Curvature', curvature_learned, 'tab:pink'),
             ('Latent Curvature', curvature_latents, 'tab:orange')
+        ])
+    elif config.compute_learned_curv and config.compute_true_curv:
+        curve_groups.append([
+            ('True Curvature', curvature_true, 'tab:green'),
+            ('Learned Curvature', curvature_learned, 'tab:pink'),
         ])
     elif config.compute_true_curv:
         curve_groups.append([
@@ -621,12 +628,12 @@ def plot_curvatures_1d(labels, curvature_true, curvature_inputs, curvature_recon
         curve_groups.append([
             ('True Curvature', curvature_true, 'tab:green'),
             ('Input Curvature', curvature_inputs, 'tab:blue'),
-            ('Normalized Learned Curvature', curvature_latents_normalized, 'tab:orange')
+            ('Normalized Latent Curvature', curvature_latents_normalized, 'tab:orange')
         ])
     else:
         curve_groups.append([
             ('Input Curvature', curvature_inputs, 'tab:blue'),
-            ('Normalized Learned Curvature', curvature_latents_normalized, 'tab:orange')
+            ('Normalized Latent Curvature', curvature_latents_normalized, 'tab:orange')
         ])
     titles = ['Sanity Check', 'Compare to Inputs I', 'Compare to Inputs II']
 

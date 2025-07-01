@@ -424,12 +424,12 @@ def get_sphere_immersion(radius, deformation_amp, embedding_dim, translation, ro
     def immersion(angle_pair):
         theta, phi = angle_pair
         amplitude1 = (
-                1 + deformation_amp * torch.exp(-5 * theta ** 2)
-                + deformation_amp * torch.exp(-5 * (theta - gs.pi) ** 2)
+                1 + deformation_amp * gs.exp(-5 * theta ** 2)
+                + deformation_amp * gs.exp(-5 * (theta - gs.pi) ** 2)
         )
         amplitude2 = (
-                1 + deformation_amp * torch.exp(-5 * (theta - gs.pi / 2) ** 2)
-                + deformation_amp * torch.exp(-5 * (theta - 3 * gs.pi / 2) ** 2)
+                1 + deformation_amp * gs.exp(-5 * (theta - gs.pi / 2) ** 2)
+                + deformation_amp * gs.exp(-5 * (theta - 3 * gs.pi / 2) ** 2)
         )
 
         x = radius * gs.sin(theta) * gs.cos(phi)

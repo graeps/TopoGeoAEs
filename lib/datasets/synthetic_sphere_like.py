@@ -57,7 +57,7 @@ def load_s2_synthetic(
     immersion = get_s2_synthetic_immersion(radius, geodesic_distortion_amp, embedding_dim, rot)
 
     sqrt_ntimes = int(gs.sqrt(n_times))
-    thetas = gs.linspace(0.01, gs.pi, sqrt_ntimes)
+    thetas = gs.linspace(0.0001, gs.pi, sqrt_ntimes)
     phis = gs.linspace(0, 2 * gs.pi, sqrt_ntimes)
 
     angle_grid = torch.cartesian_prod(thetas, phis)

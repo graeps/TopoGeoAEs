@@ -15,6 +15,7 @@ import lib.dataloaders.synthetic_loader as synthetic_loader
 import lib.dataloaders.flat_torus_loader as flat_torus_loader
 import lib.models.vae.euclidean_vae as e_vae_model
 import lib.models.vae.vm_toroidal_vae as vm_toroidal_vae_model
+import lib.models.vae.vmf_toroidal_vae as vmf_toroidal_vae_model
 import lib.models.vae.vmf_spherical_vae as vmf_spherical_vae_model
 import lib.models.ae.euclidean_ae as ae_model
 import lib.models.ae.param_ae as param_model
@@ -69,6 +70,10 @@ def run_experiment(name=None, all_configs=None):
             history = trainer.MVAETrainer(model, data_loader, optimizer, config).train()
         elif config.model_type == "VMToroidalVAE":
             model = vm_toroidal_vae_model.VMToroidalVAE(config)
+            optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
+            history = trainer.MVAETrainer(model, data_loader, optimizer, config).train()
+        elif config.model_type == "VMFToroidalVAE":
+            model = vmf_toroidal_vae_model.VMFToroidalVAE(config)
             optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
             history = trainer.MVAETrainer(model, data_loader, optimizer, config).train()
         elif config.model_type == "VMFSphericalVAE":

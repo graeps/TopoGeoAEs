@@ -153,7 +153,7 @@ def load_synthetic_ds(config):
                                        embedding_dim=config.embedding_dim, translation=config.rotation,
                                        rotation=config.rotation, random_seed=config.random_seed, )
     else:
-        raise InvalidConfigError(f"Unknown dataset: {config['dataset_name']}")
+        raise InvalidConfigError(f"Unknown dataset: {config.dataset_name}")
 
     if config.dataset_name in {"nested_spheres", "nested_spheres_high_dim", "interlocked_tori", "interlocked_tubes"}:
         entity_index, angles = labels

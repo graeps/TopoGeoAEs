@@ -5,7 +5,6 @@ from torch_topological.nn import VietorisRipsComplex
 
 from ..distributions import VonMisesFisher, HypersphericalUniform
 
-
 def elbo(posterior_type, x, z, x_recon, posterior_params, config):
     latent_dim = config.latent_dim
     recon_loss = config.recon_loss

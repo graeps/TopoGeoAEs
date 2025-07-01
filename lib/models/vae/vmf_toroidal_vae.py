@@ -10,13 +10,13 @@ class VMFToroidalVAE(torch.nn.Module):
     def __init__(self, config):
         super().__init__()
         self.posterior_type = "vmf_toroidal"
-        self.data_dim = config["data_dim"]
-        self.sftbeta = config["sftbeta"]
-        self.latent_dim = config["latent_dim"]
-        self.encoder_width = config["encoder_width"]
-        self.encoder_depth = config["encoder_depth"]
-        self.decoder_width = config["decoder_width"]
-        self.decoder_depth = config["decoder_depth"]
+        self.data_dim = config.embedding_dim
+        self.sftbeta = config.sftbeta
+        self.latent_dim = config.latent_dim
+        self.encoder_width = config.encoder_width
+        self.encoder_depth = config.encoder_depth
+        self.decoder_width = config.decoder_width
+        self.decoder_depth = config.decoder_depth
 
         self.encoder_flatten = torch.nn.Flatten()
         self.encoder_fc = torch.nn.Linear(self.data_dim, self.encoder_width)
@@ -66,19 +66,15 @@ class VMFToroidalVAE(torch.nn.Module):
         """
         h = self.encoder_flatten(x)
         h = f.softplus(self.encoder_fc(h), beta=self.sftbeta)
-        print("after 1. layer", h[0] - h[1])
 
         for layer in self.encoder_linears:
             h = f.softplus(layer(h), beta=self.sftbeta)
-            print("after layer", layer, h[0] - h[1])
 
         z_theta_mu = self.fc_z_theta_mu(h)
         z_theta_kappa = f.softplus(self.fc_z_theta_kappa(h)) + 1
 
         z_phi_mu = self.fc_z_phi_mu(h)
         z_phi_kappa = f.softplus(self.fc_z_phi_kappa(h)) + 1
-
-        print("z_theta_kappa, z_phi_kappa", z_theta_kappa, z_phi_kappa)
 
         return z_theta_mu, z_theta_kappa, z_phi_mu, z_phi_kappa
 
@@ -148,7 +144,7 @@ class VMFToroidalVAE(torch.nn.Module):
         for layer in self.decoder_linears:
             h = f.softplus(layer(h), beta=self.sftbeta)
 
-        return self.fc_x_recon(h).view(-1, 1, 28, 28)
+        return self.fc_x_recon(h)
 
     def forward(self, x):
         """Run VAE: Encode, sample and decode.

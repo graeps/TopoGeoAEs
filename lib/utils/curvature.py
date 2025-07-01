@@ -51,10 +51,10 @@ class NeuralManifoldIntrinsic(ImmersedSet):
 
 def get_learned_immersion(model, config):
     def immersion_vm(angle):
-        if config.dataset_name == "s1_synthetic":
+        if config.dataset_name in {"s1_synthetic", "scrunchy_dim_n"}:
             z = gs.array([gs.cos(angle[0]), gs.sin(angle[0])])
 
-        elif config.dataset_name == "s2_synthetic":
+        elif config.dataset_name in {"s2_synthetic", "sphere"}:
             theta, phi = angle
             z = gs.array([
                 gs.sin(theta) * gs.cos(phi),
@@ -81,7 +81,7 @@ def get_learned_immersion(model, config):
 
     if config.model_type == 'EuclideanVAE':
         return immersion_euclidean
-    if config.model_type in {'VonMisesVAE', 'SphericalAE', 'ToroidalAE'}:
+    if config.model_type in {'VonMisesVAE', 'VMFSphericalVAE', 'VMToroidalVAE', 'SphericalAE', 'ToroidalAE'}:
         return immersion_vm
     else:
         raise InvalidConfigError(f"Unknown model type: {config.model_type}")
@@ -205,10 +205,10 @@ def get_true_immersion(config):
         raise InvalidConfigError(f"Unknown dataset: {config.dataset_name}")
 
 
-def get_z_grid(config, n_grid_points=200):
-    if config.dataset_name in {"s1_synthetic", "scrunchy"}:
+def get_z_grid(config, n_grid_points):
+    if config.dataset_name in {"s1_synthetic", "scrunchy", "scrunchy_dim_n"}:
         return torch.linspace(0, 2 * gs.pi, n_grid_points)
-    elif config.dataset_name == "s2_synthetic":
+    elif config.dataset_name in {"s2_synthetic", "sphere"}:
         thetas = gs.linspace(0.01, gs.pi, int(np.sqrt(n_grid_points)))
         phis = gs.linspace(0, 2 * gs.pi, int(np.sqrt(n_grid_points)))
         return torch.cartesian_prod(thetas, phis)
@@ -219,6 +219,70 @@ def get_z_grid(config, n_grid_points=200):
     else:
         raise InvalidConfigError(f"Unknown dataset: {config.dataset_name}")
     return z_grid
+
+
+def shift_z_grid(z_grid, anchore, config):
+    """
+    Shift z_grid so that the point closest to the latent representation
+    of 'ancore' (in ambient space) is moved to position 0.
+
+    Parameters:
+    - z_grid: torch.Tensor of shape (N,) for S¹ or (N,2) for S²/T²
+    - ancore: point on the manifold (x,y) or (x,y,z)
+    - config: contains dataset_name and possibly torus radii
+
+    Returns:
+    - z_grid_shifted: same shape as z_grid, rotated so closest match to ancore is first
+    """
+
+    def circle_inverse(x, y):
+        theta = torch.atan2(y, x) % (2 * torch.pi)
+        return theta
+
+    def sphere_inverse(x, y, z):
+        norm = torch.sqrt(x ** 2 + y ** 2 + z ** 2)
+        theta = torch.acos(z / norm).clamp(0, torch.pi)
+        phi = torch.atan2(y, x) % (2 * torch.pi)
+        return theta, phi
+
+    def torus_inverse(x, y, z, R=2.0):
+        rho = torch.sqrt(x ** 2 + y ** 2)
+        theta = torch.atan2(z, rho - R)
+        phi = torch.atan2(y, x)
+        return theta % (2 * torch.pi), phi % (2 * torch.pi)
+
+    # 1D case: Circle (S¹)
+    if z_grid.ndim == 1:
+        x, y = anchore
+        angle = circle_inverse(x, y)
+        # Compute circular distance to each point in grid
+        dists = torch.remainder(z_grid - angle + torch.pi, 2 * torch.pi) - torch.pi
+        idx_min = torch.argmin(torch.abs(dists))
+        # Circular shift
+        z_grid_shifted = torch.roll(z_grid, -idx_min.item(), dims=0)
+        return z_grid_shifted
+
+    # 2D case: Sphere (S²) or Torus (T²)
+    elif z_grid.ndim == 2 and z_grid.shape[1] == 2:
+        x, y, z = anchore
+        if config.dataset_name in {"s2_synthetic","sphere"}:
+            theta, phi = sphere_inverse(x, y, z)
+        elif config.dataset_name == "t2_synthetic":
+            R = getattr(config, "major_radius", 2.0)
+            theta, phi = torus_inverse(x, y, z, R)
+        else:
+            return z_grid
+
+        anchor_angles = torch.tensor([theta, phi], device=z_grid.device)
+
+        # Compute angular distance (wrapped) for each point in z_grid
+        angle_diffs = torch.remainder(z_grid - anchor_angles + torch.pi, 2 * torch.pi) - torch.pi
+        norms = torch.norm(angle_diffs, dim=1)
+        idx_min = torch.argmin(norms)
+        z_grid_shifted = torch.roll(z_grid, -idx_min.item(), dims=0)
+        return z_grid_shifted
+
+    return z_grid  # fallback
 
 
 def get_vectors(config, model, data_loader, n_samples):
@@ -323,30 +387,15 @@ def compute_curvature_learned(config, model, latent_vectors=None, labels=None, n
         print("Computing learned curvature...")
     if config.model_type == 'EuclideanVAE':
         z_grid = latent_vectors
-    elif config.model_type in {'VonMisesVAE', 'SphericalAE', 'ToroidalAE'}:
+    elif config.model_type in {'VMFSphericalVAE', 'VMToroidalVAE', 'SphericalAE', 'ToroidalAE'}:
         z_grid = get_z_grid(config, n_grid_points)
+        z_grid = shift_z_grid(z_grid, latent_vectors[0], config)
     else:
         raise InvalidConfigError(f"Unknown model type: {config.model_type}")
     immersion = get_learned_immersion(model, config)
     manifold_dim = z_grid.shape[1] if z_grid.ndim > 1 else 1
     curv, curv_norm = _compute_curvature(z_grid, immersion, manifold_dim, config.embedding_dim)
     return z_grid, labels, curv, curv_norm
-
-
-def _old_compute_curvature_true(config, n_grid_points=2000):
-    if config.verbose:
-        print("Computing true curvature of input dataset using on z-grid...")
-    z_grid = get_z_grid(config, n_grid_points)
-    immersion = get_true_immersion(config)
-    if config.dataset_name in {"s1_synthetic", "interlocking_rings_synthetic", "scrunchy", "clelia_curve", "8_curve",
-                               "flower_scrunchy"}:
-        manifold_dim = 1
-    elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "torus", "interlocked_tori", "interlocked_tubes"}:
-        manifold_dim = 2
-    else:
-        raise InvalidConfigError(f"Unknown dataset: {config.dataset_name}")
-    result = _compute_curvature(z_grid, immersion, manifold_dim, config.embedding_dim)
-    return z_grid, *result
 
 
 def compute_curvature_true(config, labels=None, n_grid_points=2000, cache_dir="./curvature_cache"):
@@ -457,7 +506,7 @@ def compute_curvature_error(z_grid, learned, true, config):
     elif config.dataset_name in ("s2_synthetic", "t2_synthetic"):
         return _compute_curvature_error_s2(z_grid[:, 0], z_grid[:, 1], learned, true)
     else:
-        raise InvalidConfigError(f"Unknown dataset: {config.dataset_name}")
+        raise InvalidConfigError(f"Unknown XX dataset: {config.dataset_name}")
 
 
 # Empiric curvature estimate
@@ -557,14 +606,9 @@ def estimate_curvature_2d_quadric(points, k=200):
 
 
 def compute_all_curvatures(config, model, recons, latents, inputs, labels):
-    # Compute empirical curvatures on full data
-    curv_in, curv_lat, curv_rec, labels = compute_empirical_curvature(config=config, labels=labels, inputs=inputs,
-                                                                      latents=latents, recons=recons, k=config.k
-                                                                      )
-
     # Compute pullback curvature on (ordered) subset of points to reduce computation time
     n_total = len(labels)
-    n_points = min(config.n_points_pullback_curv, n_total)
+    n_points = int(np.sqrt(min(config.n_points_pullback_curv, n_total)))**2
     sampled_indices = np.random.choice(n_total, size=n_points, replace=False)
     sampled_indices.sort()
 
@@ -574,29 +618,42 @@ def compute_all_curvatures(config, model, recons, latents, inputs, labels):
     latents_sub = latents[sampled_indices]
     recons_sub = recons[sampled_indices]
 
-    norm_factor = np.max(curv_in[sampled_indices]) / np.max(curv_lat[sampled_indices])
-    curv_lat_norm = curv_lat * norm_factor
-    curv_lat_norm_sub = curv_lat_norm[sampled_indices]
-
+    # Compute empirical curvatures on full data
+    if config.compute_emp_curv:
+        curv_in, curv_lat, curv_rec, labels = compute_empirical_curvature(config=config, labels=labels, inputs=inputs,
+                                                                          latents=latents, recons=recons, k=config.k
+                                                                          )
+        norm_factor = np.max(curv_in[sampled_indices]) / np.max(curv_lat[sampled_indices])
+        curv_lat_norm = curv_lat * norm_factor
+        curv_lat_norm_sub = curv_lat_norm[sampled_indices]
+        # Subsample empirical curvature to match subset for error computation
+        curv_in_sub = curv_in[sampled_indices]
+        curv_rec_sub = curv_rec[sampled_indices]
+        curv_lat_sub = curv_lat[sampled_indices]
+    else:
+        curv_in_sub = np.zeros(n_points)
+        curv_rec_sub = np.zeros(n_points)
+        curv_lat_sub = np.zeros(n_points)
+        curv_lat_norm_sub = np.zeros(n_points)
+        curv_lat_norm = np.zeros(len(labels))
+        curv_in = np.zeros(len(labels))
+        curv_lat = np.zeros(len(labels))
+        curv_rec = np.zeros(len(labels))
     if config.compute_true_curv:
-        _, _, curv_true = compute_curvature_true(config, labels_sub)
+        _, _, curv_true = compute_curvature_true(config=config, labels=labels_sub, n_grid_points=n_points)
     else:
-        curv_true = np.zeros(len(labels_sub))
+        curv_true = np.zeros(n_points)
     if config.compute_learned_curv:
-        _, _, _, curv_learned = compute_curvature_learned(config, model, latents_sub, labels_sub)
+        _, _, _, curv_learned = compute_curvature_learned(config=config, model=model, latent_vectors=latents_sub,
+                                                          labels=labels_sub, n_grid_points=len(labels_sub))
     else:
-        curv_learned = np.zeros(len(labels_sub))
+        curv_learned = np.zeros(n_points)
 
-    # Subsample empirical curvature to match subset for error computation
-    curv_in_sub = curv_in[sampled_indices]
-    curv_rec_sub = curv_rec[sampled_indices]
-    curv_lat_sub = curv_lat[sampled_indices]
-
-    points_sub = (inputs_sub, latents_sub, recons_sub)
     curvatures_sub = (labels_sub, curv_in_sub, curv_rec_sub, curv_lat_sub, curv_lat_norm_sub, curv_true,
                       curv_learned)
     curvatures_emp_full = (labels, curv_in, curv_lat, curv_lat_norm, curv_rec)
 
+    points_sub = (inputs_sub, latents_sub, recons_sub)
     return points_sub, curvatures_sub, curvatures_emp_full
 
 
