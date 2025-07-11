@@ -81,7 +81,7 @@ def get_learned_immersion(model, config):
 
     if config.model_type == 'EuclideanVAE':
         return immersion_euclidean
-    if config.model_type in {'VonMisesVAE', 'VMFSphericalVAE', 'VMToroidalVAE', 'SphericalAE', 'ToroidalAE'}:
+    if config.model_type in {'VonMisesVAE', 'VMFSphericalVAE', 'VMFToroidalVAE','VMToroidalVAE', 'SphericalAE', 'ToroidalAE'}:
         return immersion_vm
     else:
         raise InvalidConfigError(f"Unknown model type: {config.model_type}")
@@ -206,15 +206,16 @@ def get_true_immersion(config):
 
 
 def get_z_grid(config, n_grid_points):
+    eps = 1e-4
     if config.dataset_name in {"s1_synthetic", "scrunchy", "scrunchy_dim_n"}:
-        return torch.linspace(0, 2 * gs.pi, n_grid_points)
+        z_grid = torch.linspace(eps, 2 * gs.pi - eps, n_grid_points)
     elif config.dataset_name in {"s2_synthetic", "sphere"}:
-        thetas = gs.linspace(0.01, gs.pi, int(np.sqrt(n_grid_points)))
-        phis = gs.linspace(0, 2 * gs.pi, int(np.sqrt(n_grid_points)))
-        return torch.cartesian_prod(thetas, phis)
+        thetas = gs.linspace(0.01, gs.pi - eps, int(np.sqrt(n_grid_points)))
+        phis = gs.linspace(eps, 2 * gs.pi - eps, int(np.sqrt(n_grid_points)))
+        z_grid = torch.cartesian_prod(thetas, phis)
     elif config.dataset_name == "t2_synthetic":
-        thetas = gs.linspace(0, 2 * gs.pi, int(np.sqrt(n_grid_points)))
-        phis = gs.linspace(0, 2 * gs.pi, int(np.sqrt(n_grid_points)))
+        thetas = gs.linspace(eps, 2 * gs.pi - eps, int(np.sqrt(n_grid_points)))
+        phis = gs.linspace(eps, 2 * gs.pi - eps, int(np.sqrt(n_grid_points)))
         z_grid = torch.cartesian_prod(thetas, phis)
     else:
         raise InvalidConfigError(f"Unknown dataset: {config.dataset_name}")
@@ -253,13 +254,26 @@ def shift_z_grid(z_grid, anchore, config):
 
     # 1D case: Circle (S¹)
     if z_grid.ndim == 1:
-        x, y = anchore
-        angle = circle_inverse(x, y)
-        # Compute circular distance to each point in grid
-        dists = torch.remainder(z_grid - angle + torch.pi, 2 * torch.pi) - torch.pi
+        anchore1, anchore2 = anchore
+        x1, y1 = anchore1
+        x2, y2 = anchore2
+        angle1 = circle_inverse(x1, y1)
+        angle2 = circle_inverse(x2, y2)
+
+        # Compute circular distances from angle1 to all z_grid points
+        dists = torch.remainder(z_grid - angle1 + torch.pi, 2 * torch.pi) - torch.pi
         idx_min = torch.argmin(torch.abs(dists))
-        # Circular shift
         z_grid_shifted = torch.roll(z_grid, -idx_min.item(), dims=0)
+
+        # After shifting, align angle2 and decide orientation
+        shifted_angles = torch.remainder(z_grid_shifted - z_grid_shifted[0], 2 * torch.pi)
+        angle2_shifted = torch.remainder(angle2 - angle1, 2 * torch.pi)
+        idx2 = torch.argmin(torch.abs(shifted_angles - angle2_shifted))
+
+        # If angle2 appears before angle1 in the grid, flip
+        if idx2 < torch.numel(z_grid) // 2:
+            z_grid_shifted = torch.flip(z_grid_shifted, dims=[0])
+
         return z_grid_shifted
 
     # 2D case: Sphere (S²) or Torus (T²)
@@ -285,7 +299,7 @@ def shift_z_grid(z_grid, anchore, config):
     return z_grid  # fallback
 
 
-def get_vectors(config, model, data_loader, n_samples):
+def get_vectors(config, model, data_loader, n_samples, save_dir="./learned_vectors"):
     if config.verbose:
         print("Forwarding data through model to compute latents and recons...")
 
@@ -297,7 +311,7 @@ def get_vectors(config, model, data_loader, n_samples):
             x = x.to(config.device)
             y = y.to(config.device)
 
-            if config.model_type in {"EuclideanVAE", "VMToroidalVAE", "VMFSphericalVAE"}:
+            if config.model_type in {"EuclideanVAE", "VMToroidalVAE", "VMFToroidalVAE", "VMFSphericalVAE"}:
                 z, x_recon, _ = model(x)
             elif config.model_type in {"EuclideanAE", "ParamAE", "SphericalAE", "ToroidalAE"}:
                 angles, z, x_recon = model(x)
@@ -313,6 +327,17 @@ def get_vectors(config, model, data_loader, n_samples):
     latents = torch.cat(latents, dim=0)
     recons = torch.cat(recons, dim=0)
     labels = torch.cat(labels, dim=0)
+
+    if save_dir is not None:
+        os.makedirs(save_dir, exist_ok=True)
+        name = f"vectors_{config.experiment}_.pt"
+        save_path = os.path.join(save_dir, name)
+        torch.save({
+            'inputs': inputs,
+            'latents': latents,
+            'recons': recons,
+            'labels': labels
+        }, save_path)
 
     n_total = latents.shape[0]
     n_samples = min(n_samples, n_total)
@@ -362,12 +387,11 @@ def _compute_curvature(z_grid, immersion, dim, embedding_dim):
         dim, embedding_dim, immersion, equip=False
     )
     neural_manifold.equip_with_metric(PullbackMetric)
+    torch.unsqueeze(z_grid[0], dim=0)
     if dim == 1:
         curv = gs.zeros(len(z_grid), embedding_dim)
         for i, z in tqdm(enumerate(z_grid), desc="Computing curvature from immersion (Manifold Dim = 1)",
                          total=len(z_grid), leave=False):
-            if not torch.is_tensor(z):
-                z = torch.tensor(z)
             z = torch.unsqueeze(z, dim=0)
             curv[i, :] = neural_manifold.metric.mean_curvature_vector(z)
     else:
@@ -387,20 +411,38 @@ def compute_curvature_learned(config, model, latent_vectors=None, labels=None, n
         print("Computing learned curvature...")
     if config.model_type == 'EuclideanVAE':
         z_grid = latent_vectors
-    elif config.model_type in {'VMFSphericalVAE', 'VMToroidalVAE', 'SphericalAE', 'ToroidalAE'}:
-        z_grid = get_z_grid(config, n_grid_points)
-        z_grid = shift_z_grid(z_grid, latent_vectors[0], config)
+    elif config.model_type in {'VMFSphericalVAE', "VMFToroidalVAE", 'SphericalAE', 'ToroidalAE'}:
+        if config.latent_dim == 2:
+            anchore = (latent_vectors[0], latent_vectors[10])
+            z_grid = get_z_grid(config=config, n_grid_points=n_grid_points)
+            z_grid = shift_z_grid(z_grid, anchore, config)
+        elif config.latent_dim == 3:
+            z_grid = get_z_grid(config=config, n_grid_points=n_grid_points)
+        else:
+            raise NotImplementedError
+    elif config.model_type == 'VMToroidalVAE':
+        z_grid = get_z_grid(config=config, n_grid_points=n_grid_points)
     else:
         raise InvalidConfigError(f"Unknown model type: {config.model_type}")
-    immersion = get_learned_immersion(model, config)
-    manifold_dim = z_grid.shape[1] if z_grid.ndim > 1 else 1
-    curv, curv_norm = _compute_curvature(z_grid, immersion, manifold_dim, config.embedding_dim)
+    immersion = get_learned_immersion(model=model, config=config)
+    if config.dataset_name in {"s1_synthetic", "interlocking_rings_synthetic", "scrunchy", "clelia_curve", "8_curve",
+                               "flower_scrunchy", "scrunchy_dim_n"}:
+        manifold_dim = 1
+    elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "sphere", "sphere_high_dim", "torus", "wiggling_tube", "interlocked_tori", "nested_spheres"}:
+        manifold_dim = 2
+    else:
+        raise NotImplementedError({"unknown dataset"})
+    curv, curv_norm = _compute_curvature(z_grid=z_grid, immersion=immersion, dim=manifold_dim, embedding_dim=config.embedding_dim)
     return z_grid, labels, curv, curv_norm
 
 
 def compute_curvature_true(config, labels=None, n_grid_points=2000, cache_dir="./curvature_cache"):
     os.makedirs(cache_dir, exist_ok=True)
-    name = f"{config.dataset_name}.pt"
+    if config.dataset_name in {"s1_synthetic","s2_synthetic","t2_synthetic","scrunchy","scrunchy_dim_n"}:
+        deformation = config.geodesic_distortion_amp
+    else:
+        deformation = config.deformation_amp
+    name = f"{config.dataset_name}_{config.n_points_pullback_curv}_{deformation}.pt"
     cache_path = os.path.join(cache_dir, name)
 
     if os.path.exists(cache_path):
@@ -605,7 +647,7 @@ def estimate_curvature_2d_quadric(points, k=200):
     return np.array(curvatures)
 
 
-def compute_all_curvatures(config, model, recons, latents, inputs, labels):
+def compute_all_curvatures(config, model, recons, latents, inputs, labels, save_dir="./curvatures"):
     # Compute pullback curvature on (ordered) subset of points to reduce computation time
     n_total = len(labels)
     n_points = int(np.sqrt(min(config.n_points_pullback_curv, n_total)))**2
@@ -654,6 +696,21 @@ def compute_all_curvatures(config, model, recons, latents, inputs, labels):
     curvatures_emp_full = (labels, curv_in, curv_lat, curv_lat_norm, curv_rec)
 
     points_sub = (inputs_sub, latents_sub, recons_sub)
+
+    if save_dir is not None:
+        os.makedirs(save_dir, exist_ok=True)
+        filename = f"curvatures_{config.experiment}.pt"
+        save_path = os.path.join(save_dir, filename)
+
+        torch.save({
+            'curvatures_sub': curvatures_sub,
+            'curvatures_emp_full': curvatures_emp_full,
+            'points_sub': points_sub
+        }, save_path)
+
+        if config.verbose:
+            print(f"Saved curvatures to {save_path}")
+
     return points_sub, curvatures_sub, curvatures_emp_full
 
 

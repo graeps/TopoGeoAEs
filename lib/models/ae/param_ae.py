@@ -78,4 +78,4 @@ class ParamAE(nn.Module):
         z = self.parameterize(s)
         x_recon = self.decode(z)
 
-        return z, x_recon
+        return s, z, x_recon

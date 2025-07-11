@@ -821,9 +821,6 @@ def get_scrunchy_dim_n(deformation_amp, embedding_dim, translation, rotation, de
 
 
 def load_scrunchy_dim_n(n_points, noise_var, deformation_amp, embedding_dim, translation, rotation, random_seed=42):
-    gs.random.seed(random_seed)
-    torch.manual_seed(random_seed)
-
     rot = torch.eye(embedding_dim)
     if rotation == "random":
         rot = SpecialOrthogonal(n=embedding_dim).random_point()
@@ -832,7 +829,6 @@ def load_scrunchy_dim_n(n_points, noise_var, deformation_amp, embedding_dim, tra
         trans = 100 * torch.rand(embedding_dim)
     immersion = get_scrunchy_dim_n(deformation_amp=deformation_amp, embedding_dim=embedding_dim, translation=trans,
                                    rotation=rot)
-
     angles = torch.linspace(0, 2 * torch.pi, n_points)
     data = torch.stack([immersion(angle) for angle in angles])
 

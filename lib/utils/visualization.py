@@ -15,11 +15,13 @@ from scipy.interpolate import griddata, RBFInterpolator
 from .curvature import compute_curvature_learned, compute_curvature_error, \
     compute_curvature_true, estimate_curvature_1d_quadric, \
     compute_all_curvatures, get_vectors, compute_curvature_error_mse, compute_curvature_error_linf, \
-    compute_curvature_error_smape
+    compute_curvature_error_smape, get_z_grid
 from .topology import compare_persistent_homology
 
 import plotly.graph_objs as go
 from plotly.subplots import make_subplots
+import plotly.io as pio
+
 
 
 def show_training_history(config, history):
@@ -478,47 +480,49 @@ def curvature_compute_plot_euclidean(config, model):
 
 
 def plot_curvature_norms(angles, curvature_norms, config, norm_val, profile_type):
-    fig = plt.figure(figsize=(8, 4))  # smaller figure
+    fig = plt.figure(figsize=(12, 6))  # increased size for clarity
     colormap = plt.get_cmap("hsv")
 
-    if norm_val is not None:
+    # Handle curvature normalization safely
+    if norm_val is not None and norm_val > 0:
         color_norm = mpl.colors.Normalize(0.0, norm_val)
     else:
-        color_norm = mpl.colors.Normalize(0.0, max(curvature_norms))
+        eps = 1e-3
+        color_norm = mpl.colors.Normalize(0.0, max(curvature_norms) + eps)
 
-    if config.dataset_name in {"s1_synthetic", "interlocking_rings_synthetic", "scrunchy_synthetic"}:
+    if config.dataset_name in {"s1_synthetic", "scrunchy_dim_n"}:
         ax1 = fig.add_subplot(121)
         ax1.plot(angles, curvature_norms, linewidth=2)
         ax1.set_xlabel("angle", fontsize=12)
         ax1.set_ylabel("mean curvature norm", fontsize=12)
+        ax1.set_title(f"{profile_type} profile", fontsize=14)
 
         ax2 = fig.add_subplot(122, projection="polar")
         sc = ax2.scatter(
             angles,
             np.ones_like(angles),
             c=curvature_norms,
-            s=50,  # smaller markers
+            s=50,
             cmap=colormap,
             norm=color_norm,
             linewidths=0,
         )
         ax2.set_yticks([])
-        ax2.set_xlabel("angle", fontsize=12)
-
-        ax1.set_title(f"{profile_type} profile", fontsize=14)
         ax2.set_title(f"{profile_type} profile", fontsize=14)
 
-    elif config.dataset_name in {"s2_synthetic", "t2_synthetic"}:
+    elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "sphere"}:
         ax = fig.add_subplot(111, projection="3d")
 
-        if config.dataset_name == "s2_synthetic":
-            x = config.radius * [np.sin(a[0]) * np.cos(a[1]) for a in angles]
-            y = config.radius * [np.sin(a[0]) * np.sin(a[1]) for a in angles]
-            z = config.radius * [np.cos(a[0]) for a in angles]
+        if config.dataset_name in {"s2_synthetic","sphere"}:
+            x = config.radius * np.sin(angles[:, 0]) * np.cos(angles[:, 1])
+            y = config.radius * np.sin(angles[:, 0]) * np.sin(angles[:, 1])
+            z = config.radius * np.cos(angles[:, 0])
         else:  # t2_synthetic
-            x = [(config.major_radius - config.minor_radius * np.cos(a[0])) * np.cos(a[1]) for a in angles]
-            y = [(config.major_radius - config.minor_radius * np.cos(a[0])) * np.sin(a[1]) for a in angles]
-            z = [config.minor_radius * np.sin(a[0]) for a in angles]
+            theta = angles[:, 0]
+            phi = angles[:, 1]
+            x = (config.major_radius - config.minor_radius * np.cos(theta)) * np.cos(phi)
+            y = (config.major_radius - config.minor_radius * np.cos(theta)) * np.sin(phi)
+            z = config.minor_radius * np.sin(theta)
 
         sc = ax.scatter3D(x, y, z, s=50, c=curvature_norms, cmap="Spectral", norm=color_norm)
         plt.colorbar(sc, ax=ax, shrink=0.6)
@@ -531,8 +535,51 @@ def plot_curvature_norms(angles, curvature_norms, config, norm_val, profile_type
             ax.set_zlim(-r, r)
             plt.axis("off")
 
+    else:
+        raise NotImplementedError(f"Dataset {config.dataset_name} not supported.")
+
     plt.tight_layout()
-    return fig
+
+    if config.log_dir is not None:
+        fname = f"heatmaps_template_manifold_{profile_type}_{config.model_type}.png"
+        path = os.path.join(config.log_dir, fname)
+        plt.savefig(path)
+        print(f"Saved curvature norm plot to: {path}")
+
+    plt.close(fig)
+
+    if config.dataset_name in {"s2_synthetic", "t2_synthetic","sphere"}:
+        # Add Plotly export
+        plotly_fig = go.Figure(
+            data=[
+                go.Scatter3d(
+                    x=x,
+                    y=y,
+                    z=z,
+                    mode="markers",
+                    marker=dict(
+                        size=4,
+                        color=curvature_norms,
+                        colorscale="Viridis",
+                        opacity=0.8,
+                        colorbar=dict(title="Curvature Norm")
+                    ),
+                )
+            ]
+        )
+        plotly_fig.update_layout(
+            scene=dict(
+                xaxis_title="X",
+                yaxis_title="Y",
+                zaxis_title="Z"
+            ),
+            title=dict(text=f"{profile_type.capitalize()} Curvature Norm", x=0.5),
+        )
+
+        if config.log_dir is not None:
+            html_path = os.path.join(config.log_dir, f"curvature_norm_{profile_type}_{config.model_type}.html")
+            pio.write_html(plotly_fig, html_path)
+            print(f"Saved interactive plot to: {html_path}")
 
 
 def scatter_curvature_heatmaps(config, points, points_sub, curv_true, curv_in, curv_rec, curv_lat,
@@ -657,7 +704,8 @@ def plot_curvatures_1d(labels, curvature_true, curvature_inputs, curvature_recon
 
 def plot_curvatures_2d(labels, labels_sub, curv_true, curv_in, curv_rec, curv_lat, curv_learned, config, entity=None):
     grid_res = 100
-    if config.dataset_name in {"sphere", "sphere_high_dim", "nested_spheres", "nested_spheres_high_dim"}:
+    if config.dataset_name in {"sphere", "s2_synthetic", "sphere_high_dim", "nested_spheres",
+                               "nested_spheres_high_dim"}:
         grid_x, grid_y = np.meshgrid(np.linspace(0, np.pi, int(grid_res // 2)), np.linspace(0, 2 * np.pi, grid_res))
     else:
         grid_x, grid_y = np.meshgrid(np.linspace(0, 2 * np.pi, grid_res), np.linspace(0, 2 * np.pi, grid_res))
@@ -850,8 +898,16 @@ def _plot_all_curvatures_from_vectors(config, model, recons, latents, inputs, la
         plot_curvatures_2d(labels=labels, labels_sub=labels_sub, curv_true=curv_true, curv_in=curv_in,
                            curv_rec=curv_rec, curv_lat=curv_lat, curv_learned=curv_learned,
                            config=config)
-        scatter_curvature_heatmaps(config, points=points, points_sub=points_sub, curv_true=curv_true,
-                                   curv_in=curv_in, curv_rec=curv_rec, curv_learned=curv_learned, curv_lat=curv_lat)
+        if config.model_type in {"EuclideanVAE", "EuclideanAE"}:
+            scatter_curvature_heatmaps(config, points=points, points_sub=points_sub, curv_true=curv_true,
+                                       curv_in=curv_in, curv_rec=curv_rec, curv_learned=curv_learned, curv_lat=curv_lat)
+        elif config.model_type in {"VMFSphericalVAE", "VMFToroidalVAE", "VMToroidalVAE", "ToroidalAE", "SphericalAE"}:
+            z_grid = get_z_grid(config,config.n_points_pullback_curv)
+            plot_curvature_norms(angles=z_grid, curvature_norms=curv_true, config=config, norm_val=None, profile_type="true")
+            plot_curvature_norms(angles=z_grid, curvature_norms=curv_learned, config=config, norm_val=None, profile_type="learned")
+        else:
+            raise NotImplementedError
+
     elif labels.ndim == 2 and labels.shape[1] == 3:
         entity_indices = labels[:, 0]
         entity_indices_sub = labels_sub[:, 0]
@@ -1050,73 +1106,6 @@ def plot_curvature_persistence(config, model, data_loader):
 
 def normalize(arr):
     return (arr - np.min(arr)) / (np.max(arr) - np.min(arr) + 1e-8)
-
-
-def plot_neural_manifold_learned(curv_norm_learned_profile, config, labels):
-    if config.dataset_name == "experimental":
-        stats = [
-            "mean_velocities",
-            "median_velocities",
-            "std_velocities",
-            "min_velocities",
-            "max_velocities",
-        ]
-        cmaps = ["viridis", "viridis", "magma", "Blues", "Reds"]
-
-        fig, axes = plt.subplots(
-            nrows=1,
-            ncols=len(stats),
-            figsize=(10, 7),
-            subplot_kw={"projection": "polar"},
-        )
-        for i_stat, stat_velocities in enumerate(stats):
-            ax = axes[i_stat]
-            ax.scatter(
-                # Note: using the geodesic distance makes the plot
-                # reparameterization invariant.
-                # However, the computation is extremely slow, thus
-                # we recommend using z_grid for the main pipeline
-                # and computing geodesic_dist in the notebook 07
-                # after having selected a run.
-                curv_norm_learned_profile["z_grid"],
-                1 / curv_norm_learned_profile["curv_norm_learned"],
-                c=curv_norm_learned_profile[stat_velocities],
-                cmap=cmaps[i_stat],
-            )
-            ax.plot(
-                curv_norm_learned_profile["z_grid"],
-                1 / curv_norm_learned_profile["curv_norm_learned"],
-                c="black",
-            )
-            ax.set_rlabel_position(-22.5)  # Move radial labels away from plotted line
-            ax.grid(True)
-            ax.set_title("Color: " + stat_velocities, va="bottom")
-            fig.tight_layout()
-    else:
-        fig, ax = plt.subplots(
-            nrows=1, ncols=1, figsize=(20, 4), subplot_kw={"projection": "polar"}
-        )
-
-        ax.scatter(
-            # Note: using the geodesic distance makes the plot
-            # reparameterization invariant.
-            # However, the computation is extremely slow, thus
-            # we recommend using z_grid for the main pipeline
-            # and computing geodesic_dist in the notebook 07
-            # after having selected a run.
-            curv_norm_learned_profile["z_grid"],
-            1 / curv_norm_learned_profile["curv_norm_learned"],
-        )
-        ax.plot(
-            curv_norm_learned_profile["z_grid"],
-            1 / curv_norm_learned_profile["curv_norm_learned"],
-            c="black",
-        )
-        ax.set_rlabel_position(-22.5)  # Move radial labels away from plotted line
-        ax.grid(True)
-        fig.tight_layout()
-
-    return fig
 
 
 def show_recon_mnist(model, loader, device="cpu"):

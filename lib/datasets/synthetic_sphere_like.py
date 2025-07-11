@@ -57,8 +57,9 @@ def load_s2_synthetic(
     immersion = get_s2_synthetic_immersion(radius, geodesic_distortion_amp, embedding_dim, rot)
 
     sqrt_ntimes = int(gs.sqrt(n_times))
-    thetas = gs.linspace(0.0001, gs.pi, sqrt_ntimes)
-    phis = gs.linspace(0, 2 * gs.pi, sqrt_ntimes)
+    eps = 1e-4
+    thetas = gs.linspace(0.01, gs.pi - eps, sqrt_ntimes)
+    phis = gs.linspace(eps , 2 * gs.pi - eps, sqrt_ntimes)
 
     angle_grid = torch.cartesian_prod(thetas, phis)
     data = torch.stack([immersion(pair) for pair in angle_grid])
@@ -243,6 +244,12 @@ def get_s1_synthetic_immersion(
 
 def get_s2_synthetic_immersion(radius, geodesic_distortion_amp, embedding_dim, rot):
     """Returns a function mapping S² angles to R^embedding_dim with distortion."""
+
+    def spherical(theta, phi):
+        x = gs.sin(theta) * gs.cos(phi)
+        y = gs.sin(theta) * gs.sin(phi)
+        z = gs.cos(theta)
+        return gs.array([x, y, z])
     def immersion(angle_pair):
         theta, phi = angle_pair
         amplitude = (
@@ -250,11 +257,7 @@ def get_s2_synthetic_immersion(radius, geodesic_distortion_amp, embedding_dim, r
                 + geodesic_distortion_amp * gs.exp(-5 * (theta - gs.pi) ** 2)
         )
 
-        x = radius * gs.sin(theta) * gs.cos(phi)
-        y = radius * gs.sin(theta) * gs.sin(phi)
-        z = radius * gs.cos(theta)
-
-        point = amplitude * gs.array([x, y, z])
+        point = amplitude * spherical(theta, phi)
         point = gs.squeeze(point, axis=-1)
         if embedding_dim > 3:
             point = gs.concatenate([point, gs.zeros(embedding_dim - 3)])

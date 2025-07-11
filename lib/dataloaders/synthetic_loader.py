@@ -21,7 +21,6 @@ def load_synthetic_ds(config):
             embedding_dim=config.embedding_dim,
             noise_var=config.noise_var,
             geodesic_distortion_func=config.geodesic_distortion_func,
-            random_seed=config.random_seed,
         )
     elif config.dataset_name == "scrunchy":
         dataset, labels = load_scrunchy(
@@ -32,7 +31,6 @@ def load_synthetic_ds(config):
             geodesic_distortion_amp=config.geodesic_distortion_amp,
             embedding_dim=config.embedding_dim,
             noise_var=config.noise_var,
-            random_seed=config.random_seed,
         )
     elif config.dataset_name == "flower_scrunchy":
         dataset, labels = load_flower_scrunchy(
@@ -43,7 +41,6 @@ def load_synthetic_ds(config):
             geodesic_distortion_amp=config.geodesic_distortion_amp,
             embedding_dim=config.embedding_dim,
             noise_var=config.noise_var,
-            random_seed=config.random_seed,
         )
     elif config.dataset_name == "scrunchy_dim_n":
         dataset, labels = load_scrunchy_dim_n(
@@ -53,13 +50,11 @@ def load_synthetic_ds(config):
             noise_var=config.noise_var,
             translation=config.translation,
             rotation=config.rotation,
-            random_seed=config.random_seed,
         )
     elif config.dataset_name == "interlocking_rings_synthetic":
         dataset, labels = load_interlocking_rings_synthetic(
             rotation=config.rotation,
             embedding_dim=config.embedding_dim,
-            noise_var=config.noise_var,
         )
     elif config.dataset_name == "s2_synthetic":
         dataset, labels = load_s2_synthetic(
@@ -69,7 +64,6 @@ def load_synthetic_ds(config):
             geodesic_distortion_amp=config.geodesic_distortion_amp,
             embedding_dim=config.embedding_dim,
             noise_var=config.noise_var,
-            random_seed=config.random_seed,
         )
     elif config.dataset_name == "t2_synthetic":
         dataset, labels = load_t2_synthetic(
@@ -80,7 +74,6 @@ def load_synthetic_ds(config):
             geodesic_distortion_amp=config.geodesic_distortion_amp,
             embedding_dim=config.embedding_dim,
             noise_var=config.noise_var,
-            random_seed=config.random_seed,
         )
     elif config.dataset_name == "torus":
         dataset, labels = load_torus(n_points=config.n_times, major_radius=config.major_radius,
@@ -88,51 +81,44 @@ def load_synthetic_ds(config):
                                      noise_var=config.noise_var,
                                      deformation_amp=config.deformation_amp,
                                      embedding_dim=config.embedding_dim,
-                                     translation=config.translation, rotation=config.rotation,
-                                     random_seed=config.random_seed, )
+                                     translation=config.translation, rotation=config.rotation)
     elif config.dataset_name == "interlocked_tori":
         dataset, labels = load_interlocked_tori(n_points=config.n_times, major_radius=config.major_radius,
                                                 minor_radius=config.minor_radius,
                                                 noise_var=config.noise_var, embedding_dim=config.embedding_dim,
-                                                deformation_amp=config.deformation_amp, rotation=config.rotation,
-                                                random_seed=config.random_seed, )
+                                                deformation_amp=config.deformation_amp, rotation=config.rotation)
     elif config.dataset_name == "interlocked_tubes":
         dataset, labels = load_interlocked_tubes(n_phi=config.n_phi, n_theta=config.n_theta,
                                                  minor_radius=config.minor_radius, noise_var=config.noise_var,
                                                  wiggling_dim=config.wiggling_dim, embedding_dim=config.embedding_dim,
-                                                 deformation_amp=config.deformation_amp, rotation=config.rotation,
-                                                 random_seed=config.random_seed)
+                                                 deformation_amp=config.deformation_amp, rotation=config.rotation)
     elif config.dataset_name == "genus_3":
         dataset, labels = generate_genus3(n_points=config.n_times, noise_var=config.noise_var,
                                           embedding_dim=config.embedding_dim, translation=config.translation,
-                                          rotation=config.rotation, random_seed=config.random_seed, )
+                                          rotation=config.rotation)
     elif config.dataset_name == "wiggling_tube":
         dataset, labels = load_wiggling_tube(n_phi=config.n_phi, n_theta=config.n_theta,
                                              minor_radius=config.minor_radius, noise_var=config.noise_var,
                                              wiggling_dim=config.wiggling_dim, embedding_dim=config.embedding_dim,
-                                             deformation_amp=config.deformation_amp, rotation=config.rotation,
-                                             random_seed=config.random_seed)
+                                             deformation_amp=config.deformation_amp, rotation=config.rotation)
     elif config.dataset_name == "sphere":
         dataset, labels = load_sphere(n_points=config.n_times, radius=config.radius,
                                       noise_var=config.noise_var, deformation_amp=config.deformation_amp,
                                       embedding_dim=config.embedding_dim,
-                                      translation=config.translation, rotation=config.rotation,
-                                      random_seed=config.random_seed, )
+                                      translation=config.translation, rotation=config.rotation)
     elif config.dataset_name == "nested_spheres":
         dataset, labels = load_nested_spheres(n_points=config.n_times, minor_radius=config.minor_radius,
                                               mid_radius=config.mid_radius, major_radius=config.major_radius,
                                               noise_var=config.noise_var, deformation_amp=config.deformation_amp,
                                               embedding_dim=config.embedding_dim,
-                                              translation=config.translation, rotation=config.rotation,
-                                              random_seed=config.random_seed, )
+                                              translation=config.translation, rotation=config.rotation)
 
     elif config.dataset_name == "sphere_high_dim":
         dataset, labels = load_sphere_high_dim_bump(n_points=config.n_times, radius=config.radius,
                                                     noise_var=config.noise_var,
                                                     deformation_amp=config.deformation_amp,
                                                     embedding_dim=config.embedding_dim,
-                                                    translation=config.translation, rotation=config.rotation,
-                                                    random_seed=config.random_seed, )
+                                                    translation=config.translation, rotation=config.rotation)
     elif config.dataset_name == "nested_spheres_high_dim":
         dataset, labels = load_nested_spheres_high_dim_bump(n_points=config.n_times, minor_radius=config.minor_radius,
                                                             mid_radius=config.mid_radius,
@@ -141,17 +127,16 @@ def load_synthetic_ds(config):
                                                             deformation_amp=config.deformation_amp,
                                                             embedding_dim=config.embedding_dim,
                                                             translation=config.translation, rotation=config.rotation,
-                                                            enclosing_sphere=config.enclosing_sphere,
-                                                            random_seed=config.random_seed, )
+                                                            enclosing_sphere=config.enclosing_sphere)
     elif config.dataset_name == "clelia_curve":
         dataset, labels = load_clelia_curve(n_points=config.n_times, r=config.radius, c=config.clelia_c,
                                             noise_var=config.noise_var,
                                             embedding_dim=config.embedding_dim, translation=config.translation,
-                                            rotation=config.rotation, random_seed=config.random_seed, )
+                                            rotation=config.rotation)
     elif config.dataset_name == "8_curve":
         dataset, labels = load_8_curve(n_points=config.n_times, noise_var=config.noise_var,
                                        embedding_dim=config.embedding_dim, translation=config.rotation,
-                                       rotation=config.rotation, random_seed=config.random_seed, )
+                                       rotation=config.rotation)
     else:
         raise InvalidConfigError(f"Unknown dataset: {config.dataset_name}")
 

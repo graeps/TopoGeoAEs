@@ -11,6 +11,9 @@ mvae_dir = os.path.split(os.getcwd())[0]
 if mvae_dir not in sys.path:
     sys.path.append(mvae_dir)
 
+os.environ["GEOMSTATS_BACKEND"] = "pytorch"
+import geomstats.backend as gs  # noqa: E402
+
 import lib.dataloaders.synthetic_loader as synthetic_loader
 import lib.dataloaders.flat_torus_loader as flat_torus_loader
 import lib.models.vae.euclidean_vae as e_vae_model
@@ -56,6 +59,7 @@ def run_experiment(name=None, all_configs=None):
         print("--------------------------------------------------------------------------------------")
 
         torch.manual_seed(config.random_seed)
+        gs.random.seed(config.random_seed)
         np.random.seed(config.random_seed)
 
         if config.dataset_name == "flat_torus_embedding":

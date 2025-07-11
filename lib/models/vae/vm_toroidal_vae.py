@@ -5,7 +5,6 @@ import torch.nn as nn
 
 from ...distributions import VonMisesFisher
 
-
 class VMToroidalVAE(torch.nn.Module):
     def __init__(
             self,

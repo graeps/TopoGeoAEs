@@ -48,8 +48,6 @@ class VMFSphericalVAE(torch.nn.Module):
         z_mu = z_mu / z_mu.norm(dim=-1, keepdim=True)
         z_kappa = F.softplus(self.fc_z_kappa(h)) + 1
 
-        #print("z_mu, z_kappa", z_mu, z_kappa)
-
         return z_mu, z_kappa
 
     def reparameterize(self, posterior_params):

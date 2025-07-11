@@ -63,11 +63,11 @@ class MVAETrainer:
         else:
             dataloader = tqdm(self.train_loader, desc=f"Epoch {epoch + 1}/{self.num_epochs}", leave=False)
 
-        for batch_idx, (x, _) in enumerate(dataloader):
+        for batch_idx, (x, labels) in enumerate(dataloader):
             x = x.to(self.device)
             self.optimizer.zero_grad()
             z, x_recon, posterior_params = self.model(x)
-            loss, recon_loss, kl_loss, topo_loss = elbo(self.model.posterior_type, x, z, x_recon, posterior_params,
+            loss, recon_loss, kl_loss, topo_loss = elbo(self.model.posterior_type, x, z, x_recon, posterior_params, labels,
                                                         self.config)
             loss.backward()
             self.optimizer.step()
@@ -101,10 +101,10 @@ class MVAETrainer:
         test_topo_loss = 0
 
         with torch.no_grad():
-            for x, _ in self.test_loader:
+            for x, labels in self.test_loader:
                 x = x.to(self.device)
                 z, x_recon, posterior_params = self.model(x)
-                loss, recon_loss, kl_loss, topo_loss = elbo(self.model.posterior_type, x, z, x_recon, posterior_params,
+                loss, recon_loss, kl_loss, topo_loss = elbo(self.model.posterior_type, x, z, x_recon, posterior_params, labels,
                                                  self.config)
                 test_loss += loss.item()
                 test_recon_loss += recon_loss.item()

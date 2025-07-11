@@ -22,7 +22,7 @@ dependencies:
       - torch-topological
       - giotto-tda
 variables:
-  GEOMSTATS_BACKEND: "pytorch"
+  GEOMSTATS_BACKEND: 'pytorch'
 
 # update environment after changes:
 # conda env update --file conda-env.yaml --prune
