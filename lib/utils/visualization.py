@@ -23,7 +23,6 @@ from plotly.subplots import make_subplots
 import plotly.io as pio
 
 
-
 def show_training_history(config, history):
     loss_keys = [key.replace('train_', '') for key in history.keys() if key.startswith('train_')]
     unique_losses = sorted(set(loss_keys))
@@ -291,8 +290,8 @@ def _scatter_datapoints(ax, data, title, colors=None, cmap='hsv', pca_dim=3):
         ax.set_yticks([])
     elif d == 2:
         sc = ax.scatter(data[:, 0], data[:, 1], c=colors, cmap=cmap, s=dot_size, alpha=0.7)
-    elif d == 3:
-        sc = ax.scatter(data[:, 0], data[:, 1], data[:, 2], c=colors, cmap=cmap, s=dot_size, alpha=0.7)
+    # elif d == 3:
+    #     sc = ax.scatter(data[:, 0], data[:, 1], data[:, 2], c=colors, cmap=cmap, s=dot_size, alpha=0.7)
     else:
         data = PCA(n_components=pca_dim).fit_transform(data)
         if pca_dim == 2:
@@ -379,12 +378,12 @@ def curvature_compute_plot_vm(config, model, test_loader):
             "s1_synthetic",
     ):
         curv_norm_learned_profile["z_grid"] = z_grid
-    elif config.dataset_name in ("s2_synthetic", "t2_synthetic"):
+    elif config.dataset_name in ("s2_synthetic", "t2_synthetic", "torus"):
         curv_norm_learned_profile["z_grid_theta"] = z_grid[:, 0]
         curv_norm_learned_profile["z_grid_phi"] = z_grid[:, 1]
 
     norm_val = None
-    if config.dataset_name in ("s1_synthetic", "s2_synthetic", "t2_synthetic"):
+    if config.dataset_name in ("s1_synthetic", "s2_synthetic", "t2_synthetic", "torus"):
         print("Computing true curvature for synthetic data...")
         z_grid, _, curv_norms_true = compute_curvature_true(config, n_grid_points=config.n_grid_points)
         print("Computing curvature error for synthetic data...")
@@ -414,7 +413,7 @@ def curvature_compute_plot_vm(config, model, test_loader):
         norm_val=norm_val,
         profile_type="learned",
     )
-    if config.dataset_name in ("s1_synthetic", "s2_synthetic", "t2_synthetic"):
+    if config.dataset_name in ("s1_synthetic", "s2_synthetic", "t2_synthetic", "torus"):
         fig_curv_norms_true = plot_curvature_norms(
             angles=z_grid,
             curvature_norms=curv_norms_true,
@@ -510,10 +509,10 @@ def plot_curvature_norms(angles, curvature_norms, config, norm_val, profile_type
         ax2.set_yticks([])
         ax2.set_title(f"{profile_type} profile", fontsize=14)
 
-    elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "sphere"}:
+    elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "sphere", "torus"}:
         ax = fig.add_subplot(111, projection="3d")
 
-        if config.dataset_name in {"s2_synthetic","sphere"}:
+        if config.dataset_name in {"s2_synthetic", "sphere"}:
             x = config.radius * np.sin(angles[:, 0]) * np.cos(angles[:, 1])
             y = config.radius * np.sin(angles[:, 0]) * np.sin(angles[:, 1])
             z = config.radius * np.cos(angles[:, 0])
@@ -528,7 +527,7 @@ def plot_curvature_norms(angles, curvature_norms, config, norm_val, profile_type
         plt.colorbar(sc, ax=ax, shrink=0.6)
         ax.set_title(f"{profile_type} profile", fontsize=14)
 
-        if config.dataset_name == "t2_synthetic":
+        if config.dataset_name in {"t2_synthetic", "torus"}:
             r = config.major_radius + config.minor_radius
             ax.set_xlim(-r, r)
             ax.set_ylim(-r, r)
@@ -548,7 +547,7 @@ def plot_curvature_norms(angles, curvature_norms, config, norm_val, profile_type
 
     plt.close(fig)
 
-    if config.dataset_name in {"s2_synthetic", "t2_synthetic","sphere"}:
+    if config.dataset_name in {"s2_synthetic", "t2_synthetic", "sphere"}:
         # Add Plotly export
         plotly_fig = go.Figure(
             data=[
@@ -583,7 +582,7 @@ def plot_curvature_norms(angles, curvature_norms, config, norm_val, profile_type
 
 
 def scatter_curvature_heatmaps(config, points, points_sub, curv_true, curv_in, curv_rec, curv_lat,
-                               curv_learned, entity=None):
+                               curv_learned, z_grid, entity=None):
     inputs, latents, recons = points
     inputs_sub, latents_sub = points_sub
 
@@ -702,7 +701,8 @@ def plot_curvatures_1d(labels, curvature_true, curvature_inputs, curvature_recon
     plt.show()
 
 
-def plot_curvatures_2d(labels, labels_sub, curv_true, curv_in, curv_rec, curv_lat, curv_learned, config, entity=None):
+def plot_curvatures_2d(labels, labels_sub, curv_true, curv_in, curv_rec, curv_lat, curv_learned, z_grid, config,
+                       entity=None):
     grid_res = 100
     if config.dataset_name in {"sphere", "s2_synthetic", "sphere_high_dim", "nested_spheres",
                                "nested_spheres_high_dim"}:
@@ -768,9 +768,9 @@ def plot_curvatures_2d(labels, labels_sub, curv_true, curv_in, curv_rec, curv_la
 
     }
     if config.compute_true_curv:
-        surfaces["True Curvature on Input Data"] = interpolate(labels_sub, curv_true)
+        surfaces["True Curvature on Input Data"] = interpolate(z_grid, curv_true)
     if config.compute_learned_curv:
-        surfaces["Learned Curvature (pullback) on Latent Representation"] = interpolate(labels_sub, curv_learned)
+        surfaces["Learned Curvature (pullback) on Latent Representation"] = interpolate(z_grid, curv_learned)
     if config.compute_rec_curv:
         surfaces["Empirical Curvature on Reconstructed Data"] = interpolate(labels, curv_rec)
 
@@ -879,11 +879,11 @@ def plot_curvature_errors_and_stats(curv_true, curv_in, curv_rec,
 
 
 def _plot_all_curvatures_from_vectors(config, model, recons, latents, inputs, labels):
-    points_sub, curvatures_sub, curvatures_emp_full = compute_all_curvatures(config, model, recons, latents, inputs,
+    points_sub, curvatures_sub, curvatures_emp_full, points = compute_all_curvatures(config, model, recons, latents, inputs,
                                                                              labels)
     points = (inputs, latents, recons)
     inputs_sub, latents_sub, recons_sub = points_sub
-    labels_sub, curv_in_sub, curv_rec_sub, curv_lat_sub, curv_lat_norm_sub, curv_true, curv_learned = curvatures_sub
+    labels_sub, curv_in_sub, curv_rec_sub, curv_lat_sub, curv_lat_norm_sub, curv_true, curv_learned, curv_learned_rotated, z_grid = curvatures_sub
     labels, curv_in, curv_lat, curv_lat_norm, curv_rec = curvatures_emp_full
 
     # Plot curvatures over angles
@@ -895,16 +895,27 @@ def _plot_all_curvatures_from_vectors(config, model, recons, latents, inputs, la
                                    curv_in=curv_in, curv_rec=curv_rec, curv_learned=curv_learned, curv_lat=curv_lat)
     elif labels.ndim == 2 and labels.shape[1] == 2:
         points_sub = (inputs_sub, latents_sub)
-        plot_curvatures_2d(labels=labels, labels_sub=labels_sub, curv_true=curv_true, curv_in=curv_in,
-                           curv_rec=curv_rec, curv_lat=curv_lat, curv_learned=curv_learned,
-                           config=config)
+        if config.model_type in {"VMFSphericalVAE", "SphericalAE"}:
+            plot_curvatures_2d(labels=labels, labels_sub=labels_sub, curv_true=curv_true, curv_in=curv_in,
+                               curv_rec=curv_rec, curv_lat=curv_lat, curv_learned=curv_learned_rotated, z_grid=z_grid,
+                               config=config)
+        else:
+            plot_curvatures_2d(labels=labels, labels_sub=labels_sub, curv_true=curv_true, curv_in=curv_in,
+                               curv_rec=curv_rec, curv_lat=curv_lat, curv_learned=curv_learned, z_grid=z_grid,
+                               config=config)
         if config.model_type in {"EuclideanVAE", "EuclideanAE"}:
             scatter_curvature_heatmaps(config, points=points, points_sub=points_sub, curv_true=curv_true,
-                                       curv_in=curv_in, curv_rec=curv_rec, curv_learned=curv_learned, curv_lat=curv_lat)
-        elif config.model_type in {"VMFSphericalVAE", "VMFToroidalVAE", "VMToroidalVAE", "ToroidalAE", "SphericalAE"}:
-            z_grid = get_z_grid(config,config.n_points_pullback_curv)
-            plot_curvature_norms(angles=z_grid, curvature_norms=curv_true, config=config, norm_val=None, profile_type="true")
-            plot_curvature_norms(angles=z_grid, curvature_norms=curv_learned, config=config, norm_val=None, profile_type="learned")
+                                       curv_in=curv_in, curv_rec=curv_rec, curv_learned=curv_learned, curv_lat=curv_lat, z_grid=z_grid)
+        elif config.model_type in {"VMFToroidalVAE", "VMToroidalVAE", "ToroidalAE"}:
+            plot_curvature_norms(angles=z_grid, curvature_norms=curv_true, config=config, norm_val=None,
+                                 profile_type="true")
+            plot_curvature_norms(angles=z_grid, curvature_norms=curv_learned, config=config, norm_val=None,
+                                 profile_type="learned")
+        elif config.model_type in {"VMFSphericalVAE", "SphericalAE"}:
+            plot_curvature_norms(angles=z_grid, curvature_norms=curv_true, config=config, norm_val=None,
+                                 profile_type="true")
+            plot_curvature_norms(angles=z_grid, curvature_norms=curv_learned_rotated, config=config, norm_val=None,
+                                 profile_type="learned")
         else:
             raise NotImplementedError
 
@@ -935,17 +946,25 @@ def _plot_all_curvatures_from_vectors(config, model, recons, latents, inputs, la
             curv_learned_entity = curv_learned[mask_sub]
             plot_curvatures_2d(labels=angels, labels_sub=angels_sub, curv_true=curv_true_entity,
                                curv_in=curv_in_entity, curv_rec=curv_rec_entity, curv_lat=curv_lat_entity,
-                               curv_learned=curv_learned_entity, config=config, entity=entity)
+                               curv_learned=curv_learned_entity, z_grid=z_grid, config=config, entity=entity)
             scatter_curvature_heatmaps(config, points=points_entity, points_sub=points_sub_entity,
                                        curv_true=curv_true_entity,
                                        curv_in=curv_in_entity, curv_rec=curv_rec_entity,
-                                       curv_learned=curv_learned_entity, curv_lat=curv_lat_entity, entity=entity)
+                                       curv_learned=curv_learned_entity, z_grid=z_grid, curv_lat=curv_lat_entity,
+                                       entity=entity)
     else:
         raise NotImplementedError("Label dimension not supported for curvature plotting.")
 
-    plot_curvature_errors_and_stats(curv_true=curv_true, curv_in=curv_in_sub, curv_rec=curv_rec_sub,
-                                    curv_lat=curv_lat_sub, curv_lat_norm=curv_lat_norm_sub, curv_learned=curv_learned,
-                                    config=config)
+    if config.model_type in {"VMFSphericalVAE", "SphericalAE"}:
+        plot_curvature_errors_and_stats(curv_true=curv_true, curv_in=curv_in_sub, curv_rec=curv_rec_sub,
+                                        curv_lat=curv_lat_sub, curv_lat_norm=curv_lat_norm_sub,
+                                        curv_learned=curv_learned_rotated,
+                                        config=config)
+    else:
+        plot_curvature_errors_and_stats(curv_true=curv_true, curv_in=curv_in_sub, curv_rec=curv_rec_sub,
+                                        curv_lat=curv_lat_sub, curv_lat_norm=curv_lat_norm_sub,
+                                        curv_learned=curv_learned,
+                                        config=config)
 
 
 def plot_all_curvatures(config, model, data_loader):
