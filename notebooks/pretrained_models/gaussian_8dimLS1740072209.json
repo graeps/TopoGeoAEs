@@ -1,0 +1,1 @@
+{"data_dim": 784, "latent_dim": 8, "sftbeta": 1, "device": "cpu", "encoder_width": 128, "encoder_depth": 1, "decoder_width": 128, "decoder_depth": 1}
