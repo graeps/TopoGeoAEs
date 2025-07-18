@@ -3,7 +3,6 @@ import os
 import time
 
 import matplotlib as mpl
-from random import sample
 import pandas as pd
 import torch
 import numpy as np
@@ -13,9 +12,9 @@ from sklearn.decomposition import PCA
 from scipy.interpolate import griddata, RBFInterpolator
 
 from .curvature import compute_curvature_learned, compute_curvature_error, \
-    compute_curvature_true, estimate_curvature_1d_quadric, \
+    compute_curvature_true, \
     compute_all_curvatures, get_vectors, compute_curvature_error_mse, compute_curvature_error_linf, \
-    compute_curvature_error_smape, get_z_grid
+    compute_curvature_error_smape
 from .topology import compare_persistent_homology
 
 import plotly.graph_objs as go
@@ -300,8 +299,9 @@ def _scatter_datapoints(ax, data, title, colors=None, cmap='hsv', pca_dim=3):
             sc = ax.scatter(data[:, 0], data[:, 1], data[:, 2], c=colors, cmap=cmap, s=dot_size, alpha=0.7)
         pca_applied = True
 
-    title_suffix = " (PCA)" if pca_applied else ""
-    ax.set_title(f"{title}{title_suffix}")
+    if title is not None:
+        title_suffix = " (PCA)" if pca_applied else ""
+        ax.set_title(f"{title}{title_suffix}")
     ax.set_aspect('equal', adjustable='datalim')
 
     return sc
@@ -329,6 +329,7 @@ def plot_data_latents_recon(config, model, data_loader):
         pca_dim = 2
     else:
         pca_dim = 3
+
     # Dataset plot
     ax1 = fig.add_subplot(1, 3, 1, projection='3d' if inputs.shape[1] >= 3 and pca_dim == 3 else None)
     _scatter_datapoints(ax1, inputs, "Input Data", colors, cmap=color_map, pca_dim=pca_dim)
@@ -342,12 +343,40 @@ def plot_data_latents_recon(config, model, data_loader):
     _scatter_datapoints(ax3, recons, "Reconstructed Data", colors, cmap=color_map, pca_dim=pca_dim)
 
     plt.tight_layout()
+    plt.show()
 
+    # Save combined plot
     if config.log_dir is not None:
         save_path = os.path.join(config.log_dir, "input_latents_recons_plot.png")
         plt.savefig(save_path)
 
-    plt.show()
+        if config.log_dir is not None:
+            # Input Data
+            fig_input = plt.figure()
+            ax_input = fig_input.add_subplot(1, 1, 1,
+                                             projection='3d' if inputs.shape[1] >= 3 and pca_dim == 3 else None)
+            _scatter_datapoints(ax_input, inputs, None, colors, cmap=color_map, pca_dim=pca_dim)
+            fig_input.tight_layout()
+            fig_input.savefig(os.path.join(config.log_dir, "input_data.png"))
+            plt.close(fig_input)
+
+            # Latent Representation
+            fig_latent = plt.figure()
+            ax_latent = fig_latent.add_subplot(1, 1, 1,
+                                               projection='3d' if latents.shape[1] >= 3 and pca_dim == 3 else None)
+            _scatter_datapoints(ax_latent, latents, None, colors, cmap=color_map, pca_dim=pca_dim)
+            fig_latent.tight_layout()
+            fig_latent.savefig(os.path.join(config.log_dir, "latent_representation.png"))
+            plt.close(fig_latent)
+
+            # Reconstruction
+            fig_recon = plt.figure()
+            ax_recon = fig_recon.add_subplot(1, 1, 1,
+                                             projection='3d' if recons.shape[1] >= 3 and pca_dim == 3 else None)
+            _scatter_datapoints(ax_recon, recons, None, colors, cmap=color_map, pca_dim=pca_dim)
+            fig_recon.tight_layout()
+            fig_recon.savefig(os.path.join(config.log_dir, "reconstructed_data.png"))
+            plt.close(fig_recon)
 
 
 def curvature_compute_plot_vm(config, model, test_loader):
@@ -492,9 +521,9 @@ def plot_curvature_norms(angles, curvature_norms, config, norm_val, profile_type
     if config.dataset_name in {"s1_synthetic", "scrunchy_dim_n"}:
         ax1 = fig.add_subplot(121)
         ax1.plot(angles, curvature_norms, linewidth=2)
-        ax1.set_xlabel("angle", fontsize=12)
-        ax1.set_ylabel("mean curvature norm", fontsize=12)
-        ax1.set_title(f"{profile_type} profile", fontsize=14)
+        # ax1.set_xlabel("angle", fontsize=12)
+        # ax1.set_ylabel("mean curvature norm", fontsize=12)
+        # ax1.set_title(f"{profile_type} profile", fontsize=14, pad=20)
 
         ax2 = fig.add_subplot(122, projection="polar")
         sc = ax2.scatter(
@@ -507,7 +536,7 @@ def plot_curvature_norms(angles, curvature_norms, config, norm_val, profile_type
             linewidths=0,
         )
         ax2.set_yticks([])
-        ax2.set_title(f"{profile_type} profile", fontsize=14)
+        # ax2.set_title(f"{profile_type} profile", fontsize=14, pad=20)
 
     elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "sphere", "torus"}:
         ax = fig.add_subplot(111, projection="3d")
@@ -545,6 +574,7 @@ def plot_curvature_norms(angles, curvature_norms, config, norm_val, profile_type
         plt.savefig(path)
         print(f"Saved curvature norm plot to: {path}")
 
+    plt.show()
     plt.close(fig)
 
     if config.dataset_name in {"s2_synthetic", "t2_synthetic", "sphere"}:
@@ -581,37 +611,49 @@ def plot_curvature_norms(angles, curvature_norms, config, norm_val, profile_type
             print(f"Saved interactive plot to: {html_path}")
 
 
-def scatter_curvature_heatmaps(config, points, points_sub, curv_true, curv_in, curv_rec, curv_lat,
-                               curv_learned, z_grid, entity=None):
+def scatter_curvature_heatmaps(config, points, points_sub, z_grid, curv_true, curv_in, curv_rec, curv_lat,
+                               curv_learned, entity=None):
     inputs, latents, recons = points
     inputs_sub, latents_sub = points_sub
-
-    fig = plt.figure(figsize=(18, 10))
     color_map = 'rainbow'
 
     def plot_heatmap_group(heatmaps, suptitle, tag):
         num_heatmaps = len(heatmaps)
-        num_cols = 3  # Maximum number of plots per row
-        num_rows = (num_heatmaps + num_cols - 1) // num_cols  # Calculate number of rows required
+        num_cols = 3
+        num_rows = (num_heatmaps + num_cols - 1) // num_cols
 
         if config.dataset_name == "s1_synthetic":
             pca_dim = 2
         else:
             pca_dim = 3
 
+        # Main figure with all subplots
         fig = plt.figure(figsize=(18, 6 * num_rows))
-        for i, (title, (curv, points)) in enumerate(heatmaps.items(), 1):
+        for i, (title, (curv, pts)) in enumerate(heatmaps.items(), 1):
             ax = fig.add_subplot(num_rows, num_cols, i,
-                                 projection='3d' if points.shape[1] >= 3 and pca_dim == 3 else None)
-            sc = _scatter_datapoints(ax=ax, data=points, title=title, colors=curv, cmap=color_map, pca_dim=pca_dim)
+                                 projection='3d' if pts.shape[1] >= 3 and pca_dim == 3 else None)
+            sc = _scatter_datapoints(ax=ax, data=pts, title=title, colors=curv, cmap=color_map, pca_dim=pca_dim)
             fig.colorbar(sc, ax=ax, shrink=0.7)
+
+            # Individual figure for each heatmap
+            if getattr(config, "log_dir", None) is not None:
+                fig_indiv = plt.figure(figsize=(6, 6))
+                ax_indiv = fig_indiv.add_subplot(111,
+                                                 projection='3d' if pts.shape[1] >= 3 and pca_dim == 3 else None)
+                sc_indiv = _scatter_datapoints(ax=ax_indiv, data=pts, title=None, colors=curv, cmap=color_map,
+                                               pca_dim=pca_dim)
+                fig_indiv.colorbar(sc_indiv, ax=ax_indiv, shrink=0.7)
+                plt.tight_layout()
+                fname_indiv = f"heatmap_{tag}_{i}.png"
+                fig_indiv.savefig(os.path.join(config.log_dir, fname_indiv))
+                plt.close(fig_indiv)
+
         fig.suptitle(suptitle, fontsize=16)
-        plt.tight_layout(rect=[0, 0, 1, 0.96])  # Adjust layout to make room for the suptitle
+        plt.tight_layout(rect=[0, 0, 1, 0.96])
 
-        if config.log_dir is not None:
+        if getattr(config, "log_dir", None) is not None:
             fname = f"heatmap_{tag}.png"
-            plt.savefig(os.path.join(config.log_dir, fname))
-
+            fig.savefig(os.path.join(config.log_dir, fname))
         plt.show()
 
     heatmaps = {
@@ -621,83 +663,113 @@ def scatter_curvature_heatmaps(config, points, points_sub, curv_true, curv_in, c
 
     if config.compute_rec_curv:
         heatmaps["Quadric Fit Curvature Estimation on Recons"] = (curv_rec, recons)
-    if config.compute_true_curv:
-        heatmaps["True Curvature on Data Manifold"] = (curv_true, inputs_sub)
-    if config.compute_learned_curv:
-        heatmaps["Param. Curvature from Decoder"] = (curv_learned, latents_sub)
 
     if entity is not None:
-        plot_heatmap_group(heatmaps, f'Curvature Heatmap Comparison - Connected Components {int(entity)}',
-                           'curvature_heatmaps')
+        plot_heatmap_group(
+            heatmaps,
+            f'Curvature Heatmap Comparison - Connected Components {int(entity)}',
+            'curvature_heatmaps'
+        )
     else:
-        plot_heatmap_group(heatmaps, 'Curvature Heatmap Comparison', 'curvature_heatmaps')
+        plot_heatmap_group(
+            heatmaps,
+            'Curvature Heatmap Comparison',
+            'curvature_heatmaps'
+        )
 
 
-def plot_curvatures_1d(labels, curvature_true, curvature_inputs, curvature_recons,
-                       curvature_latents, curvature_latents_normalized, curvature_learned, config):
+def plot_curvatures_1d(labels, curv_true, curv_in, curv_rec,
+                       curv_lat, curv_lat_norm, curv_learned, z_grid, config):
     curve_groups = []
     if config.compute_true_curv:
         curve_groups.append([
-            ('True Curvature', curvature_true, 'tab:green'),
-            ('Input Curvature', curvature_inputs, 'tab:blue'),
-            ('Reconstructed Curvature', curvature_recons, 'tab:red')
+            ('True Curvature', curv_true, z_grid, 'tab:green'),
+            ('Input Curvature', curv_in, labels, 'tab:blue'),
+            ('Reconstructed Curvature', curv_rec, labels, 'tab:red')
         ])
     else:
         curve_groups.append([
-            ('Input Curvature', curvature_inputs, 'tab:blue'),
-            ('Reconstructed Curvature', curvature_recons, 'tab:red')
+            ('Input Curvature', curv_in, labels, 'tab:blue'),
+            ('Reconstructed Curvature', curv_rec, labels, 'tab:red')
         ])
+
     if config.compute_learned_curv and config.compute_true_curv and config.compute_emp_curv:
         curve_groups.append([
-            ('True Curvature', curvature_true, 'tab:green'),
-            ('Input Curvature', curvature_inputs, 'tab:blue'),
-            ('Learned Curvature', curvature_learned, 'tab:pink'),
-            ('Latent Curvature', curvature_latents, 'tab:orange')
+            ('True Curvature', curv_true, z_grid, 'tab:green'),
+            ('Input Curvature', curv_in, labels, 'tab:blue'),
+            ('Learned Curvature', curv_learned, z_grid, 'tab:pink'),
+            ('Latent Curvature', curv_lat, labels, 'tab:orange')
         ])
     elif config.compute_learned_curv and config.compute_true_curv:
         curve_groups.append([
-            ('True Curvature', curvature_true, 'tab:green'),
-            ('Learned Curvature', curvature_learned, 'tab:pink'),
+            ('True Curvature', curv_true, z_grid, 'tab:green'),
+            ('Learned Curvature', curv_learned, labels, 'tab:pink'),
         ])
     elif config.compute_true_curv:
         curve_groups.append([
-            ('True Curvature', curvature_true, 'tab:green'),
-            ('Input Curvature', curvature_inputs, 'tab:blue'),
-            ('Latent Curvature', curvature_latents, 'tab:orange')
+            ('True Curvature', curv_true, z_grid, 'tab:green'),
+            ('Input Curvature', curv_in, labels, 'tab:blue'),
+            ('Latent Curvature', curv_lat, labels, 'tab:orange')
         ])
     else:
         curve_groups.append([
-            ('Input Curvature', curvature_inputs, 'tab:blue'),
-            ('Latent Curvature', curvature_latents, 'tab:orange')
+            ('Input Curvature', curv_in, labels, 'tab:blue'),
+            ('Latent Curvature', curv_lat, labels, 'tab:orange')
         ])
+
     if config.compute_true_curv:
         curve_groups.append([
-            ('True Curvature', curvature_true, 'tab:green'),
-            ('Input Curvature', curvature_inputs, 'tab:blue'),
-            ('Normalized Latent Curvature', curvature_latents_normalized, 'tab:orange')
+            ('True Curvature', curv_true, z_grid, 'tab:green'),
+            ('Input Curvature', curv_in, labels, 'tab:blue'),
+            ('Normalized Latent Curvature', curv_lat_norm, labels, 'tab:orange')
         ])
     else:
         curve_groups.append([
-            ('Input Curvature', curvature_inputs, 'tab:blue'),
-            ('Normalized Latent Curvature', curvature_latents_normalized, 'tab:orange')
+            ('Input Curvature', curv_in, labels, 'tab:blue'),
+            ('Normalized Latent Curvature', curv_lat_norm, labels, 'tab:orange')
         ])
+
     titles = ['Sanity Check', 'Compare to Inputs I', 'Compare to Inputs II']
 
-    fig, axes = plt.subplots(1, 3, figsize=(18, 5), sharex=True)
-    for ax, curves, title in zip(axes, curve_groups, titles):
-        for label, curve, color in curves:
-            linestyle = '--' if label == 'True Curvature' else '-'  # dashed line for True Curvature
-            ax.plot(labels, curve, label=label, color=color, linestyle=linestyle, linewidth=2, alpha=0.8)
+    if len(curve_groups) != len(titles):
+        raise ValueError("curve_groups and titles must have the same length")
+
+    fig, axes = plt.subplots(1, len(curve_groups), figsize=(6 * len(curve_groups), 5), sharex=True)
+    if len(curve_groups) == 1:
+        axes = [axes]
+
+    for idx, (ax, curves, title) in enumerate(zip(axes, curve_groups, titles)):
+        for label, curve_values, x_points, color in curves:
+            linestyle = '--' if label == 'True Curvature' else '-'
+            ax.plot(x_points, curve_values, label=label,
+                    color=color, linestyle=linestyle, linewidth=2, alpha=0.8)
         ax.set_title(title)
         ax.set_xlabel('Angle')
         ax.set_xticks([0, np.pi, 2 * np.pi])
         ax.set_xticklabels(['0', r'$\pi$', r'$2\pi$'])
         ax.grid(False)
         ax.legend(loc='upper right', fontsize=8)
+
+        # Save individual subplot if log_dir is specified
+        if getattr(config, "log_dir", None) is not None:
+            indiv_path = os.path.join(config.log_dir, f"curvature_grid_plot_{title}.png")
+            fig_indiv, ax_indiv = plt.subplots(figsize=(6, 5))
+            for label, curve_values, x_points, color in curves:
+                linestyle = '--' if label == 'True Curvature' else '-'
+                ax_indiv.plot(x_points, curve_values, label=label,
+                              color=color, linestyle=linestyle, linewidth=2, alpha=0.8)
+            ax_indiv.set_xticks([0, np.pi, 2 * np.pi])
+            ax_indiv.set_xticklabels(['0', r'$\pi$', r'$2\pi$'])
+            ax_indiv.grid(False)
+            ax_indiv.legend(loc='upper right', fontsize=8)
+            plt.tight_layout()
+            fig_indiv.savefig(indiv_path)
+            plt.close(fig_indiv)
+
     axes[0].set_ylabel('Curvature')
     plt.tight_layout()
-    if config.log_dir is not None:
-        plt.savefig(os.path.join(config.log_dir, "curvature_grid_plot.png"))
+    if getattr(config, "log_dir", None) is not None:
+        fig.savefig(os.path.join(config.log_dir, "curvature_grid_plot.png"))
     plt.show()
 
 
@@ -879,8 +951,9 @@ def plot_curvature_errors_and_stats(curv_true, curv_in, curv_rec,
 
 
 def _plot_all_curvatures_from_vectors(config, model, recons, latents, inputs, labels):
-    points_sub, curvatures_sub, curvatures_emp_full, points = compute_all_curvatures(config, model, recons, latents, inputs,
-                                                                             labels)
+    points_sub, curvatures_sub, curvatures_emp_full, points = compute_all_curvatures(config, model, recons, latents,
+                                                                                     inputs,
+                                                                                     labels)
     points = (inputs, latents, recons)
     inputs_sub, latents_sub, recons_sub = points_sub
     labels_sub, curv_in_sub, curv_rec_sub, curv_lat_sub, curv_lat_norm_sub, curv_true, curv_learned, curv_learned_rotated, z_grid = curvatures_sub
@@ -889,9 +962,21 @@ def _plot_all_curvatures_from_vectors(config, model, recons, latents, inputs, la
     # Plot curvatures over angles
     if labels.ndim == 1:
         points_sub = (inputs_sub, latents_sub)
-        plot_curvatures_1d(labels_sub, curv_true, curv_in_sub, curv_rec_sub, curv_lat_sub, curv_lat_norm_sub,
-                           curv_learned, config)
-        scatter_curvature_heatmaps(config, points=points, points_sub=points_sub, curv_true=curv_true,
+        if config.model_type in {"VMFSphericalVAE", "SphericalAE"}:
+            plot_curvatures_1d(labels=labels_sub, curv_true=curv_true, curv_in=curv_in_sub, curv_rec=curv_rec_sub,
+                               curv_lat=curv_lat_sub,
+                               curv_lat_norm=curv_lat_norm_sub,
+                               curv_learned=curv_learned_rotated, z_grid=z_grid, config=config)
+            plot_curvature_norms(angles=z_grid, curvature_norms=curv_true, config=config, norm_val=None,
+                                 profile_type="true")
+            plot_curvature_norms(angles=z_grid, curvature_norms=curv_learned_rotated, config=config, norm_val=None,
+                                 profile_type="learned")
+        else:
+            plot_curvatures_1d(labels=labels_sub, curv_true=curv_true, curv_in=curv_in_sub, curv_rec=curv_rec_sub,
+                               curv_lat=curv_lat_sub,
+                               curv_lat_norm=curv_lat_norm_sub,
+                               curv_learned=curv_learned, config=config)
+            scatter_curvature_heatmaps(config, points=points, points_sub=points_sub, z_grid=z_grid, curv_true=curv_true,
                                    curv_in=curv_in, curv_rec=curv_rec, curv_learned=curv_learned, curv_lat=curv_lat)
     elif labels.ndim == 2 and labels.shape[1] == 2:
         points_sub = (inputs_sub, latents_sub)
@@ -904,8 +989,9 @@ def _plot_all_curvatures_from_vectors(config, model, recons, latents, inputs, la
                                curv_rec=curv_rec, curv_lat=curv_lat, curv_learned=curv_learned, z_grid=z_grid,
                                config=config)
         if config.model_type in {"EuclideanVAE", "EuclideanAE"}:
-            scatter_curvature_heatmaps(config, points=points, points_sub=points_sub, curv_true=curv_true,
-                                       curv_in=curv_in, curv_rec=curv_rec, curv_learned=curv_learned, curv_lat=curv_lat, z_grid=z_grid)
+            scatter_curvature_heatmaps(config, points=points, points_sub=points_sub, z_grid=z_grid, curv_true=curv_true,
+                                       curv_in=curv_in, curv_rec=curv_rec, curv_learned=curv_learned, curv_lat=curv_lat,
+                                       )
         elif config.model_type in {"VMFToroidalVAE", "VMToroidalVAE", "ToroidalAE"}:
             plot_curvature_norms(angles=z_grid, curvature_norms=curv_true, config=config, norm_val=None,
                                  profile_type="true")
@@ -947,10 +1033,10 @@ def _plot_all_curvatures_from_vectors(config, model, recons, latents, inputs, la
             plot_curvatures_2d(labels=angels, labels_sub=angels_sub, curv_true=curv_true_entity,
                                curv_in=curv_in_entity, curv_rec=curv_rec_entity, curv_lat=curv_lat_entity,
                                curv_learned=curv_learned_entity, z_grid=z_grid, config=config, entity=entity)
-            scatter_curvature_heatmaps(config, points=points_entity, points_sub=points_sub_entity,
+            scatter_curvature_heatmaps(config, points=points_entity, points_sub=points_sub_entity, z_grid=z_grid,
                                        curv_true=curv_true_entity,
                                        curv_in=curv_in_entity, curv_rec=curv_rec_entity,
-                                       curv_learned=curv_learned_entity, z_grid=z_grid, curv_lat=curv_lat_entity,
+                                       curv_learned=curv_learned_entity, curv_lat=curv_lat_entity,
                                        entity=entity)
     else:
         raise NotImplementedError("Label dimension not supported for curvature plotting.")
@@ -958,13 +1044,11 @@ def _plot_all_curvatures_from_vectors(config, model, recons, latents, inputs, la
     if config.model_type in {"VMFSphericalVAE", "SphericalAE"}:
         plot_curvature_errors_and_stats(curv_true=curv_true, curv_in=curv_in_sub, curv_rec=curv_rec_sub,
                                         curv_lat=curv_lat_sub, curv_lat_norm=curv_lat_norm_sub,
-                                        curv_learned=curv_learned_rotated,
-                                        config=config)
+                                        curv_learned=curv_learned_rotated, config=config)
     else:
         plot_curvature_errors_and_stats(curv_true=curv_true, curv_in=curv_in_sub, curv_rec=curv_rec_sub,
                                         curv_lat=curv_lat_sub, curv_lat_norm=curv_lat_norm_sub,
-                                        curv_learned=curv_learned,
-                                        config=config)
+                                        curv_learned=curv_learned, config=config)
 
 
 def plot_all_curvatures(config, model, data_loader):
@@ -1125,55 +1209,3 @@ def plot_curvature_persistence(config, model, data_loader):
 
 def normalize(arr):
     return (arr - np.min(arr)) / (np.max(arr) - np.min(arr) + 1e-8)
-
-
-def show_recon_mnist(model, loader, device="cpu"):
-    model.eval()
-    with torch.no_grad():
-        x, _ = next(iter(loader))  # Get a batch of images
-        x = x.to(device)  # Original inputs (flattened 784)
-
-        # Forward pass through the model
-        _, x_recon, _ = model(x)  # Extract only the reconstructed images
-
-    # Randomly select 10 indices
-    indices = sample(range(x.size(0)), 10)
-
-    fig, axes = plt.subplots(2, 10, figsize=(15, 4))
-    for i, idx in enumerate(indices):
-        # Reshape and plot the original input images
-        axes[0, i].imshow(x[idx].view(28, 28).cpu().numpy(), cmap="gray")
-        axes[0, i].axis("off")
-        # Reshape and plot the reconstructed images
-        axes[1, i].imshow(x_recon[idx].view(28, 28).cpu().numpy(), cmap="gray")
-        axes[1, i].axis("off")
-
-    axes[0, 0].set_title("Original Images")
-    axes[1, 0].set_title("Reconstructed Images")
-    plt.show()
-
-
-def show_recon_mnist_ae(model, loader, device="cpu"):
-    model.eval()
-    with torch.no_grad():
-        x, _ = next(iter(loader))  # Get a batch of images
-        x = x.to(device)  # Original inputs (flattened 784)
-
-        # Forward pass through the model
-        _, x_recon, _, _ = model(x)  # Extract only the reconstructed images
-
-    # Randomly select 10 indices
-    indices = sample(range(x.size(0)), 10)
-
-    fig, axes = plt.subplots(2, 10, figsize=(15, 4))
-    for i, idx in enumerate(indices):
-        # Reshape and plot the original input images
-        axes[0, i].imshow(x[idx].view(28, 28).cpu().numpy(), cmap="gray")
-        axes[0, i].axis("off")
-        # Reshape and plot the reconstructed images
-        axes[1, i].imshow(x_recon[idx].view(28, 28).cpu().numpy(), cmap="gray")
-        axes[1, i].axis("off")
-
-    axes[0, 0].set_title("Original Images")
-    axes[1, 0].set_title("Reconstructed Images")
-    plt.show()

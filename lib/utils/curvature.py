@@ -6,7 +6,6 @@ from tqdm import tqdm
 from sklearn.neighbors import NearestNeighbors
 from sklearn.decomposition import PCA
 from numpy.linalg import lstsq
-from scipy.spatial.distance import pdist
 from scipy.signal import savgol_filter
 from scipy.spatial import cKDTree
 
@@ -20,7 +19,6 @@ from ..datasets.synthetic_sphere_like import (
     get_s2_synthetic_immersion,
     get_t2_synthetic_immersion,
     get_scrunchy_immersion,
-    get_interlocking_rings_immersion,
     get_flower_scrunchy_immersion,
 )
 
@@ -380,7 +378,7 @@ def compute_curvature_learned(config, model, latents=None, labels=None, n_grid_p
         if config.latent_dim == 2:
             anchore = (latents[0], latents[10])
             z_grid = get_z_grid(config=config, n_grid_points=n_grid_points)
-            z_grid = shift_z_grid(z_grid, anchore, config)
+            #z_grid = shift_z_grid(z_grid, anchore, config)
         elif config.latent_dim == 3:
             z_grid = get_z_grid(config=config, n_grid_points=n_grid_points)
     elif config.model_type == 'VMToroidalVAE':
@@ -654,7 +652,11 @@ def compute_all_curvatures(config, model, recons, latents, inputs, labels, save_
     if config.compute_learned_curv:
         _, _, _, curv_learned = compute_curvature_learned(config=config, model=model, latents=latents_sub,
                                                           labels=labels_sub, n_grid_points=n_points)
-        curv_learned_rotated = compute_curvature_rotated(learned_curvature=curv_learned, latents=latents_sub, labels=labels_sub, z_grid=z_grid)
+        if config.model_type in {"VMFSphericalVAE", "SphericalAE"}:
+            curv_learned_rotated = compute_curvature_rotated(learned_curvature=curv_learned, latents=latents_sub,
+                                                             labels=labels_sub, z_grid=z_grid)
+        else:
+            curv_learned_rotated = curv_learned
     else:
         curv_learned = np.zeros(n_points)
         curv_learned_rotated = np.zeros(n_points)
@@ -685,32 +687,45 @@ def compute_all_curvatures(config, model, recons, latents, inputs, labels, save_
 
 
 def compute_curvature_rotated(learned_curvature, latents, labels, z_grid):
+    latents = latents.to(torch.float32)
+    labels = labels.to(torch.float32)
+    z_grid = z_grid.to(torch.float32)
+
+    def angle_to_cartesian(theta):
+        x = torch.cos(theta)
+        y = torch.sin(theta)
+        return torch.stack([x, y], dim=1).to(torch.float32)
+
     def spherical_to_cartesian(theta, phi):
         x = torch.sin(theta) * torch.cos(phi)
         y = torch.sin(theta) * torch.sin(phi)
         z = torch.cos(theta)
-        return torch.stack([x, y, z], dim=1)
+        return torch.stack([x, y, z], dim=1).to(torch.float32)
 
     def compute_rotation_matrix(source, target):
-        source = source.to(dtype=torch.float64)
-        target = target.to(dtype=torch.float64)
-
         A = source.T @ target
         U, _, Vt = torch.svd(A)
         R = Vt @ U.T
-        if torch.det(R) < 0:
-            Vt[-1, :] *= -1
-            R = Vt @ U.T
+        # # Ensure det(R)=+1
+        # if torch.det(R) < 0:
+        #     Vt[-1, :] *= -1
+        #     R = Vt @ U.T
         return R
 
-    # Build spherical grid
-    vecs = spherical_to_cartesian(z_grid[:, 0], z_grid[:, 1])
-
     # Compute rotation
-    label_cartesian = spherical_to_cartesian(labels[:, 0], labels[:, 1])
-    R = compute_rotation_matrix(latents, label_cartesian)
+    if latents.shape[1] == 2:
+        theta_grid = z_grid[:,0] if z_grid.ndim > 1 else z_grid
+        vecs = angle_to_cartesian(theta_grid)
 
-    # Rotate function
+        label_angles = labels[:,0] if labels.ndim > 1 else labels
+        label_cartesian = angle_to_cartesian(label_angles)
+    elif latents.shape[1] == 3:
+        vecs = spherical_to_cartesian(z_grid[:, 0], z_grid[:, 1])
+        label_cartesian = spherical_to_cartesian(labels[:, 0], labels[:, 1])
+    else:
+        raise NotImplementedError
+
+    R = compute_rotation_matrix(latents, label_cartesian)
     vecs_rotated = vecs @ R
     tree = cKDTree(vecs.numpy())
     _, nn_indices = tree.query(vecs_rotated.numpy(), k=1)
