@@ -1,2 +1,1 @@
-from .fashion_mnist_loader import load_fashion_mnist
 from .shape_toroidal import generate_toroidal_pointcloud, load_shaped_torus

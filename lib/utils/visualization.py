@@ -279,24 +279,23 @@ def plot_latent_projections(model, pointcloud, test_loader, device="cpu"):
         plt.show()
 
 
-def _scatter_datapoints(ax, data, title, colors=None, cmap='hsv', pca_dim=3):
+def _scatter_datapoints(ax, data, title, dot_size=2, colors=None, color_norm=None, cmap='hsv', apply_pca=True, pca_dim=3):
     d = data.shape[1]
     pca_applied = False
-    dot_size = 2
 
     if d == 1:
-        sc = ax.scatter(data[:, 0], np.zeros_like(data[:, 0]), c=colors, cmap=cmap, s=dot_size, alpha=0.7)
+        sc = ax.scatter(data[:, 0], np.zeros_like(data[:, 0]), c=colors, cmap=cmap, norm=color_norm, s=dot_size, alpha=0.7)
         ax.set_yticks([])
     elif d == 2:
-        sc = ax.scatter(data[:, 0], data[:, 1], c=colors, cmap=cmap, s=dot_size, alpha=0.7)
-    # elif d == 3:
-    #     sc = ax.scatter(data[:, 0], data[:, 1], data[:, 2], c=colors, cmap=cmap, s=dot_size, alpha=0.7)
+        sc = ax.scatter(data[:, 0], data[:, 1], c=colors, cmap=cmap, norm=color_norm, s=dot_size, alpha=0.7)
+    elif d == 3 and apply_pca is False:
+        sc = ax.scatter(data[:, 0], data[:, 1], data[:, 2], c=colors, cmap=cmap, norm=color_norm, s=dot_size, alpha=0.7)
     else:
         data = PCA(n_components=pca_dim).fit_transform(data)
         if pca_dim == 2:
-            sc = ax.scatter(data[:, 0], data[:, 1], c=colors, cmap=cmap, s=dot_size, alpha=0.7)
+            sc = ax.scatter(data[:, 0], data[:, 1], c=colors, cmap=cmap, norm=color_norm, s=dot_size, alpha=0.7)
         else:
-            sc = ax.scatter(data[:, 0], data[:, 1], data[:, 2], c=colors, cmap=cmap, s=dot_size, alpha=0.7)
+            sc = ax.scatter(data[:, 0], data[:, 1], data[:, 2], c=colors, cmap=cmap, norm=color_norm, s=dot_size, alpha=0.7)
         pca_applied = True
 
     if title is not None:
@@ -332,15 +331,15 @@ def plot_data_latents_recon(config, model, data_loader):
 
     # Dataset plot
     ax1 = fig.add_subplot(1, 3, 1, projection='3d' if inputs.shape[1] >= 3 and pca_dim == 3 else None)
-    _scatter_datapoints(ax1, inputs, "Input Data", colors, cmap=color_map, pca_dim=pca_dim)
+    _scatter_datapoints(ax=ax1, data=inputs, title="Input Data", colors=colors, cmap=color_map, pca_dim=pca_dim)
 
     # Latent space plot
     ax2 = fig.add_subplot(1, 3, 2, projection='3d' if latents.shape[1] >= 3 and pca_dim == 3 else None)
-    _scatter_datapoints(ax2, latents, "Latent Representation", colors, cmap=color_map, pca_dim=pca_dim)
+    _scatter_datapoints(ax=ax2, data=latents, title="Latent Representation", colors=colors, cmap=color_map, pca_dim=pca_dim)
 
     # Reconstruction plot
     ax3 = fig.add_subplot(1, 3, 3, projection='3d' if recons.shape[1] >= 3 and pca_dim == 3 else None)
-    _scatter_datapoints(ax3, recons, "Reconstructed Data", colors, cmap=color_map, pca_dim=pca_dim)
+    _scatter_datapoints(ax=ax3, data=recons, title="Reconstructed Data", colors=colors, cmap=color_map, pca_dim=pca_dim)
 
     plt.tight_layout()
     plt.show()
@@ -355,7 +354,7 @@ def plot_data_latents_recon(config, model, data_loader):
             fig_input = plt.figure()
             ax_input = fig_input.add_subplot(1, 1, 1,
                                              projection='3d' if inputs.shape[1] >= 3 and pca_dim == 3 else None)
-            _scatter_datapoints(ax_input, inputs, None, colors, cmap=color_map, pca_dim=pca_dim)
+            _scatter_datapoints(ax=ax_input, data=inputs, title=None, colors=colors, cmap=color_map, pca_dim=pca_dim)
             fig_input.tight_layout()
             fig_input.savefig(os.path.join(config.log_dir, "input_data.png"))
             plt.close(fig_input)
@@ -364,7 +363,7 @@ def plot_data_latents_recon(config, model, data_loader):
             fig_latent = plt.figure()
             ax_latent = fig_latent.add_subplot(1, 1, 1,
                                                projection='3d' if latents.shape[1] >= 3 and pca_dim == 3 else None)
-            _scatter_datapoints(ax_latent, latents, None, colors, cmap=color_map, pca_dim=pca_dim)
+            _scatter_datapoints(ax=ax_latent, data=latents, title=None, colors=colors, cmap=color_map, pca_dim=pca_dim)
             fig_latent.tight_layout()
             fig_latent.savefig(os.path.join(config.log_dir, "latent_representation.png"))
             plt.close(fig_latent)
@@ -373,7 +372,7 @@ def plot_data_latents_recon(config, model, data_loader):
             fig_recon = plt.figure()
             ax_recon = fig_recon.add_subplot(1, 1, 1,
                                              projection='3d' if recons.shape[1] >= 3 and pca_dim == 3 else None)
-            _scatter_datapoints(ax_recon, recons, None, colors, cmap=color_map, pca_dim=pca_dim)
+            _scatter_datapoints(ax=ax_recon, data=recons, title=None, colors=colors, cmap=color_map, pca_dim=pca_dim)
             fig_recon.tight_layout()
             fig_recon.savefig(os.path.join(config.log_dir, "reconstructed_data.png"))
             plt.close(fig_recon)
@@ -539,8 +538,6 @@ def plot_curvature_norms(angles, curvature_norms, config, norm_val, profile_type
         # ax2.set_title(f"{profile_type} profile", fontsize=14, pad=20)
 
     elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "sphere", "torus"}:
-        ax = fig.add_subplot(111, projection="3d")
-
         if config.dataset_name in {"s2_synthetic", "sphere"}:
             x = config.radius * np.sin(angles[:, 0]) * np.cos(angles[:, 1])
             y = config.radius * np.sin(angles[:, 0]) * np.sin(angles[:, 1])
@@ -551,17 +548,28 @@ def plot_curvature_norms(angles, curvature_norms, config, norm_val, profile_type
             x = (config.major_radius - config.minor_radius * np.cos(theta)) * np.cos(phi)
             y = (config.major_radius - config.minor_radius * np.cos(theta)) * np.sin(phi)
             z = config.minor_radius * np.sin(theta)
+        points = np.stack([x, y, z], axis=1)
 
-        sc = ax.scatter3D(x, y, z, s=50, c=curvature_norms, cmap="Spectral", norm=color_norm)
-        plt.colorbar(sc, ax=ax, shrink=0.6)
-        ax.set_title(f"{profile_type} profile", fontsize=14)
+        fig = plt.figure(figsize=(6, 5))
+        ax = fig.add_subplot(1, 1, 1, projection='3d')
+        sc = _scatter_datapoints(ax=ax, data=points, colors=curvature_norms, dot_size=20,
+                                 cmap="rainbow", apply_pca=False, pca_dim=3, title=None)
+        fig.colorbar(sc, ax=ax, shrink=0.7)
+        plt.tight_layout()
 
         if config.dataset_name in {"t2_synthetic", "torus"}:
             r = config.major_radius + config.minor_radius
             ax.set_xlim(-r, r)
             ax.set_ylim(-r, r)
             ax.set_zlim(-r, r)
-            plt.axis("off")
+        elif config.dataset_name in {"s2_synthetic", "sphere"}:
+            r = config.radius
+            ax.set_xlim(-r, r)
+            ax.set_ylim(-r, r)
+            ax.set_zlim(-2*r/3, 2*r/3)
+        else:
+            raise NotImplementedError
+        plt.axis("off")
 
     else:
         raise NotImplementedError(f"Dataset {config.dataset_name} not supported.")
@@ -977,7 +985,7 @@ def _plot_all_curvatures_from_vectors(config, model, recons, latents, inputs, la
                                curv_lat_norm=curv_lat_norm_sub,
                                curv_learned=curv_learned, config=config)
             scatter_curvature_heatmaps(config, points=points, points_sub=points_sub, z_grid=z_grid, curv_true=curv_true,
-                                   curv_in=curv_in, curv_rec=curv_rec, curv_learned=curv_learned, curv_lat=curv_lat)
+                                       curv_in=curv_in, curv_rec=curv_rec, curv_learned=curv_learned, curv_lat=curv_lat)
     elif labels.ndim == 2 and labels.shape[1] == 2:
         points_sub = (inputs_sub, latents_sub)
         if config.model_type in {"VMFSphericalVAE", "SphericalAE"}:
