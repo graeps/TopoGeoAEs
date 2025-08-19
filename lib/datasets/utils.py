@@ -1,4 +1,43 @@
 import torch
+import os
+
+# Set Geomstats backend before importing it
+os.environ["GEOMSTATS_BACKEND"] = "pytorch"
+import geomstats.backend as gs  # noqa: E402
+
+
+def embedd_rotate_translate(point, embedding_dim, translation, rotation):
+    point = embedd(points=point, embedding_dim=embedding_dim)
+    point = rotate_translate(points=point, rotation=rotation, translation=translation)
+    return point
+
+
+def embedd(points, embedding_dim):
+    points = gs.array(points)
+    if points.ndim == 1:
+        pad_width = embedding_dim - points.shape[0]
+        if pad_width > 0:
+            points = gs.concatenate([points, gs.zeros(pad_width)])
+    elif points.ndim == 2:
+        pad_width = embedding_dim - points.shape[1]
+        if pad_width > 0:
+            zeros = gs.zeros((points.shape[0], pad_width))
+            points = gs.concatenate([points, zeros], axis=1)
+    else:
+        raise ValueError("Input must be a 1D or 2D array.")
+    return points
+
+
+def rotate_translate(points, translation, rotation):
+    if points.ndim == 1:
+        points = gs.einsum("ij,j->i", rotation, points)
+        points = points + translation
+    elif points.ndim == 2:
+        points = gs.einsum("ij,nj->ni", rotation, points)
+        points = points + translation
+    else:
+        raise ValueError("Input must be a 1D or 2D tensor.")
+    return points
 
 
 def compute_n_deriv(curve, t, order):
@@ -74,8 +113,8 @@ def compute_n_deriv_scrunchy(curve, t, order, deformation_amp):
     return derivatives
 
 
-def compute_frenet_frame(curve, t, order, deformation_amp=None, is_scrunchy_dim_n=False):
-    if is_scrunchy_dim_n:
+def compute_frenet_frame(curve, t, order, deformation_amp=None, is_s1_high=False):
+    if is_s1_high:
         derivatives = compute_n_deriv_scrunchy(curve, t, order, deformation_amp)
     else:
         derivatives = compute_n_deriv(curve, t, order)

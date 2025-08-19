@@ -29,7 +29,7 @@ class MVAETrainer:
             dict: Training and testing losses per epoch.
         """
         if self.verbose:
-            print(f"Training the {self.model.posterior_type} VAE model.")
+            print(f"Training the {self.model.type} VAE model.")
 
         for epoch in range(self.num_epochs):
             train_loss, train_recon_loss, train_kl_loss, train_topo_loss = self.train_one_epoch(epoch, self.verbose)
@@ -67,7 +67,7 @@ class MVAETrainer:
             x = x.to(self.device)
             self.optimizer.zero_grad()
             z, x_recon, posterior_params = self.model(x)
-            loss, recon_loss, kl_loss, topo_loss = elbo(self.model.posterior_type, x, z, x_recon, posterior_params, labels,
+            loss, recon_loss, kl_loss, topo_loss = elbo(self.model.type, x, z, x_recon, posterior_params, labels,
                                                         self.config)
             loss.backward()
             self.optimizer.step()
@@ -104,7 +104,7 @@ class MVAETrainer:
             for x, labels in self.test_loader:
                 x = x.to(self.device)
                 z, x_recon, posterior_params = self.model(x)
-                loss, recon_loss, kl_loss, topo_loss = elbo(self.model.posterior_type, x, z, x_recon, posterior_params, labels,
+                loss, recon_loss, kl_loss, topo_loss = elbo(self.model.type, x, z, x_recon, posterior_params, labels,
                                                  self.config)
                 test_loss += loss.item()
                 test_recon_loss += recon_loss.item()

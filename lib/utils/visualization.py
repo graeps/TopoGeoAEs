@@ -324,7 +324,7 @@ def plot_data_latents_recon(config, model, data_loader):
 
     fig = plt.figure(figsize=(18, 5))
 
-    if config.dataset_name == "s1_synthetic":
+    if config.dataset_name == "s1_low":
         pca_dim = 2
     else:
         pca_dim = 3
@@ -403,15 +403,15 @@ def curvature_compute_plot_vm(config, model, test_loader):
         }
     )
     if config.dataset_name in (
-            "s1_synthetic",
+            "s1_low",
     ):
         curv_norm_learned_profile["z_grid"] = z_grid
-    elif config.dataset_name in ("s2_synthetic", "t2_synthetic", "torus"):
+    elif config.dataset_name in ("s2_low", "t2_low", "t2_high"):
         curv_norm_learned_profile["z_grid_theta"] = z_grid[:, 0]
         curv_norm_learned_profile["z_grid_phi"] = z_grid[:, 1]
 
     norm_val = None
-    if config.dataset_name in ("s1_synthetic", "s2_synthetic", "t2_synthetic", "torus"):
+    if config.dataset_name in ("s1_low", "s2_low", "t2_low", "t2_high"):
         print("Computing true curvature for synthetic data...")
         z_grid, _, curv_norms_true = compute_curvature_true(config, n_grid_points=config.n_grid_points)
         print("Computing curvature error for synthetic data...")
@@ -427,7 +427,7 @@ def curvature_compute_plot_vm(config, model, test_loader):
             }
         )
 
-        if config.dataset_name == "s1_synthetic":
+        if config.dataset_name == "s1_low":
             curv_norm_true_profile["z_grid"] = z_grid
         else:
             curv_norm_true_profile["z_grid_theta"] = z_grid[:, 0]
@@ -441,7 +441,7 @@ def curvature_compute_plot_vm(config, model, test_loader):
         norm_val=norm_val,
         profile_type="learned",
     )
-    if config.dataset_name in ("s1_synthetic", "s2_synthetic", "t2_synthetic", "torus"):
+    if config.dataset_name in ("s1_low", "s2_low", "t2_low", "t2_high"):
         fig_curv_norms_true = plot_curvature_norms(
             angles=z_grid,
             curvature_norms=curv_norms_true,
@@ -450,7 +450,7 @@ def curvature_compute_plot_vm(config, model, test_loader):
             profile_type="true",
         )
 
-    if config.dataset_name in ("s1_synthetic", "experimental", "three_place_cells_synthetic",):
+    if config.dataset_name in ("s1_low", "experimental", "three_place_cells_synthetic",):
         fig_neural_manifold_learned = plot_neural_manifold_learned(
             curv_norm_learned_profile=curv_norm_learned_profile,
             config=config,
@@ -517,7 +517,7 @@ def plot_curvature_norms(angles, curvature_norms, config, norm_val, profile_type
         eps = 1e-3
         color_norm = mpl.colors.Normalize(0.0, max(curvature_norms) + eps)
 
-    if config.dataset_name in {"s1_synthetic", "scrunchy_dim_n"}:
+    if config.dataset_name in {"s1_low", "s1_high"}:
         ax1 = fig.add_subplot(121)
         ax1.plot(angles, curvature_norms, linewidth=2)
         # ax1.set_xlabel("angle", fontsize=12)
@@ -537,12 +537,12 @@ def plot_curvature_norms(angles, curvature_norms, config, norm_val, profile_type
         ax2.set_yticks([])
         # ax2.set_title(f"{profile_type} profile", fontsize=14, pad=20)
 
-    elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "sphere", "torus"}:
-        if config.dataset_name in {"s2_synthetic", "sphere"}:
+    elif config.dataset_name in {"s2_low", "t2_low", "s2_high", "t2_high"}:
+        if config.dataset_name in {"s2_low", "s2_high"}:
             x = config.radius * np.sin(angles[:, 0]) * np.cos(angles[:, 1])
             y = config.radius * np.sin(angles[:, 0]) * np.sin(angles[:, 1])
             z = config.radius * np.cos(angles[:, 0])
-        else:  # t2_synthetic
+        else:  # t2_low
             theta = angles[:, 0]
             phi = angles[:, 1]
             x = (config.major_radius - config.minor_radius * np.cos(theta)) * np.cos(phi)
@@ -557,12 +557,12 @@ def plot_curvature_norms(angles, curvature_norms, config, norm_val, profile_type
         fig.colorbar(sc, ax=ax, shrink=0.7)
         plt.tight_layout()
 
-        if config.dataset_name in {"t2_synthetic", "torus"}:
+        if config.dataset_name in {"t2_low", "t2_high"}:
             r = config.major_radius + config.minor_radius
             ax.set_xlim(-r, r)
             ax.set_ylim(-r, r)
             ax.set_zlim(-r, r)
-        elif config.dataset_name in {"s2_synthetic", "sphere"}:
+        elif config.dataset_name in {"s2_low", "s2_high"}:
             r = config.radius
             ax.set_xlim(-r, r)
             ax.set_ylim(-r, r)
@@ -585,7 +585,7 @@ def plot_curvature_norms(angles, curvature_norms, config, norm_val, profile_type
     plt.show()
     plt.close(fig)
 
-    if config.dataset_name in {"s2_synthetic", "t2_synthetic", "sphere"}:
+    if config.dataset_name in {"s2_low", "t2_low", "s2_high"}:
         # Add Plotly export
         plotly_fig = go.Figure(
             data=[
@@ -630,7 +630,7 @@ def scatter_curvature_heatmaps(config, points, points_sub, z_grid, curv_true, cu
         num_cols = 3
         num_rows = (num_heatmaps + num_cols - 1) // num_cols
 
-        if config.dataset_name == "s1_synthetic":
+        if config.dataset_name == "s1_low":
             pca_dim = 2
         else:
             pca_dim = 3
@@ -784,7 +784,7 @@ def plot_curvatures_1d(labels, curv_true, curv_in, curv_rec,
 def plot_curvatures_2d(labels, labels_sub, curv_true, curv_in, curv_rec, curv_lat, curv_learned, z_grid, config,
                        entity=None):
     grid_res = 100
-    if config.dataset_name in {"sphere", "s2_synthetic", "sphere_high_dim", "nested_spheres",
+    if config.dataset_name in {"s2_high", "s2_low", "sphere_high_dim", "nested_spheres",
                                "nested_spheres_high_dim"}:
         grid_x, grid_y = np.meshgrid(np.linspace(0, np.pi, int(grid_res // 2)), np.linspace(0, 2 * np.pi, grid_res))
     else:

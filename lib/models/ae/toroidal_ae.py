@@ -4,13 +4,21 @@ from torch.nn import functional as F
 
 
 class ToroidalAE(nn.Module):
+    """
+    Autoencoder constrained to a toroidal latent space (T^2 embedded in R^3).
+
+    The encoder maps input data x in R^d into 2 angular variables (theta, phi),
+    which are then projected onto a 3D embedding of the torus in R^3.
+    The decoder reconstructs the input from the torus coordinates.
+
+    """
     def __init__(self, config):
         super().__init__()
         self.type = "torus_ae"
-        self.data_dim = config.embedding_dim
-        self.latent_dim = config.latent_dim
-        self.use_angle_constraint = config.use_angle_constraint
+        self.data_dim = config.embedding_dim    # Input dimension
+        self.latent_dim = config.latent_dim     # Latent dim, has to be 3 for torus embedding
         assert self.latent_dim == 3, "TorusAE requires latent_dim == 3"
+        self.use_angle_constraint = config.use_angle_constraint     # Constrain angles to an interval I of R^2
         if config.activation == "relu":
             self.activation = F.relu
         elif config.activation == "softplus":
@@ -19,25 +27,26 @@ class ToroidalAE(nn.Module):
         else:
             raise NotImplementedError
 
-        self.R = 2.0
-        self.r = 1.0
+        self.R = 2.0    # Major radius
+        self.r = 1.0    # Minor radius
 
-        encoder_widths = config.encoder_widths
-        decoder_widths = config.decoder_widths
+        encoder_widths = config.encoder_widths      # Encoder widths, implicitly defining network depth by array length
+        decoder_widths = config.decoder_widths      # Decoder widths, implicitly defining network depth by array length
 
+        # Encoder network
         self.encoder_linears = nn.ModuleList()
         in_dim = self.data_dim
         for out_dim in encoder_widths:
             self.encoder_linears.append(nn.Linear(in_dim, out_dim))
             in_dim = out_dim
-        self.fc_final_encoder = nn.Linear(in_dim, self.latent_dim - 1)  # outputs angles (θ, φ)
+        self.fc_final_encoder = nn.Linear(in_dim, self.latent_dim - 1)  # outputs angles (theta, phi)
 
+        # Decoder network
         self.decoder_linears = nn.ModuleList()
-        in_dim = 3  # (x, y, z) in ℝ³
+        in_dim = 3  # (x, y, z) in R^3
         for out_dim in decoder_widths:
             self.decoder_linears.append(nn.Linear(in_dim, out_dim))
             in_dim = out_dim
-
         self.fc_x_recon = nn.Linear(in_dim, self.data_dim)
 
     def encode(self, x):
@@ -47,11 +56,9 @@ class ToroidalAE(nn.Module):
         raw_angles = self.fc_final_encoder(h)  # shape: [batch, 2]
 
         if self.use_angle_constraint:
-            # θ, φ ∈ [−π, π]
-            angles = torch.pi * torch.tanh(raw_angles)
+            angles = torch.pi * torch.tanh(raw_angles)      # (phi,theta) in [-pi,pi]^2
         else:
-            angles = raw_angles
-
+            angles = raw_angles     # (phi, theta) in R^2
         return angles
 
     def decode(self, z):
@@ -60,7 +67,23 @@ class ToroidalAE(nn.Module):
             h = self.activation(layer(h))
         return self.fc_x_recon(h)
 
-    def project_to_torus(self, angles):
+    def forward(self, x):
+        angles = self.encode(x)
+        z = self._project_to_torus(angles)
+        x_recon = self.decode(z)
+        return angles, z, x_recon
+
+    def _project_to_torus(self, angles):
+        """
+        Project the torus coordinates onto the torus space.
+        Args:
+            angles: (theta, phi)
+
+        Returns:
+            x = (R + r cos(phi)) cos(theta)
+            y = (R + r cos(phi)) sin(theta)
+            z = r sin(phi)
+        """
         theta = angles[..., 0]  # angle around the major circle
         phi = angles[..., 1]    # angle around the minor circle
 
@@ -75,9 +98,3 @@ class ToroidalAE(nn.Module):
 
         coords = torch.stack((x, y, z), dim=-1)
         return coords
-
-    def forward(self, x):
-        angles = self.encode(x)
-        z = self.project_to_torus(angles)
-        x_recon = self.decode(z)
-        return angles, z, x_recon

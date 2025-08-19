@@ -22,7 +22,7 @@ class AETrainer:
 
     def train(self):
         if self.verbose:
-            print(f"Training the {self.model.posterior_type} AE model.")
+            print(f"Training the {self.model.type} AE model.")
 
         for epoch in range(self.num_epochs):
             train_loss, train_recon_loss, train_topo_loss = self.train_one_epoch(epoch, self.verbose)

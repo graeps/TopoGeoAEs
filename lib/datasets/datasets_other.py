@@ -13,6 +13,110 @@ from torch.distributions.multivariate_normal import MultivariateNormal
 from .utils import compute_frenet_frame
 
 
+def load_scrunchy(rotation,
+                  n_points=1500,
+                  radius=1.0,
+                  n_wiggles=6,
+                  deformation_amp=0.4,
+                  embedding_dim=10,
+                  noise_var=0.01, random_seed=42,
+                  ):
+    gs.random.seed(random_seed)
+    rot = torch.eye(embedding_dim)
+    if rotation == "random":
+        rot = SpecialOrthogonal(n=embedding_dim).random_point()
+
+    immersion = get_scrunchy_immersion(
+        radius=radius,
+        n_wiggles=n_wiggles,
+        distortion_amp=deformation_amp,
+        embedding_dim=embedding_dim,
+        rot=rot,
+    )
+
+    angles = _get_equal_arc_length_angles(immersion, n_points)
+    data = torch.stack([immersion(angle) for angle in angles])
+
+    if noise_var > 0:
+        noise = MultivariateNormal(
+            loc=torch.zeros(embedding_dim),
+            covariance_matrix=noise_var * torch.eye(embedding_dim),
+        ).sample((n_points,))
+        noisy_data = data + radius * noise
+    else:
+        noisy_data = data
+
+    labels = angles.unsqueeze(dim=1)
+    return noisy_data, labels
+
+def get_scrunchy_immersion(radius, n_wiggles, distortion_amp, embedding_dim, rot):
+    def immersion(angle):
+        x = radius * gs.cos(angle)
+        y = radius * gs.sin(angle)
+        z = distortion_amp * gs.cos(n_wiggles * angle)
+        point = gs.squeeze(gs.array([x, y, z]), axis=-1)
+        if embedding_dim > 3:
+            point = gs.concatenate([point, gs.zeros(embedding_dim - 3)])
+        return gs.einsum("ij,j->i", rot, point)
+
+    return immersion
+
+
+def get_flower_scrunchy_immersion(radius, n_wiggles, distortion_amp, embedding_dim, rot):
+    def immersion(angle):
+        amp = radius * (1 + distortion_amp / 2 * gs.cos(angle * 3))
+
+        x = amp * gs.cos(angle)
+        y = amp * gs.sin(angle)
+        z = distortion_amp * gs.cos(n_wiggles * angle)
+        point = gs.squeeze(gs.array([x, y, z]), axis=-1)
+        if embedding_dim > 3:
+            point = gs.concatenate([point, gs.zeros(embedding_dim - 3)])
+
+        return gs.einsum("ij,j->i", rot, point)
+
+    return immersion
+
+
+def get_interlocking_rings_immersion(radius, embedding_dim, rot):
+    def immersion(angle: float) -> torch.Tensor:
+        assert 0 <= angle <= 4 * gs.pi
+        if angle < 2 * gs.pi:
+            # First Ring
+            x = radius * gs.cos(angle)
+            y = radius * gs.sin(angle)
+            z = 0
+            point = gs.squeeze(gs.array([x, y, z]), axis=-1)
+
+        else:
+            # Second Ring
+            x = radius * gs.sin(angle) + radius
+            y = 0
+            z = radius * gs.cos(angle)
+            point = gs.squeeze(gs.array([x, y, z]), axis=-1)
+
+        if embedding_dim > 3:
+            point = gs.concatenate([point, gs.zeros(embedding_dim - 3)])
+
+        return gs.einsum("ij,j->i", rot, point)
+
+    return immersion
+
+
+def _get_equal_arc_length_angles(immersion, n_points=1500, oversample=10000):
+    angles_fine = torch.linspace(0, 2 * torch.pi, oversample)
+    points = torch.stack([immersion(a) for a in angles_fine])
+    dists = torch.norm(points[1:] - points[:-1], dim=1)
+    arc_lengths = torch.cat([torch.zeros(1), torch.cumsum(dists, dim=0)])
+    arc_lengths = arc_lengths / arc_lengths[-1]
+
+    desired = torch.linspace(0, 1, n_points)
+    idxs = torch.searchsorted(arc_lengths, desired)
+    idxs = torch.clamp(idxs, 0, oversample - 1)
+    return angles_fine[idxs]
+
+
+
 def generate_three_manifolds(manifold, n_points_per_manifold=1000, noise_var=0.2, embedding_dim=3, translations=None,
                              rotations=None):
     if translations is None:
@@ -59,76 +163,6 @@ def generate_three_manifolds(manifold, n_points_per_manifold=1000, noise_var=0.2
     return data, labels
 
 
-def get_torus_immersion(major_radius, minor_radius, embedding_dim, deformation_amp, translation, rotation):
-    def immersion(angle_pair):
-        theta, phi = angle_pair
-
-        amplitude1 = (1 + 0.5 * (
-                deformation_amp * gs.exp(-2 * (phi - gs.pi / 2) ** 2) * gs.exp(-2 * (theta - gs.pi) ** 2)
-                + deformation_amp * gs.exp(-2 * (phi - 3 * gs.pi / 2) ** 2) * gs.exp(-2 * (theta - gs.pi) ** 2))
-                      )
-        amplitude2 = (
-                deformation_amp * gs.exp(-2 * (phi - gs.pi / 2) ** 2) * gs.exp(-2 * (theta - gs.pi / 2) ** 2)
-                + deformation_amp * gs.exp(-2 * (phi - 3 * gs.pi / 2) ** 2) * gs.exp(-2 * (theta - 3 * gs.pi / 2) ** 2)
-        )
-
-        # Standard 3D torus coordinates
-        x = (major_radius - minor_radius * gs.cos(theta)) * gs.cos(phi)
-        y = (major_radius - minor_radius * gs.cos(theta)) * gs.sin(phi)
-        z = minor_radius * gs.sin(theta)
-
-        point = amplitude1 * gs.array([x, y, z])
-        point = gs.squeeze(point, axis=-1)
-
-        if embedding_dim > 3:
-            point = gs.concatenate([point, gs.zeros(embedding_dim - 3)])
-
-        if embedding_dim > 7:
-            point[3] = amplitude2
-        for i in range(2):
-            point[4 + i] = gs.sin((i + 1) * theta) * gs.cos((i + 2) * phi)
-
-        point = _rotate_translate(point, translation, rotation)
-        return point
-
-    return immersion
-
-
-def load_torus(n_points, major_radius, minor_radius, noise_var, embedding_dim, deformation_amp,
-               translation="random",
-               rotation="random", random_seed=42, ):
-    gs.random.seed(random_seed)
-    torch.manual_seed(random_seed)
-
-    rot = torch.eye(embedding_dim)
-    if rotation == "random":
-        rot = SpecialOrthogonal(n=embedding_dim).random_point()
-    trans = torch.zeros(embedding_dim)
-    if translation == "random":
-        trans = 100 * torch.rand(embedding_dim)
-
-    immersion = get_torus_immersion(major_radius=major_radius, minor_radius=minor_radius, embedding_dim=embedding_dim,
-                                    deformation_amp=deformation_amp,
-                                    translation=trans, rotation=rot)
-
-    sqrt_ntimes = int(gs.sqrt(n_points))
-    eps = 1e-4
-    thetas = gs.linspace(eps, 2 * gs.pi - eps, sqrt_ntimes)
-    phis = gs.linspace(eps, 2 * gs.pi - eps, sqrt_ntimes)
-    angle_grid = torch.cartesian_prod(thetas, phis)
-
-    data = torch.stack([immersion(pair) for pair in angle_grid])
-
-    if noise_var != 0:
-        noise = MultivariateNormal(
-            loc=torch.zeros(embedding_dim),
-            covariance_matrix=major_radius * noise_var * torch.eye(embedding_dim),
-        ).sample((sqrt_ntimes ** 2,))
-        data = data + noise
-
-    return data, angle_grid
-
-
 def generate_torus(n_points=5000, major_radius=5.0, minor_radius=1.0, filled=False, noise_var=0.01, embedding_dim=3,
                    translation=None,
                    rotation=None, random_seed=42):
@@ -172,7 +206,7 @@ def load_wiggling_tube(n_phi, n_theta, minor_radius, noise_var, wiggling_dim, em
     rot = torch.eye(wiggling_dim)
     trans = torch.zeros(wiggling_dim)
 
-    curve = get_scrunchy_dim_n(deformation_amp=deformation_amp, embedding_dim=wiggling_dim, translation=trans,
+    curve = get_s1_high(deformation_amp=deformation_amp, embedding_dim=wiggling_dim, translation=trans,
                                rotation=rot)
 
     data = []
@@ -180,7 +214,7 @@ def load_wiggling_tube(n_phi, n_theta, minor_radius, noise_var, wiggling_dim, em
 
     for phi in phis:
         frame, _, _ = compute_frenet_frame(curve, phi, wiggling_dim, deformation_amp=deformation_amp,
-                                           is_scrunchy_dim_n=True)
+                                           is_s1_high=True)
         e1 = frame[:, 1]
         e2 = frame[:, 2]
         center = curve(phi)
@@ -224,7 +258,7 @@ def load_interlocked_tori(n_points, major_radius, minor_radius, noise_var, embed
     rot = torch.eye(embedding_dim)
     trans = torch.zeros(embedding_dim)
 
-    immersion = get_torus_immersion(major_radius=major_radius, minor_radius=minor_radius, embedding_dim=embedding_dim,
+    immersion = get_t2_high_immersion(major_radius=major_radius, minor_radius=minor_radius, embedding_dim=embedding_dim,
                                     deformation_amp=deformation_amp,
                                     translation=trans, rotation=rot)
 
@@ -429,98 +463,6 @@ def generate_genus3(n_points=5000, R=1.0, r=0.25, noise_var=0.01, embedding_dim=
     return points, labels
 
 
-def get_sphere_immersion(radius, deformation_amp, embedding_dim, translation, rotation):
-    def immersion(angle_pair):
-        theta, phi = angle_pair
-
-        amplitude = (
-                1 + 0.5 * deformation_amp * (gs.exp(-5 * theta ** 2)
-                                             + gs.exp(-5 * (theta - gs.pi) ** 2))
-        )
-
-        # Base S^2 coordinates in R^3
-        x = radius * gs.sin(theta) * gs.cos(phi)
-        y = radius * gs.sin(theta) * gs.sin(phi)
-        z = radius * gs.cos(theta)
-
-        point = amplitude * gs.array([x, y, z])
-        point = gs.squeeze(point, axis=-1)
-
-        if embedding_dim > 3:
-            point = gs.concatenate([point, gs.zeros(embedding_dim - 3)])
-
-        if embedding_dim > 5:
-            for i in range(2):
-                point[3 + i] = gs.sin((i + 1) * theta) * gs.cos((i + 2) * phi)
-
-        point = _rotate_translate(point, translation, rotation)
-        return point
-
-    return immersion
-
-    # def immersion(angle_pair):
-    #     theta, phi = angle_pair
-    #     amplitude1 = (
-    #             1 + deformation_amp * (gs.exp(-5 * theta ** 2)
-    #                                          + gs.exp(-5 * (theta - gs.pi) ** 2))
-    #     )
-    #     amplitude2 = (
-    #             1 + deformation_amp * (gs.exp(-5 * (theta - gs.pi / 2) ** 2)
-    #                                    + gs.exp(-5 * (theta - 3 * gs.pi / 2) ** 2))
-    #     )
-    #     amplitude3 = 1 + deformation_amp * (torch.cos(theta) + torch.cos(2 * theta))
-    #     amplitude4 = 1 + deformation_amp * (torch.cos(phi) + torch.cos(2 * phi))
-    #
-    #     x = radius * gs.sin(theta) * gs.cos(phi)
-    #     y = radius * gs.sin(theta) * gs.sin(phi)
-    #     z = radius * gs.cos(theta)
-    #
-    #     point = gs.array([x, y, z])
-    #     point = gs.squeeze(point, axis=-1)
-    #     if embedding_dim > 6:
-    #         point = gs.concatenate([point, gs.zeros(embedding_dim - 3)])
-    #         point[3] = amplitude1
-    #         point[4] = amplitude2
-    #         point[5] = amplitude3
-    #         point[6] = amplitude4
-    #
-    #     point = _rotate_translate(point, translation, rotation)
-    #     return point
-
-
-def load_sphere(n_points, radius, noise_var, embedding_dim, deformation_amp, translation, rotation, random_seed=42):
-    gs.random.seed(random_seed)
-    torch.manual_seed(random_seed)
-
-    if rotation == "random":
-        rot = SpecialOrthogonal(n=embedding_dim).random_point()
-    else:
-        rot = torch.eye(embedding_dim)
-    if translation is None:
-        trans = torch.zeros(embedding_dim)
-    else:
-        trans = translation
-
-    immersion = get_sphere_immersion(radius=radius, embedding_dim=embedding_dim, deformation_amp=deformation_amp,
-                                     translation=trans, rotation=rot)
-    sqrt_ntimes = int(gs.sqrt(n_points))
-    thetas = gs.arccos(np.linspace(0.99, -0.99, sqrt_ntimes))  # For more uniform distribution of sample points
-    # thetas = gs.linspace(0.01, np.pi - 0.01, sqrt_ntimes)
-    phis = gs.linspace(0.01, 2 * np.pi - 0.01, sqrt_ntimes)
-    angle_grid = torch.cartesian_prod(thetas, phis)
-
-    data = torch.stack([immersion(pair) for pair in angle_grid])
-
-    if noise_var != 0:
-        noise = MultivariateNormal(
-            loc=torch.zeros(embedding_dim),
-            covariance_matrix=noise_var * torch.eye(embedding_dim),
-        ).sample((sqrt_ntimes ** 2,))
-        data = data + noise
-
-    return data, angle_grid
-
-
 def load_nested_spheres(n_points, major_radius, mid_radius, minor_radius, noise_var, embedding_dim, deformation_amp,
                         translation, rotation, random_seed=42):
     gs.random.seed(random_seed)
@@ -539,13 +481,13 @@ def load_nested_spheres(n_points, major_radius, mid_radius, minor_radius, noise_
     else:
         trans = translation
 
-    immersion_inner = get_sphere_immersion(radius=minor_radius, embedding_dim=embedding_dim,
+    immersion_inner = get_s2_high_immersion(radius=minor_radius, embedding_dim=embedding_dim,
                                            deformation_amp=deformation_amp,
                                            translation=trans, rotation=rot_inner)
-    immersion_mid = get_sphere_immersion(radius=mid_radius, embedding_dim=embedding_dim,
+    immersion_mid = get_s2_high_immersion(radius=mid_radius, embedding_dim=embedding_dim,
                                          deformation_amp=deformation_amp,
                                          translation=trans, rotation=rot_mid)
-    immersion_outer = get_sphere_immersion(radius=major_radius, embedding_dim=embedding_dim,
+    immersion_outer = get_s2_high_immersion(radius=major_radius, embedding_dim=embedding_dim,
                                            deformation_amp=deformation_amp,
                                            translation=trans, rotation=rot_outer)
 
@@ -823,88 +765,103 @@ def load_8_curve(n_points, noise_var, embedding_dim=3, translation="random", rot
     return data, angles
 
 
-def get_scrunchy_dim_n(deformation_amp, embedding_dim, translation, rotation, deformation="peaks"):
-    def immersion(angle):
-        if deformation == "peaks":
-            x1 = gs.sin(angle)
-            x2 = gs.cos(angle)
-            x3 = gs.sin(0 * angle)
-            x4 = deformation_amp * gs.cos(2 * angle)
-            x5 = deformation_amp * gs.sin(3 * angle)
-            x6 = deformation_amp * gs.cos(4 * angle)
-            x7 = deformation_amp * gs.sin(5 * angle)
-            x8 = deformation_amp * gs.cos(6 * angle)
-            x9 = deformation_amp * gs.sin(7 * angle)
-            x10 = deformation_amp * gs.cos(7 * angle)
-        else:
-            x1 = gs.sin(angle)
-            x2 = gs.cos(angle)
-            x3 = gs.sin(2 * angle)
-            x4 = deformation_amp * gs.cos(2 * angle)
-            x5 = deformation_amp * gs.sin(3 * angle)
-            x6 = deformation_amp * gs.cos(3 * angle)
-            x7 = deformation_amp * gs.sin(4 * angle)
-            x8 = deformation_amp * gs.cos(4 * angle)
-            x9 = deformation_amp * gs.sin(5 * angle)
-            x10 = deformation_amp * gs.cos(5 * angle)
-
-        point = gs.array([x1, x2, x3, x4, x5, x6, x7, x8, x9, x10])[:embedding_dim]
-        point = gs.squeeze(point, axis=-1)
-        point = _rotate_translate(point, translation, rotation)
-        return point
-
-    return immersion
-
-
-def load_scrunchy_dim_n(n_points, noise_var, deformation_amp, embedding_dim, translation, rotation, random_seed=42):
+def load_scrunchy(rotation,
+                  n_points=1500,
+                  radius=1.0,
+                  n_wiggles=6,
+                  deformation_amp=0.4,
+                  embedding_dim=10,
+                  noise_var=0.01, random_seed=42,
+                  ):
+    gs.random.seed(random_seed)
     rot = torch.eye(embedding_dim)
     if rotation == "random":
         rot = SpecialOrthogonal(n=embedding_dim).random_point()
-    trans = torch.zeros(embedding_dim)
-    if translation == "random":
-        trans = 100 * torch.rand(embedding_dim)
-    immersion = get_scrunchy_dim_n(deformation_amp=deformation_amp, embedding_dim=embedding_dim, translation=trans,
-                                   rotation=rot)
-    angles = torch.linspace(0, 2 * torch.pi, n_points)
+
+    immersion = get_scrunchy_immersion(
+        radius=radius,
+        n_wiggles=n_wiggles,
+        distortion_amp=deformation_amp,
+        embedding_dim=embedding_dim,
+        rot=rot,
+    )
+
+    angles = _get_equal_arc_length_angles(immersion, n_points)
     data = torch.stack([immersion(angle) for angle in angles])
 
-    if noise_var != 0:
-        noise = MultivariateNormal(loc=torch.zeros(embedding_dim),
-                                   covariance_matrix=noise_var * torch.eye(embedding_dim), ).sample((n_points,))
-        data = data + noise
-
-    return data, angles
-
-
-def _embedd_rotate_translate(point, embedding_dim, translation, rotation):
-    point = _embedd(points=point, embedding_dim=embedding_dim)
-    point = _rotate_translate(points=point, rotation=rotation, translation=translation)
-    return point
-
-
-def _embedd(points, embedding_dim):
-    points = gs.array(points)
-    if points.ndim == 1:
-        pad_width = embedding_dim - points.shape[0]
-        if pad_width > 0:
-            points = gs.concatenate([points, gs.zeros(pad_width)])
-    elif points.ndim == 2:
-        pad_width = embedding_dim - points.shape[1]
-        if pad_width > 0:
-            zeros = gs.zeros((points.shape[0], pad_width))
-            points = gs.concatenate([points, zeros], axis=1)
+    if noise_var > 0:
+        noise = MultivariateNormal(
+            loc=torch.zeros(embedding_dim),
+            covariance_matrix=noise_var * torch.eye(embedding_dim),
+        ).sample((n_points,))
+        noisy_data = data + radius * noise
     else:
-        raise ValueError("Input must be a 1D or 2D array.")
-    return points
+        noisy_data = data
+
+    labels = angles.unsqueeze(dim=1)
+    return noisy_data, labels
 
 
-def _rotate_translate(points, translation, rotation):
-    if points.ndim == 1:
-        points = gs.einsum("ij,j->i", rotation, points)
-        points = points + translation
-    elif points.ndim == 2:
-        points = gs.einsum("ij,nj->ni", rotation, points)
-        points = points + translation
+def load_flower_scrunchy(rotation,
+                         n_points=1500,
+                         radius=1.0,
+                         n_wiggles=6,
+                         deformation_amp=0.4,
+                         embedding_dim=10,
+                         noise_var=0.01, random_seed=42,
+                         ):
+    gs.random.seed(random_seed)
+    rot = torch.eye(embedding_dim)
+    if rotation == "random":
+        rot = SpecialOrthogonal(n=embedding_dim).random_point()
+
+    immersion = get_flower_scrunchy_immersion(
+        radius=radius,
+        n_wiggles=n_wiggles,
+        distortion_amp=deformation_amp,
+        embedding_dim=embedding_dim,
+        rot=rot,
+    )
+
+    angles = _get_equal_arc_length_angles(immersion, n_points)
+    data = torch.stack([immersion(angle) for angle in angles])
+
+    if noise_var > 0:
+        noise = MultivariateNormal(
+            loc=torch.zeros(embedding_dim),
+            covariance_matrix=noise_var * torch.eye(embedding_dim),
+        ).sample((n_points,))
+        noisy_data = data + radius * noise
     else:
-        raise ValueError("Input must be a 1D or 2D tensor.")
-    return points
+        noisy_data = data
+
+    labels = angles.unsqueeze(dim=1)
+    return noisy_data, labels
+
+
+def load_interlocking_rings_synthetic(rotation,
+                                      n_points=1500,
+                                      radius=1.0,
+                                      embedding_dim=10,
+                                      noise_var=0.01,
+                                      ):
+    rot = torch.eye(embedding_dim)
+    if rotation == "random":
+        rot = SpecialOrthogonal(n=embedding_dim).random_point()
+    immersion = get_interlocking_rings_immersion(
+        radius=radius,
+        embedding_dim=embedding_dim,
+        rot=rot,
+    )
+    angles = gs.linspace(0, 4 * gs.pi, n_points)
+    data = torch.stack([immersion(angle) for angle in angles])
+
+    noise = MultivariateNormal(
+        loc=torch.zeros(embedding_dim),
+        covariance_matrix=noise_var * torch.eye(embedding_dim),
+    ).sample((n_points,))
+
+    noisy_data = data + radius * noise
+    labels = pd.DataFrame({"angles": angles})
+    return noisy_data, labels
+

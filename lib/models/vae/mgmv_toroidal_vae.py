@@ -13,7 +13,7 @@ class MGVMToroidalVAE(torch.nn.Module):
     ):
         is_valid_model_config(config)
         super().__init__()
-        self.posterior_type = "mgvm_toroidal"
+        self.type = "mgvm_toroidal"
         self.data_dim = config["data_dim"]
         self.sftbeta = config["sftbeta"]
         self.latent_dim = config["latent_dim"]  # Here latent_dim = d for T^d latent space (manifold dim)

@@ -14,20 +14,20 @@ from geomstats.geometry.euclidean import Euclidean
 from geomstats.geometry.pullback_metric import PullbackMetric
 from geomstats.geometry.special_orthogonal import SpecialOrthogonal
 
-from ..datasets.synthetic_sphere_like import (
-    get_s1_synthetic_immersion,
-    get_s2_synthetic_immersion,
-    get_t2_synthetic_immersion,
+from ..datasets.datasets_main import (
+    get_s1_low_immersion,
+    get_s2_low_immersion,
+    get_t2_low_immersion,
     get_scrunchy_immersion,
     get_flower_scrunchy_immersion,
 )
 
-from ..datasets.topo_datasets import (
+from ..datasets.datasets_other import (
     get_clelia_immersion,
     get_8_curve_immersion,
-    get_torus_immersion,
-    get_sphere_immersion,
-    get_scrunchy_dim_n,
+    get_t2_high_immersion,
+    get_s2_high_immersion,
+    get_s1_high,
     get_sphere_high_dim_bump_immersion
 )
 
@@ -50,10 +50,10 @@ class NeuralManifoldIntrinsic(ImmersedSet):
 
 def get_learned_immersion(model, config):
     def immersion_vm(angle):
-        if config.dataset_name in {"s1_synthetic", "scrunchy_dim_n"}:
+        if config.dataset_name in {"s1_low", "s1_high"}:
             z = gs.array([gs.cos(angle[0]), gs.sin(angle[0])])
 
-        elif config.dataset_name in {"s2_synthetic", "sphere"}:
+        elif config.dataset_name in {"s2_low", "s2_high"}:
             theta, phi = angle
             z = gs.array([
                 gs.sin(theta) * gs.cos(phi),
@@ -61,7 +61,7 @@ def get_learned_immersion(model, config):
                 gs.cos(theta),
             ])
 
-        elif config.dataset_name in {"t2_synthetic", "torus"}:
+        elif config.dataset_name in {"t2_low", "t2_high"}:
             theta, phi = angle
             z = gs.array([
                 (config.major_radius - config.minor_radius * gs.cos(theta)) * gs.cos(phi),
@@ -93,12 +93,12 @@ def get_true_immersion(config):
     if config.rotation == "random":
         rot = SpecialOrthogonal(n=config.embedding_dim).random_point()
 
-    if config.dataset_name == "s1_synthetic":
-        return get_s1_synthetic_immersion(
-            config.geodesic_distortion_func,
+    if config.dataset_name == "s1_low":
+        return get_s1_low_immersion(
+            config.deformation_type,
             config.radius,
             config.n_wiggles,
-            config.geodesic_distortion_amp,
+            config.deformation_amp,
             config.embedding_dim,
             rot,
         )
@@ -113,7 +113,7 @@ def get_true_immersion(config):
         return get_scrunchy_immersion(
             config.radius,
             config.n_wiggles,
-            config.geodesic_distortion_amp,
+            config.deformation_amp,
             config.embedding_dim,
             rot,
         )
@@ -121,19 +121,19 @@ def get_true_immersion(config):
         return get_flower_scrunchy_immersion(
             config.radius,
             config.n_wiggles,
-            config.geodesic_distortion_amp,
+            config.deformation_amp,
             config.embedding_dim,
             rot,
         )
-    elif config.dataset_name == "scrunchy_dim_n":
-        return get_scrunchy_dim_n(
-            deformation_amp=config.geodesic_distortion_amp,
+    elif config.dataset_name == "s1_high":
+        return get_s1_high(
+            deformation_amp=config.deformation_amp,
             embedding_dim=config.embedding_dim,
             translation=trans,
             rotation=rot
         )
-    elif config.dataset_name == "torus":
-        return get_torus_immersion(
+    elif config.dataset_name == "t2_high":
+        return get_t2_high_immersion(
             major_radius=config.major_radius,
             minor_radius=config.minor_radius,
             embedding_dim=config.embedding_dim,
@@ -142,14 +142,14 @@ def get_true_immersion(config):
             rotation=rot
         )
     elif config.dataset_name == "interlocked_tori":
-        immersion1 = get_torus_immersion(major_radius=config.major_radius,
+        immersion1 = get_t2_high_immersion(major_radius=config.major_radius,
                                          minor_radius=config.minor_radius,
                                          embedding_dim=3,
                                          deformation_amp=config.deformation_amp,
                                          translation=torch.zeros(3),
                                          rotation=torch.eye(n=3),
                                          )
-        immersion2 = get_torus_immersion(major_radius=config.major_radius,
+        immersion2 = get_t2_high_immersion(major_radius=config.major_radius,
                                          minor_radius=config.minor_radius,
                                          embedding_dim=3,
                                          deformation_amp=config.deformation_amp,
@@ -157,33 +157,33 @@ def get_true_immersion(config):
                                          rotation=torch.eye(n=3),
                                          )
         return immersion1, immersion2
-    elif config.dataset_name == "sphere":
-        return get_sphere_immersion(radius=config.radius, embedding_dim=config.embedding_dim,
+    elif config.dataset_name == "s2_high":
+        return get_s2_high_immersion(radius=config.radius, embedding_dim=config.embedding_dim,
                                     deformation_amp=config.deformation_amp,
                                     translation=trans, rotation=rot)
     elif config.dataset_name == "nested_spheres":
-        immersion_inner = get_sphere_immersion(radius=config.minor_radius, embedding_dim=3,
+        immersion_inner = get_s2_high_immersion(radius=config.minor_radius, embedding_dim=3,
                                                deformation_amp=config.deformation_amp,
                                                translation=torch.zeros(3), rotation=torch.eye(n=3))
-        immersion_mid = get_sphere_immersion(radius=config.mid_radius, embedding_dim=3,
+        immersion_mid = get_s2_high_immersion(radius=config.mid_radius, embedding_dim=3,
                                              deformation_amp=config.deformation_amp,
                                              translation=torch.zeros(3), rotation=torch.eye(n=3))
-        immersion_outer = get_sphere_immersion(radius=config.major_radius, embedding_dim=3,
+        immersion_outer = get_s2_high_immersion(radius=config.major_radius, embedding_dim=3,
                                                deformation_amp=config.deformation_amp,
                                                translation=torch.zeros(3), rotation=torch.eye(n=3))
         return immersion_inner, immersion_mid, immersion_outer
-    elif config.dataset_name == "s2_synthetic":
-        return get_s2_synthetic_immersion(
+    elif config.dataset_name == "s2_low":
+        return get_s2_low_immersion(
             radius=config.radius,
-            geodesic_distortion_amp=config.geodesic_distortion_amp,
+            deformation_amp=config.deformation_amp,
             embedding_dim=config.embedding_dim,
             rot=rot,
         )
-    elif config.dataset_name == "t2_synthetic":
-        return get_t2_synthetic_immersion(
+    elif config.dataset_name == "t2_low":
+        return get_t2_low_immersion(
             config.major_radius,
             config.minor_radius,
-            config.geodesic_distortion_amp,
+            config.deformation_amp,
             config.embedding_dim,
             rot,
         )
@@ -207,13 +207,13 @@ def get_true_immersion(config):
 
 def get_z_grid(config, n_grid_points):
     eps = 1e-4
-    if config.dataset_name in {"s1_synthetic", "scrunchy", "scrunchy_dim_n"}:
+    if config.dataset_name in {"s1_low", "scrunchy", "s1_high"}:
         z_grid = torch.linspace(eps, 2 * gs.pi - eps, n_grid_points)
-    elif config.dataset_name in {"s2_synthetic", "sphere"}:
+    elif config.dataset_name in {"s2_low", "s2_high"}:
         thetas = gs.arccos(np.linspace(0.99, -0.99, int(np.sqrt(n_grid_points))))
         phis = gs.linspace(0.01, 2 * gs.pi - 0.01, int(np.sqrt(n_grid_points)))
         z_grid = torch.cartesian_prod(thetas, phis)
-    elif config.dataset_name in {"t2_synthetic", "torus"}:
+    elif config.dataset_name in {"t2_low", "t2_high"}:
         thetas = gs.linspace(eps, 2 * gs.pi - eps, int(np.sqrt(n_grid_points)))
         phis = gs.linspace(eps, 2 * gs.pi - eps, int(np.sqrt(n_grid_points)))
         z_grid = torch.cartesian_prod(thetas, phis)
@@ -386,10 +386,10 @@ def compute_curvature_learned(config, model, latents=None, labels=None, n_grid_p
     else:
         raise InvalidConfigError(f"Unknown model type: {config.model_type}")
     immersion = get_learned_immersion(model=model, config=config)
-    if config.dataset_name in {"s1_synthetic", "interlocking_rings_synthetic", "scrunchy", "clelia_curve", "8_curve",
-                               "flower_scrunchy", "scrunchy_dim_n"}:
+    if config.dataset_name in {"s1_low", "interlocking_rings_synthetic", "scrunchy", "clelia_curve", "8_curve",
+                               "flower_scrunchy", "s1_high"}:
         manifold_dim = 1
-    elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "sphere", "sphere_high_dim", "torus", "wiggling_tube",
+    elif config.dataset_name in {"s2_low", "t2_low", "s2_high", "sphere_high_dim", "t2_high", "wiggling_tube",
                                  "interlocked_tori", "nested_spheres"}:
         manifold_dim = 2
     else:
@@ -401,8 +401,8 @@ def compute_curvature_learned(config, model, latents=None, labels=None, n_grid_p
 
 def compute_curvature_true(config, labels=None, n_grid_points=2000, cache_dir="./curvature_cache"):
     os.makedirs(cache_dir, exist_ok=True)
-    if config.dataset_name in {"s1_synthetic", "s2_synthetic", "t2_synthetic", "scrunchy", "scrunchy_dim_n"}:
-        deformation = config.geodesic_distortion_amp
+    if config.dataset_name in {"s1_low", "s2_low", "t2_low", "scrunchy", "s1_high"}:
+        deformation = config.deformation_amp
     else:
         deformation = config.deformation_amp
     name = f"{config.dataset_name}_{config.n_points_pullback_curv}_{deformation}.pt"
@@ -421,12 +421,12 @@ def compute_curvature_true(config, labels=None, n_grid_points=2000, cache_dir=".
     else:
         angles = get_z_grid(config, n_grid_points)
 
-    if config.dataset_name in {"s1_synthetic", "interlocking_rings_synthetic", "scrunchy", "clelia_curve", "8_curve",
-                               "flower_scrunchy", "scrunchy_dim_n"}:
+    if config.dataset_name in {"s1_low", "interlocking_rings_synthetic", "scrunchy", "clelia_curve", "8_curve",
+                               "flower_scrunchy", "s1_high"}:
         immersion = get_true_immersion(config)
         curv, curv_norm = _compute_curvature(angles, immersion, 1, config.embedding_dim)
 
-    elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "torus", "sphere_high_dim", "sphere"}:
+    elif config.dataset_name in {"s2_low", "t2_low", "t2_high", "sphere_high_dim", "s2_high"}:
         immersion = get_true_immersion(config)
         curv, curv_norm = _compute_curvature(angles, immersion, 2, config.embedding_dim)
 
@@ -506,9 +506,9 @@ def compute_curvature_error_smape(true_curv, approx_curv, eps=1e-12):
 
 
 def compute_curvature_error(z_grid, learned, true, config):
-    if config.dataset_name == "s1_synthetic":
+    if config.dataset_name == "s1_low":
         return _compute_curvature_error_s1(z_grid, learned, true)
-    elif config.dataset_name in ("s2_synthetic", "t2_synthetic"):
+    elif config.dataset_name in ("s2_low", "t2_low"):
         return _compute_curvature_error_s2(z_grid[:, 0], z_grid[:, 1], learned, true)
     else:
         raise InvalidConfigError(f"Unknown XX dataset: {config.dataset_name}")
@@ -517,13 +517,13 @@ def compute_curvature_error(z_grid, learned, true, config):
 # Empiric curvature estimate
 def compute_empirical_curvature(config, labels, inputs, latents, recons, k=160):
     if config.dataset_name in {"8_curve", "clelia_curve", "flower_curve", "scrunchy", "flower_scrunchy",
-                               "scrunchy_dim_n",
-                               "s1_synthetic"}:
+                               "s1_high",
+                               "s1_low"}:
         curv_in = estimate_curvature_1d_quadric(inputs, k)
         curv_lat = estimate_curvature_1d_quadric(latents, k)
         curv_rec = estimate_curvature_1d_quadric(recons, k)
-    elif config.dataset_name in {"s2_synthetic", "t2_synthetic", "torus", "genus_3", "sphere", "sphere_high_dim",
-                                 "wiggling_tube", "flat_torus_embedding"}:
+    elif config.dataset_name in {"s2_low", "t2_low", "t2_high", "genus_3", "s2_high", "sphere_high_dim",
+                                 "wiggling_tube", "flat_t2_high_embedding"}:
         curv_in = estimate_curvature_2d_quadric(inputs, k)
         curv_lat = estimate_curvature_2d_quadric(latents, k)
         curv_rec = estimate_curvature_2d_quadric(recons, k)

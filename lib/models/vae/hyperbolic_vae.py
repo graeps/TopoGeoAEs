@@ -15,7 +15,7 @@ class HyperbolicVAE(torch.nn.Module):
     ):
         is_valid_model_config(config)
         super().__init__()
-        self.posterior_type = "hyperbolic"
+        self.type = "hyperbolic"
         self.data_dim = config["data_dim"]
         self.sftbeta = config["sftbeta"]
         self.latent_dim = config["latent_dim"]

@@ -1,15 +1,22 @@
-# Version from Acosta paper, S^n x S^m as latent space
 import torch
 from torch.nn import functional as f
 
-from ..utils.valid_config import is_valid_model_config
 from ...distributions import VonMisesFisher
 
 
 class VMFToroidalVAE(torch.nn.Module):
+    """
+    Variational Autoencoder with a latent space modeled as S^n x S^m subset R^{n+1} × R^{m+1}.
+    Original version of the one used in F. Acosta et al. 2023. "Quantifying Extrinsic Curvature in Neural Manifolds".
+    Only minimally modified to fit the project.
+
+    The encoder outputs two independent von Mises–Fisher distributions over S^n and S^m.
+    The sampled directions are projected to R^3 via torus parametrization for the case n = m = 1.
+    """
+
     def __init__(self, config):
         super().__init__()
-        self.posterior_type = "vmf_toroidal"
+        self.posterior_type = "vmf_toroidal_vae"
         self.data_dim = config.embedding_dim
         self.sftbeta = config.sftbeta
         self.latent_dim = config.latent_dim
