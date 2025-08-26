@@ -677,7 +677,8 @@ def compute_all_curvatures(config, model, recons, latents, inputs, labels, save_
         torch.save({
             'curvatures_sub': curvatures_sub,
             'curvatures_emp_full': curvatures_emp_full,
-            'points_sub': points_sub
+            'points_sub': points_sub,
+            'points': points,
         }, save_path)
 
         if config.verbose:

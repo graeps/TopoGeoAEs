@@ -30,7 +30,7 @@ class ToroidalAE(nn.Module):
         for out_dim in encoder_widths:
             self.encoder_linears.append(nn.Linear(in_dim, out_dim))
             in_dim = out_dim
-        self.fc_final_encoder = nn.Linear(in_dim, self.latent_dim - 1)  # outputs angles (θ, φ)
+        self.fc_final_encoder = nn.Linear(in_dim, self.latent_dim - 1)
 
         self.decoder_linears = nn.ModuleList()
         in_dim = 3  # (x, y, z) in ℝ³

@@ -652,7 +652,8 @@ def scatter_curvature_heatmaps(config, points, points_sub, z_grid, curv_true, cu
                                                pca_dim=pca_dim)
                 fig_indiv.colorbar(sc_indiv, ax=ax_indiv, shrink=0.7)
                 plt.tight_layout()
-                fname_indiv = f"heatmap_{tag}_{i}.png"
+                safe_title = title.replace(" ", "_").lower()
+                fname_indiv = f"heatmap_{safe_title}.png"
                 fig_indiv.savefig(os.path.join(config.log_dir, fname_indiv))
                 plt.close(fig_indiv)
 
@@ -665,12 +666,12 @@ def scatter_curvature_heatmaps(config, points, points_sub, z_grid, curv_true, cu
         plt.show()
 
     heatmaps = {
-        "Quadric Fit Curvature Estimation on Inputs": (curv_in, inputs),
-        "Quadric Fit Curvature Estimation on Latents": (curv_lat, latents),
+        "Inputs": (curv_in, inputs),
+        "Latents": (curv_lat, latents),
     }
 
     if config.compute_rec_curv:
-        heatmaps["Quadric Fit Curvature Estimation on Recons"] = (curv_rec, recons)
+        heatmaps["Recons"] = (curv_rec, recons)
 
     if entity is not None:
         plot_heatmap_group(
@@ -760,7 +761,7 @@ def plot_curvatures_1d(labels, curv_true, curv_in, curv_rec,
 
         # Save individual subplot if log_dir is specified
         if getattr(config, "log_dir", None) is not None:
-            indiv_path = os.path.join(config.log_dir, f"curvature_grid_plot_{title}.png")
+            indiv_path = os.path.join(config.log_dir, f"curvplot_{title}.png")
             fig_indiv, ax_indiv = plt.subplots(figsize=(6, 5))
             for label, curve_values, x_points, color in curves:
                 linestyle = '--' if label == 'True Curvature' else '-'
@@ -769,7 +770,7 @@ def plot_curvatures_1d(labels, curv_true, curv_in, curv_rec,
             ax_indiv.set_xticks([0, np.pi, 2 * np.pi])
             ax_indiv.set_xticklabels(['0', r'$\pi$', r'$2\pi$'])
             ax_indiv.grid(False)
-            ax_indiv.legend(loc='upper right', fontsize=8)
+            ax_indiv.legend(loc='upper right', fontsize=16)
             plt.tight_layout()
             fig_indiv.savefig(indiv_path)
             plt.close(fig_indiv)
@@ -783,9 +784,14 @@ def plot_curvatures_1d(labels, curv_true, curv_in, curv_rec,
 
 def plot_curvatures_2d(labels, labels_sub, curv_true, curv_in, curv_rec, curv_lat, curv_learned, z_grid, config,
                        entity=None):
+    import matplotlib.pyplot as plt
+    from matplotlib.ticker import FuncFormatter
+    from scipy.interpolate import griddata
+    import numpy as np
+    import os
+
     grid_res = 100
-    if config.dataset_name in {"sphere", "s2_synthetic", "sphere_high_dim", "nested_spheres",
-                               "nested_spheres_high_dim"}:
+    if config.dataset_name in {"sphere", "s2_synthetic", "sphere_high_dim", "nested_spheres", "nested_spheres_high_dim"}:
         grid_x, grid_y = np.meshgrid(np.linspace(0, np.pi, int(grid_res // 2)), np.linspace(0, 2 * np.pi, grid_res))
     else:
         grid_x, grid_y = np.meshgrid(np.linspace(0, 2 * np.pi, grid_res), np.linspace(0, 2 * np.pi, grid_res))
@@ -793,72 +799,104 @@ def plot_curvatures_2d(labels, labels_sub, curv_true, curv_in, curv_rec, curv_la
     def interpolate(lbls, values):
         return griddata(lbls, values, (grid_x, grid_y), method="cubic")
 
+    def pi_formatter(x, pos):
+        if np.isclose(x, 0):
+            return "0"
+        elif np.isclose(x, np.pi / 2):
+            return r"$\frac{\pi}{2}$"
+        elif np.isclose(x, np.pi):
+            return r"$\pi$"
+        elif np.isclose(x, 2 * np.pi):
+            return r"$2\pi$"
+        else:
+            return ""
+
     def plot_surface_group(surfaces, suptitle, tag):
         num_surfaces = len(surfaces)
         num_cols = 3
         num_rows = (num_surfaces + num_cols - 1) // num_cols
-
-        fig = plt.figure(figsize=(18, 6 * num_rows))
-
-        # Custom formatters for axis ticks
-        def pi_formatter(x, pos):
-            if np.isclose(x, 0):
-                return "0"
-            elif np.isclose(x, np.pi / 2):
-                return r"$\frac{\pi}{2}$"
-            elif np.isclose(x, np.pi):
-                return r"$\pi$"
-            elif np.isclose(x, 2 * np.pi):
-                return r"$2\pi$"
-            else:
-                return ""
+        fig = plt.figure(figsize=(6 * num_cols, 5 * num_rows))
 
         for i, (title, surface) in enumerate(surfaces.items(), 1):
             ax = fig.add_subplot(num_rows, num_cols, i, projection='3d')
-            surf = ax.plot_surface(grid_x, grid_y, surface, cmap='viridis')
-
+            ax.plot_surface(grid_x, grid_y, surface, cmap='viridis')
             ax.set_title(title, fontsize=12)
-
             ax.set_xlabel(r'$\theta_1$')
             ax.set_ylabel(r'$\theta_2$')
-            ax.set_zlabel('Curvature', labelpad=10)
-
+            ax.set_zlabel('Curvature')
             ax.xaxis.set_major_locator(plt.MultipleLocator(np.pi / 2))
             ax.yaxis.set_major_locator(plt.MultipleLocator(np.pi))
-
             ax.xaxis.set_major_formatter(FuncFormatter(pi_formatter))
             ax.yaxis.set_major_formatter(FuncFormatter(pi_formatter))
 
-            # Add colorbar with extra padding
-            cbar = fig.colorbar(surf, ax=ax, shrink=0.6, aspect=10, pad=0.1)
-            cbar.ax.tick_params(labelsize=10)
-
         fig.suptitle(suptitle, fontsize=18)
-        fig.tight_layout(rect=[0, 0, 1, 0.96])  # Leave space for suptitle
-
+        fig.tight_layout(rect=[0, 0, 1, 0.96])
         if config.log_dir is not None:
-            fname = f"surface_{tag}.png"
-            plt.savefig(os.path.join(config.log_dir, fname), dpi=300, bbox_inches='tight')
-
+            fname = f"surface_group_{tag}.png"
+            fig.savefig(os.path.join(config.log_dir, fname), dpi=300, bbox_inches='tight')
         plt.show()
 
-    surfaces = {
-        "Empirical Curvature on Input Data": interpolate(labels, curv_in),
-        "Empirical Curvature on Latent Representation": interpolate(labels, curv_lat),
+    def plot_individual_surface(title, surface, tag):
+        fig = plt.figure(figsize=(6, 5))
+        ax = fig.add_subplot(111, projection='3d')
+        ax.plot_surface(grid_x, grid_y, surface, cmap='viridis')
 
+        # Remove title and axis labels
+        ax.set_title("")
+        ax.set_xlabel("")
+        ax.set_ylabel("")
+        ax.set_zlabel("")
+
+        # Retain tick formatters for clarity
+        ax.xaxis.set_major_locator(plt.MultipleLocator(np.pi / 2))
+        ax.yaxis.set_major_locator(plt.MultipleLocator(np.pi))
+        ax.xaxis.set_major_formatter(FuncFormatter(pi_formatter))
+        ax.yaxis.set_major_formatter(FuncFormatter(pi_formatter))
+
+
+        if config.log_dir is not None:
+            fname = f"curvplot_{tag}.png"
+            fig.savefig(os.path.join(config.log_dir, fname), dpi=300, bbox_inches='tight')
+        plt.close(fig)
+
+    # Define surface groups similar to curve_groups
+    surface_groups = []
+
+    # Group 1: Sanity Check / Basic
+    basic_group = {
+        "Inputs": interpolate(labels, curv_in),
+        "Latents": interpolate(labels, curv_lat)
     }
     if config.compute_true_curv:
-        surfaces["True Curvature on Input Data"] = interpolate(z_grid, curv_true)
-    if config.compute_learned_curv:
-        surfaces["Learned Curvature (pullback) on Latent Representation"] = interpolate(z_grid, curv_learned)
-    if config.compute_rec_curv:
-        surfaces["Empirical Curvature on Reconstructed Data"] = interpolate(labels, curv_rec)
+        basic_group["True"] = interpolate(z_grid, curv_true)
+    surface_groups.append(("Sanity Check", "emp", basic_group))
 
-    if entity is not None:
-        plot_surface_group(surfaces, f'Curvature Comparison - Connected Component {int(entity)}',
-                           'curvature_plots')
-    else:
-        plot_surface_group(surfaces, 'Input Data Curvature Comparison', 'true_input_reconstructed')
+    # Group 2: Learned Curvatures (if available)
+    if config.compute_learned_curv:
+        learned_group = {
+            "Pullback": interpolate(z_grid, curv_learned),
+        }
+        if config.compute_true_curv:
+            learned_group["True Curvature on Input Data"] = interpolate(z_grid, curv_true)
+        surface_groups.append(("Learned vs True", "learned", learned_group))
+
+    # Group 3: Reconstructed (if available)
+    if config.compute_rec_curv:
+        rec_group = {
+            "Inputs": interpolate(labels, curv_in),
+            "Recons": interpolate(labels, curv_rec)
+        }
+        if config.compute_true_curv:
+            rec_group["True"] = interpolate(z_grid, curv_true)
+        surface_groups.append(("Reconstructed vs Input", "reconstructed", rec_group))
+
+    # Plot and optionally save grouped and individual surfaces
+    for suptitle, tag, group in surface_groups:
+        plot_surface_group(group, f"{suptitle} - {entity if entity is not None else 'All'}", tag)
+        if config.log_dir is not None:
+            for surface_title, surface in group.items():
+                safe_title = surface_title.lower().replace(' ', '_').replace('(', '').replace(')', '')
+                plot_individual_surface(surface_title, surface, f"{tag}_{safe_title}")
 
 
 def compute_all_error_metrics(pairs):
@@ -983,7 +1021,7 @@ def _plot_all_curvatures_from_vectors(config, model, recons, latents, inputs, la
             plot_curvatures_1d(labels=labels_sub, curv_true=curv_true, curv_in=curv_in_sub, curv_rec=curv_rec_sub,
                                curv_lat=curv_lat_sub,
                                curv_lat_norm=curv_lat_norm_sub,
-                               curv_learned=curv_learned, config=config)
+                               curv_learned=curv_learned, config=config, z_grid=z_grid)
             scatter_curvature_heatmaps(config, points=points, points_sub=points_sub, z_grid=z_grid, curv_true=curv_true,
                                        curv_in=curv_in, curv_rec=curv_rec, curv_learned=curv_learned, curv_lat=curv_lat)
     elif labels.ndim == 2 and labels.shape[1] == 2:
