@@ -311,6 +311,16 @@ def plot_data_latents_recon(config, model, data_loader):
     if torch.isnan(latents).any():
         print("NaNs detected in the dataset!")
 
+    if getattr(config, "type", None) == "torus_ae" and getattr(config, "normalize", False):
+        u1, u2 = latents[:, :2], latents[:, 2:]
+        theta = torch.atan2(u1[:, 1], u1[:, 0])
+        phi = torch.atan2(u2[:, 1], u2[:, 0])
+        R, r = 2.0, 1.0
+        x = (R + r * torch.cos(phi)) * torch.cos(theta)
+        y = (R + r * torch.cos(phi)) * torch.sin(theta)
+        z = r * torch.sin(phi)
+        latents = torch.stack((x, y, z), dim=-1)
+
     if labels.ndim > 1 and labels.shape[1] == 2:
         colors = labels[:, 0]
         color_map = "hsv"
