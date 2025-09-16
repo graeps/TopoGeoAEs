@@ -15,17 +15,15 @@ os.environ["GEOMSTATS_BACKEND"] = "pytorch"
 import geomstats.backend as gs  # noqa: E402
 
 import lib.dataloaders.synthetic_loader as synthetic_loader
-import lib.dataloaders.flat_torus_loader as flat_torus_loader
 import lib.models.vae.euclidean_vae as e_vae_model
-import lib.models.vae.vm_toroidal_vae as vm_toroidal_vae_model
 import lib.models.vae.vmf_toroidal_vae as vmf_toroidal_vae_model
 import lib.models.vae.vmf_spherical_vae as vmf_spherical_vae_model
 import lib.models.ae.euclidean_ae as ae_model
-import lib.models.ae.param_ae as param_model
 import lib.models.ae.spherical_ae as spherical_model
 import lib.models.ae.toroidal_ae as toroidal_model
 import lib.trainer as trainer
 import lib.utils as utils
+import lib.visualization as visualization
 
 from .experiment_utils import generate_experiment_report
 
@@ -62,18 +60,11 @@ def run_experiment(name=None, all_configs=None):
         gs.random.seed(config.random_seed)
         np.random.seed(config.random_seed)
 
-        if config.dataset_name == "flat_torus_embedding":
-            data_loader = flat_torus_loader.load_flat_torus_embedding(config)
-        else:
-            data_loader = synthetic_loader.load_synthetic_ds(config)
+        data_loader = synthetic_loader.load_synthetic_ds(config)
         train_loader, test_loader = data_loader
 
         if config.model_type == "EuclideanVAE":
             model = e_vae_model.EuclideanVAE(config)
-            optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
-            history = trainer.MVAETrainer(model, data_loader, optimizer, config).train()
-        elif config.model_type == "VMToroidalVAE":
-            model = vm_toroidal_vae_model.VMToroidalVAE(config)
             optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
             history = trainer.MVAETrainer(model, data_loader, optimizer, config).train()
         elif config.model_type == "VMFToroidalVAE":
@@ -88,10 +79,6 @@ def run_experiment(name=None, all_configs=None):
             model = ae_model.EuclideanAE(config)
             optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
             history = trainer.AETrainer(model, data_loader, optimizer, config).train()
-        elif config.model_type == "ParamAE":
-            model = param_model.ParamAE(config)
-            optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
-            history = trainer.AETrainer(model, data_loader, optimizer, config).train()
         elif config.model_type == "SphericalAE":
             model = spherical_model.SphericalAE(config)
             optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
@@ -103,7 +90,7 @@ def run_experiment(name=None, all_configs=None):
         else:
             raise NotImplementedError
 
-        utils.show_training_history(config, history)
+        visualization.training_history.show_training_history(config, history)
         utils.plot_data_latents_recon(config, model, train_loader)
 
         if config.persistent_homology:

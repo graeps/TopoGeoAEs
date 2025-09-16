@@ -1,3 +1,15 @@
+"""
+Helper functions for von Mises-Fisher distribution.
+
+Taken from:
+
+Davidson, T. R., Falorsi, L., De Cao, N., Kipf, T.,
+and Tomczak, J. M. (2018). Hyperspherical Variational
+Auto-Encoders. 34th Conference on Uncertainty in Artificial Intelligence (UAI-18).
+http://arxiv.org/abs/1804.00891
+https://github.com/nicola-decao/s-vae-pytorch
+"""
+
 from numbers import Number
 
 import numpy as np

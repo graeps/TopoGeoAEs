@@ -7,12 +7,43 @@ import geomstats.backend as gs  # noqa: E402
 
 
 def embedd_rotate_translate(point, embedding_dim, translation, rotation):
+    """
+    Embed a point into a higher-dimensional space and apply a rigid transformation.
+
+    This function first pads the input point to the specified embedding dimension,
+    then applies a rotation and translation.
+
+    Args:
+        point (array-like): Input point of shape (d,) or (n,d) with d <= embedding_dim.
+        embedding_dim (int): Target dimension of the embedding space.
+        translation (torch.Tensor): Translation vector of shape (embedding_dim,).
+        rotation (torch.Tensor): Rotation matrix of shape (embedding_dim, embedding_dim).
+
+    Returns:
+        torch.Tensor: Transformed point of shape (embedding_dim,) or (n, embedding_dim).
+
+    Raises:
+        ValueError: If the input has more than two dimensions.
+    """
     point = embedd(points=point, embedding_dim=embedding_dim)
     point = rotate_translate(points=point, rotation=rotation, translation=translation)
     return point
 
 
 def embedd(points, embedding_dim):
+    """
+    Embed points into a higher-dimensional Euclidean space by zero-padding.
+
+    Args:
+        points (array-like): Input of shape (d,) or (n,d) with d <= embedding_dim.
+        embedding_dim (int): Target embedding dimension.
+
+    Returns:
+        torch.Tensor: Points padded to shape (embedding_dim,) or (n, embedding_dim).
+
+    Raises:
+        ValueError: If the input has more than two dimensions.
+    """
     points = gs.array(points)
     if points.ndim == 1:
         pad_width = embedding_dim - points.shape[0]
@@ -29,6 +60,20 @@ def embedd(points, embedding_dim):
 
 
 def rotate_translate(points, translation, rotation):
+    """
+    Apply a linear rotation and translation to 1D or 2D points.
+
+    Args:
+        points (torch.Tensor): Input of shape (d,) or (n,d).
+        translation (torch.Tensor): Translation vector of shape (d,) or (embedding_dim,).
+        rotation (torch.Tensor): Rotation matrix of shape (d,d) or (embedding_dim, embedding_dim).
+
+    Returns:
+        torch.Tensor: Rotated and translated points of shape (d,) or (n,d).
+
+    Raises:
+        ValueError: If the input has more than two dimensions.
+    """
     if points.ndim == 1:
         points = gs.einsum("ij,j->i", rotation, points)
         points = points + translation
@@ -41,6 +86,18 @@ def rotate_translate(points, translation, rotation):
 
 
 def compute_n_deriv(curve, t, order):
+    """
+    Compute successive derivatives of a parametric curve using autograd.
+
+    Args:
+        curve (Callable[[torch.Tensor], torch.Tensor]): Curve mapping t to R^d.
+        t (torch.Tensor): Scalar parameter (requires_grad=True).
+        order (int): Number of derivatives to compute.
+
+    Returns:
+        List[torch.Tensor]: List of length order+1 where element k is the k-th derivative
+            of the curve evaluated at t. The first element is the curve value.
+    """
     r = curve(t)
     dim = r.shape[-1]
     derivatives = [r]
@@ -62,7 +119,15 @@ def compute_n_deriv(curve, t, order):
 
 
 def gram_schmidt(V):
-    """Orthonormalize a list of vectors using the Gram-Schmidt process."""
+    """
+    Orthonormalize a set of vectors using the Gram–Schmidt process.
+
+    Args:
+        V (torch.Tensor): Matrix of shape (n, d) whose rows are vectors to orthonormalize.
+
+    Returns:
+        torch.Tensor: Matrix Q of shape (n, d) with orthonormal rows spanning the same subspace.
+    """
     n = V.shape[0]  # Number of vectors
     Q = torch.zeros_like(V)
     for i in range(n):
@@ -74,6 +139,21 @@ def gram_schmidt(V):
 
 
 def compute_n_deriv_scrunchy(curve, t, order, deformation_amp):
+    """
+    Compute successive derivatives of a special “scrunchy” curve analytically.
+
+    This function uses known derivatives of sine and cosine components instead
+    of automatic differentiation.
+
+    Args:
+        curve (Callable[[torch.Tensor], torch.Tensor]): Curve mapping t to R^d.
+        t (torch.Tensor): Scalar parameter.
+        order (int): Number of derivatives to compute.
+        deformation_amp (float): Amplitude scaling applied to higher components.
+
+    Returns:
+        List[torch.Tensor]: List of length order+1 with the curve value and its derivatives.
+    """
     derivatives = [curve(t)]
 
     for k in range(1, order + 1):
@@ -114,6 +194,22 @@ def compute_n_deriv_scrunchy(curve, t, order, deformation_amp):
 
 
 def compute_frenet_frame(curve, t, order, deformation_amp=None, is_s1_high=False):
+    """
+    Compute the Frenet frame, curvatures, and torsion of a parametric curve.
+
+    Args:
+        curve (Callable[[torch.Tensor], torch.Tensor]): Curve mapping t to R^d.
+        t (torch.Tensor): Scalar parameter (requires_grad=True if is_s1_high is False).
+        order (int): Maximum derivative order for the frame.
+        deformation_amp (float, optional): Amplitude parameter for scrunchy derivatives.
+        is_s1_high (bool, optional): If True, use the scrunchy derivative routine.
+
+    Returns:
+        Tuple[torch.Tensor, List[torch.Tensor], Optional[torch.Tensor]]:
+            * frame: Matrix whose rows form an orthonormal Frenet frame at t.
+            * curvatures: List of successive curvatures κ_j.
+            * torsion: Last curvature, representing torsion if order >= 2.
+    """
     if is_s1_high:
         derivatives = compute_n_deriv_scrunchy(curve, t, order, deformation_amp)
     else:
@@ -139,6 +235,18 @@ def compute_frenet_frame(curve, t, order, deformation_amp=None, is_s1_high=False
 
 
 def generate_tube_from_curve(curve, tube_radius, n_phi, n_theta):
+    """
+    Generate a tubular surface around a space curve using its Frenet frame.
+
+    Args:
+        curve (Callable[[torch.Tensor], torch.Tensor]): Curve mapping t to R^d.
+        tube_radius (float): Radius of the surrounding tube.
+        n_phi (int): Number of sampling points along the curve.
+        n_theta (int): Number of sampling points along the tube cross-section.
+
+    Returns:
+        torch.Tensor: Array of shape (n_phi * n_theta, d) containing tube coordinates.
+    """
     phis = torch.linspace(0, 2 * torch.pi, n_phi, requires_grad=True)
     thetas = torch.linspace(0, 2 * torch.pi, n_theta, requires_grad=True)
 

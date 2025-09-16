@@ -1,3 +1,15 @@
+"""
+Implementation von Mises-Fisher distribution.
+
+Adapted from:
+
+Davidson, T. R., Falorsi, L., De Cao, N., Kipf, T.,
+and Tomczak, J. M. (2018). Hyperspherical Variational
+Auto-Encoders. 34th Conference on Uncertainty in Artificial Intelligence (UAI-18).
+http://arxiv.org/abs/1804.00891
+https://github.com/nicola-decao/s-vae-pytorch
+"""
+
 import math
 
 import torch
@@ -5,7 +17,7 @@ from torch.distributions import constraints
 from torch.distributions.kl import register_kl
 
 from . import HypersphericalUniform
-from .math_utils import ive
+from .utils import ive
 
 
 class VonMisesFisher(torch.distributions.Distribution):
