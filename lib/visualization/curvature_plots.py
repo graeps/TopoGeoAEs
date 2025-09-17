@@ -7,58 +7,9 @@ import json
 from scipy.interpolate import griddata
 
 from ..curvature.curvature_pipeline import compute_all_curvatures
-from ..curvature.pullback_curvature import compute_curvature_true, compute_curvature_learned
 from .utils import scatter_datapoints
 from ..utils.vectors import get_vectors
-
-
-def curvature_compute_plot_euclidean(config, model):
-    latent_vectors, labels, _, curv_norms_learned = compute_curvature_learned(
-        model=model,
-        config=config,
-        n_grid_points=config.n_grid_points,
-    )
-    z_grid, _, curv_norms_true_grid = compute_curvature_true(config, n_grid_points=config.n_grid_points)
-    labels, _, curv_norms_true_latents = compute_curvature_true(config, labels.squeeze())
-
-    fig, axs = plt.subplots(2, 2, figsize=(10, 7))
-
-    # Top-left: learned curvature
-    sc1 = axs[0, 0].scatter(latent_vectors[:, 0], latent_vectors[:, 1], c=curv_norms_learned, cmap='hsv', s=2)
-    fig.colorbar(sc1, ax=axs[0, 0], label='Curvature')
-    axs[0, 0].set_title("Learned curvature heatmap")
-    axs[0, 0].set_xlabel("z₁")
-    axs[0, 0].set_ylabel("z₂")
-
-    # Top-right: true curvature on latent points
-    sc2 = axs[0, 1].scatter(latent_vectors[:, 0], latent_vectors[:, 1], c=curv_norms_true_latents, cmap='hsv', s=2)
-    fig.colorbar(sc2, ax=axs[0, 1], label='Curvature')
-    axs[0, 1].set_title("True curvature heatmap")
-    axs[0, 1].set_xlabel("z₁")
-    axs[0, 1].set_ylabel("z₂")
-
-    # Bottom-left: curvature over angle
-    axs[1, 0].plot(z_grid, curv_norms_true_grid, linewidth=2)
-    axs[1, 0].set_xlabel("angle", fontsize=14)
-    axs[1, 0].set_ylabel("mean curvature norm", fontsize=14)
-    axs[1, 0].set_title("Curvature vs angle")
-
-    # Bottom-right: polar plot
-    polar_ax = fig.add_subplot(2, 2, 4, projection="polar")
-    polar_ax.scatter(
-        z_grid,
-        np.ones_like(z_grid),
-        c=curv_norms_true_grid,
-        s=100,
-        cmap="hsv",
-        linewidths=0,
-    )
-    polar_ax.set_yticks([])
-    polar_ax.set_title("Polar curvature")
-
-    plt.tight_layout()
-    plt.show()
-
+from ..curvature.curvature_metrics import compute_curvature_error_smape, compute_curvature_error_mse
 
 def plot_curvature_norms(angles, curvature_norms, config, norm_val, profile_type):
     fig = plt.figure(figsize=(12, 6))  # increased size for clarity
@@ -570,9 +521,9 @@ def _plot_all_curvatures_from_vectors(config, model, recons, latents, inputs, la
         entity_indices_sub = labels_sub[:, 0]
         unique_entities = entity_indices.unique(sorted=True)
         unique_entities = unique_entities[unique_entities != 100]
-        for entity in unique_entities:
-            mask = (entity_indices == entity)
-            mask_sub = (entity_indices_sub == entity)
+        for multi_entity in unique_entities:
+            mask = (entity_indices == multi_entity)
+            mask_sub = (entity_indices_sub == multi_entity)
             angels = labels[mask][:, 1:]
             angels_sub = labels_sub[mask_sub][:, 1:]
 
@@ -592,12 +543,12 @@ def _plot_all_curvatures_from_vectors(config, model, recons, latents, inputs, la
             curv_learned_entity = curv_learned[mask_sub]
             plot_curvatures_2d(labels=angels, labels_sub=angels_sub, curv_true=curv_true_entity,
                                curv_in=curv_in_entity, curv_rec=curv_rec_entity, curv_lat=curv_lat_entity,
-                               curv_learned=curv_learned_entity, z_grid=z_grid, config=config, entity=entity)
+                               curv_learned=curv_learned_entity, z_grid=z_grid, config=config, entity=multi_entity)
             scatter_curvature_heatmaps(config, points=points_entity, points_sub=points_sub_entity, z_grid=z_grid,
                                        curv_true=curv_true_entity,
                                        curv_in=curv_in_entity, curv_rec=curv_rec_entity,
                                        curv_learned=curv_learned_entity, curv_lat=curv_lat_entity,
-                                       entity=entity)
+                                       entity=multi_entity)
     else:
         raise NotImplementedError("Label dimension not supported for curvature plotting.")
 

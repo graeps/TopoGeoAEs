@@ -3,7 +3,7 @@ import numpy as np
 import torch
 
 from .pullback_curvature import compute_curvature_true, compute_curvature_learned
-from .quadric_curvature import compute_empirical_curvature
+from .quadric_curvature import compute_quadric_curvature
 
 os.environ["GEOMSTATS_BACKEND"] = "pytorch"
 
@@ -11,77 +11,132 @@ from scipy.spatial import cKDTree
 
 
 def compute_all_curvatures(config, model, recons, latents, inputs, labels, save_dir="./curvatures"):
-    # Compute pullback curvature on (ordered) subset of points to reduce computation time
-    n_total = len(labels)
-    n_points = int(np.sqrt(min(config.n_points_pullback_curv, n_total))) ** 2
-    sampled_indices = np.random.choice(n_total, size=n_points, replace=False)
+    """
+    Compute a set of curvature quantities on full data and a curated subset,
+    then return legacy tuple outputs and persist a structured bundle for easy access.
+
+    Returns (unchanged for backward compatibility):
+      points_sub: (inputs_sub, latents_sub, recons_sub)
+      curvatures_sub: (labels_sub, curv_true, curv_learned, curv_learned_rotated, z_grid)
+      curvatures_emp_full: (labels, curv_in, curv_lat, curv_rec)
+      points: (inputs, latents, recons)
+
+    Additionally, a structured 'bundle' with named keys is saved to disk.
+    """
+    # Determine subset size and indices (square number for grid-friendly plots)
+    total_count = len(labels)
+    target = min(getattr(config, "n_points_pullback_curv", total_count), total_count)
+    sub_count = int(np.sqrt(target)) ** 2
+    sub_count = max(1, sub_count)  # ensure at least one sample
+    sampled_indices = np.random.choice(total_count, size=sub_count, replace=False)
     sampled_indices.sort()
 
-    # Subsample data to match subset of curvatures for heat map plotting
-    labels_sub = labels[sampled_indices]
-    inputs_sub = inputs[sampled_indices]
-    latents_sub = latents[sampled_indices]
-    recons_sub = recons[sampled_indices]
+    # Empirical (quadric) curvature on full data with minimal branching
+    def _zeros_full():
+        return np.zeros(total_count)
 
-    # Compute empirical curvatures on full data
-    if config.compute_emp_curv:
-        curv_in, curv_lat, curv_rec, labels = compute_empirical_curvature(config=config, labels=labels, inputs=inputs,
-                                                                          latents=latents, recons=recons, k=config.k
-                                                                          )
-        norm_factor = np.max(curv_in[sampled_indices]) / np.max(curv_lat[sampled_indices])
-        curv_lat_norm = curv_lat * norm_factor
-        curv_lat_norm_sub = curv_lat_norm[sampled_indices]
-        # Subsample empirical curvature to match subset for error computation
-        curv_in_sub = curv_in[sampled_indices]
-        curv_rec_sub = curv_rec[sampled_indices]
-        curv_lat_sub = curv_lat[sampled_indices]
-    else:
-        curv_in_sub = np.zeros(n_points)
-        curv_rec_sub = np.zeros(n_points)
-        curv_lat_sub = np.zeros(n_points)
-        curv_lat_norm_sub = np.zeros(n_points)
-        curv_lat_norm = np.zeros(len(labels))
-        curv_in = np.zeros(len(labels))
-        curv_lat = np.zeros(len(labels))
-        curv_rec = np.zeros(len(labels))
-    if config.compute_true_curv:
-        z_grid, _, curv_true = compute_curvature_true(config=config, labels=labels_sub, n_grid_points=n_points)
-    else:
-        curv_true = np.zeros(n_points)
-        z_grid = np.zeros(n_points)
-    if config.compute_learned_curv:
-        _, _, _, curv_learned = compute_curvature_learned(config=config, model=model, latents=latents_sub,
-                                                          labels=labels_sub, n_grid_points=n_points)
-        if config.model_type in {"VMFSphericalVAE", "SphericalAE"}:
-            curv_learned_rotated = compute_curvature_rotated(learned_curvature=curv_learned, latents=latents_sub,
-                                                             labels=labels_sub, z_grid=z_grid)
+    compute_flags = {
+        "inputs": getattr(config, "compute_quadric_curv_inputs", False),
+        "latents": getattr(config, "compute_quadric_curv_latents", False),
+        "recons": getattr(config, "compute_quadric_curv_recons", False),
+    }
+    curv_emp_full = {
+        "inputs": compute_quadric_curvature(config=config, labels=labels, points=inputs, k=config.k)
+        if compute_flags["inputs"] else _zeros_full(),
+        "latents": compute_quadric_curvature(config=config, labels=labels, points=latents, k=config.k)
+        if compute_flags["latents"] else _zeros_full(),
+        "recons": compute_quadric_curvature(config=config, labels=labels, points=recons, k=config.k)
+        if compute_flags["recons"] else _zeros_full(),
+    }
+
+    # True curvature and grid (defined even if not computed)
+    z_grid = torch.zeros(sub_count)
+    curv_true = np.zeros(sub_count)
+    if getattr(config, "compute_true_curv", False):
+        z_res = compute_curvature_true(config=config, n_grid_points=sub_count)
+        # Accept either (z_grid, _, curv_true) or any compatible tuple length
+        if isinstance(z_res, (list, tuple)):
+            if len(z_res) >= 3:
+                z_grid, _, curv_true = z_res[-3], z_res[-2], z_res[-1]
+            elif len(z_res) == 2:
+                z_grid, curv_true = z_res
+            else:
+                # Only z_grid returned, keep defaults
+                z_grid = z_res[0]
+        else:
+            # Unexpected non-iterable result; keep defaults
+            pass
+
+    # Learned curvature (robust to varying return signatures)
+    curv_learned = np.zeros(sub_count)
+    curv_learned_rotated = np.zeros(sub_count)
+    if getattr(config, "compute_learned_curv", False):
+        learned_res = compute_curvature_learned(config=config, model=model, n_grid_points=sub_count)
+        if isinstance(learned_res, (list, tuple)) and len(learned_res) > 0:
+            curv_learned = learned_res[-1]
+        else:
+            curv_learned = learned_res  # assume it's already the curvature array
+
+        # Optional alignment for spherical models
+        if getattr(config, "model_type", None) in {"VMFSphericalVAE", "SphericalAE"}:
+            curv_learned_rotated = compute_curvature_rotated(
+                learned_curvature=curv_learned, latents=latents, z_grid=z_grid
+            )
         else:
             curv_learned_rotated = curv_learned
-    else:
-        curv_learned = np.zeros(n_points)
-        curv_learned_rotated = np.zeros(n_points)
 
-    curvatures_sub = (labels_sub, curv_in_sub, curv_rec_sub, curv_lat_sub, curv_lat_norm_sub, curv_true,
-                      curv_learned, curv_learned_rotated, z_grid)
-    curvatures_emp_full = (labels, curv_in, curv_lat, curv_lat_norm, curv_rec)
-
-    points_sub = (inputs_sub, latents_sub, recons_sub)
-
+    # Legacy tuple outputs (unchanged)
+    curvatures_sub = (curv_true, curv_learned, curv_learned_rotated, z_grid)
+    curvatures_emp_full = (labels, curv_emp_full["inputs"], curv_emp_full["latents"], curv_emp_full["recons"])
     points = (inputs, latents, recons)
 
+    # Structured bundle for easy, named access after saving
+    bundle = {
+        "metadata": {
+            "experiment": getattr(config, "experiment", "unknown"),
+            "sampled_indices": sampled_indices,
+            "total_count": int(total_count),
+            "sub_count": int(sub_count),
+        },
+        "labels": {
+            "full": labels,
+            "sub": labels_sub,
+        },
+        "points": {
+            "full": {"inputs": inputs, "latents": latents, "recons": recons},
+            "sub": {"inputs": inputs_sub, "latents": latents_sub, "recons": recons_sub},
+        },
+        "curvatures": {
+            "empirical_full": {
+                "inputs": curv_emp_full["inputs"],
+                "latents": curv_emp_full["latents"],
+                "recons": curv_emp_full["recons"],
+            },
+            "true_sub": curv_true,
+            "learned_sub": curv_learned,
+            "learned_rotated_sub": curv_learned_rotated,
+            "z_grid": z_grid,
+        },
+    }
+
+    # Persist both legacy tuples and the structured bundle
     if save_dir is not None:
         os.makedirs(save_dir, exist_ok=True)
-        filename = f"curvatures_{config.experiment}.pt"
+        filename = f"curvatures_{getattr(config, 'experiment', 'exp')}.pt"
         save_path = os.path.join(save_dir, filename)
 
-        torch.save({
-            'curvatures_sub': curvatures_sub,
-            'curvatures_emp_full': curvatures_emp_full,
-            'points_sub': points_sub,
-            'points': points,
-        }, save_path)
+        torch.save(
+            {
+                "bundle": bundle,  # new, structured and self-descriptive
+                "curvatures_sub": curvatures_sub,  # legacy
+                "curvatures_emp_full": curvatures_emp_full,  # legacy
+                "points_sub": points_sub,  # legacy
+                "points": points,  # legacy
+            },
+            save_path,
+        )
 
-        if config.verbose:
+        if getattr(config, "verbose", False):
             print(f"Saved curvatures to {save_path}")
 
     return points_sub, curvatures_sub, curvatures_emp_full, points

@@ -1,67 +1,58 @@
+from typing import Union
+
 import numpy as np
-import torch
-
-from .errors import InvalidConfigError
 
 
-def _compute_curvature_error_s1(thetas, learned, true):
-    learned = np.array(learned)
-    true = np.array(true)
-    diff = np.trapz((learned - true) ** 2, thetas)
-    norm = np.trapz(learned ** 2 + true ** 2, thetas)
-    return diff / norm
+def compute_curvature_error_mse(
+        curv1,
+        curv2,
+        eps: float = 1e-12,
+) -> Union[float, np.ndarray]:
+    """Compute mean squared error (MSE) between two curvature arrays.
 
+    Values are clipped from below by ``eps`` prior to computing the MSE, which
+    can help avoid numerical issues if some values are extremely small.
 
-def _integrate_s2(thetas, phis, h):
-    thetas = torch.unique(thetas)
-    phis = torch.unique(phis)
-    sum_phis = torch.zeros_like(thetas)
-    for t, theta in enumerate(thetas):
-        sum_phis[t] = torch.trapz(h[t * len(phis):(t + 1) * len(phis)], phis) * np.sin(theta)
-    return torch.trapz(sum_phis, thetas)
+    Args:
+        curv1: First sequence/array of curvature values.
+        curv2: Second sequence/array of curvature values.
+        eps: Small positive floor applied elementwise to both arrays.
 
-
-def _compute_curvature_error_s2(thetas, phis, learned, true):
-    diff = _integrate_s2(thetas, phis, (learned - true) ** 2)
-    norm = _integrate_s2(thetas, phis, learned ** 2 + true ** 2)
-    return diff / norm
-
-
-def compute_curvature_error_linf(curv1, curv2):
-    curv1 = np.array(curv1)
-    curv2 = np.array(curv2)
-    return np.max(np.abs(curv1 - curv2))
-
-
-def compute_curvature_error_mse(curv1, curv2, eps=1e-12):
-    curv1 = np.array(curv1)
-    curv2 = np.array(curv2)
-    curv1 = np.clip(curv1, eps, None)
-    curv2 = np.clip(curv2, eps, None)
-
-    diff = (curv1 - curv2) ** 2
-    mean = diff.sum() / len(curv1)
-    return mean
-
-
-def compute_curvature_error_smape(true_curv, approx_curv, eps=1e-12):
+    Returns:
+        Mean squared error as a float or NumPy scalar.
     """
-    Computes the symmetric mean absolute percentage error (SMAPE) between true and approximate curvatures.
-    """
-    true_curv = np.asarray(true_curv)
-    approx_curv = np.asarray(approx_curv)
+    arr1 = np.asarray(curv1)
+    arr2 = np.asarray(curv2)
+    arr1 = np.clip(arr1, eps, None)
+    arr2 = np.clip(arr2, eps, None)
 
-    # Ensure non-zero denominator
-    denominator = np.clip(np.abs(true_curv) + np.abs(approx_curv), eps, None)
-    smape = np.abs(true_curv - approx_curv) / denominator
+    diff = (arr1 - arr2) ** 2
+    mse = diff.sum() / len(arr1)
+    return mse
+
+
+def compute_curvature_error_smape(
+        true_curv,
+        approx_curv,
+        eps: float = 1e-12,
+) -> Union[float, np.ndarray]:
+    """Compute the symmetric mean absolute percentage error (SMAPE).
+
+    SMAPE is computed as:
+        mean(|y_true - y_pred| / (|y_true| + |y_pred|))
+
+    Args:
+        true_curv: Ground-truth curvature values.
+        approx_curv: Approximated curvature values.
+        eps: Small positive value to avoid division by zero.
+
+    Returns:
+        SMAPE percentage in [0, 100] as a float or NumPy scalar.
+    """
+    true_arr = np.asarray(true_curv)
+    approx_arr = np.asarray(approx_curv)
+
+    denominator = np.clip(np.abs(true_arr) + np.abs(approx_arr), eps, None)
+    smape = np.abs(true_arr - approx_arr) / denominator
 
     return 100 * np.mean(smape)
-
-
-def compute_curvature_error(z_grid, learned, true, config):
-    if config.dataset_name == "s1_low":
-        return _compute_curvature_error_s1(z_grid, learned, true)
-    elif config.dataset_name in ("s2_low", "t2_low"):
-        return _compute_curvature_error_s2(z_grid[:, 0], z_grid[:, 1], learned, true)
-    else:
-        raise InvalidConfigError(f"Unknown XX dataset: {config.dataset_name}")

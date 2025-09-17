@@ -4,12 +4,26 @@ from numpy.linalg import lstsq
 from scipy.signal import savgol_filter
 import numpy as np
 from tqdm import tqdm
-import torch
 
-from .errors import InvalidConfigError
+from lib.errors import InvalidConfigError
 
 
 def estimate_curvature_1d_quadric(points, k=160):
+    """
+    Estimates the 1D curvature of a set of points using a quadratic approximation. The method
+    fits a 1D quadratic curve to local neighborhoods of points and computes coefficients that
+    represent the curvature.
+
+    Args:
+        points (ndarray): A NumPy array of shape (n, d), where `n` is the number of points
+            and `d` is the dimensionality of each point. These represent the coordinates
+            of the points for curvature estimation.
+        k (int, optional): The number of nearest neighbors to consider for estimating
+            local curvature. Defaults to 160.
+
+    Returns:
+        ndarray: A NumPy array of shape (n,) containing the curvature values for each point.
+    """
     n, d = points.shape
     nbrs = NearestNeighbors(n_neighbors=k).fit(points)
     _, indices = nbrs.kneighbors(points)
@@ -31,6 +45,23 @@ def estimate_curvature_1d_quadric(points, k=160):
 
 
 def estimate_curvature_2d_quadric(points, k=200):
+    """
+    Estimate the curvature of a point cloud in 2D space using a quadric surface
+    fitting method. The function computes local neighborhoods for each point in
+    the input, fits a quadratic surface to these neighborhoods, and estimates
+    the curvature.
+
+    Args:
+        points (numpy.ndarray): A 2D numpy array of points with shape (n, d),
+            where n is the number of points and d is the dimensionality of
+            each point.
+        k (int): The number of nearest neighbors to consider for local
+            curvature estimation (default is 200).
+
+    Returns:
+        numpy.ndarray: A 1D numpy array of estimated curvatures for each point
+            in the input point cloud.
+    """
     n, d = points.shape
     nbrs = NearestNeighbors(n_neighbors=k).fit(points)
     _, indices = nbrs.kneighbors(points)
@@ -54,51 +85,73 @@ def estimate_curvature_2d_quadric(points, k=200):
     return np.array(curvatures)
 
 
-def compute_empirical_curvature(config, labels, inputs, latents, recons, k=160):
-    if config.dataset_name in {"8_curve", "clelia_curve", "flower_curve", "scrunchy", "flower_scrunchy",
-                               "s1_high",
-                               "s1_low"}:
-        curv_in = estimate_curvature_1d_quadric(inputs, k)
-        curv_lat = estimate_curvature_1d_quadric(latents, k)
-        curv_rec = estimate_curvature_1d_quadric(recons, k)
-    elif config.dataset_name in {"s2_low", "t2_low", "t2_high", "genus_3", "s2_high", "sphere_high_dim",
-                                 "wiggling_tube", "flat_t2_high_embedding"}:
-        curv_in = estimate_curvature_2d_quadric(inputs, k)
-        curv_lat = estimate_curvature_2d_quadric(latents, k)
-        curv_rec = estimate_curvature_2d_quadric(recons, k)
-    elif config.dataset_name in {"interlocked_tori", "nested_spheres", "nested_spheres_high_dim", "interlocked_tubes"}:
+# Dataset category constants (centralized) and getters
+from ..datasets.lookup import ONE_D_DATASETS, TWO_D_DATASETS, ENTITY_DATASETS, get_dataset_category
+
+
+def _get_estimator_for_dataset(dataset_name: str):
+    """Return the appropriate curvature estimator callable based on dataset type (or None for entity datasets)."""
+    category = get_dataset_category(dataset_name)
+    if category == "1d":
+        return estimate_curvature_1d_quadric
+    if category == "2d":
+        return estimate_curvature_2d_quadric
+    if category == "entity":
+        return None
+    # Safety: get_dataset_category raises for unknown names
+    raise InvalidConfigError(f"Unknown dataset name: {dataset_name}")
+
+
+def _apply_smoothing(do_smooth: bool, curv: np.ndarray, window_length: int = 20, polyorder: int = 6):
+    """Optionally apply Savitzky–Golay smoothing to a single curvature array."""
+    if not do_smooth:
+        return curv
+    return savgol_filter(curv, window_length, polyorder)
+
+def compute_quadric_curvature(config, labels, points, k: int = 160):
+    """
+    Compute empirical curvature for a single set of points, depending on the dataset category
+    specified in the configuration. Uses 1D or 2D quadric approximation as appropriate. For
+    datasets with discrete entities, curvature is computed per entity and concatenated.
+
+    Args:
+        config: Configuration object with 'dataset_name' and 'smoothing' attributes.
+        labels: Tensor of labels; for entity datasets, labels[:, 0] contains entity indices.
+        points: Array-like (numpy or torch) of shape (n, d) representing the point cloud to analyze.
+        k: Number of neighbors for local curvature estimation.
+
+    Returns:
+        Tuple:
+        - curv: 1D numpy.ndarray with curvature values for the provided points.
+    """
+    estimator = _get_estimator_for_dataset(config.dataset_name)
+
+    if estimator is not None:
+        # Standard 1D/2D datasets
+        curv = estimator(points, k)
+    elif config.dataset_name in ENTITY_DATASETS:
+        # Multi-entity datasets: compute per-entity then concatenate
         entity_indices = labels[:, 0]
         unique_entities = entity_indices.unique(sorted=True)
-        curv_in, curv_lat, curv_rec = [], [], []
+
+        curv_list = []
         for entity in unique_entities:
             mask = (entity_indices == entity)
-            inputs_sub = inputs[mask]
-            latents_sub = latents[mask]
-            recons_sub = recons[mask]
+            pts_sub = points[mask]
 
-            if entity == 100:
-                curv_in_sub = torch.full((inputs_sub.shape[0],), 0.0)
-                curv_lat_sub = curv_in_sub
-                curv_rec_sub = curv_in_sub
+            # Special-case: flat entity labeled as 100, for datasets with manifold of dimensions > 2
+            if int(entity) == 100:
+                curv_sub = np.zeros(pts_sub.shape[0])
             else:
-                curv_in_sub = estimate_curvature_2d_quadric(inputs_sub, k)
-                curv_lat_sub = estimate_curvature_2d_quadric(latents_sub, k)
-                curv_rec_sub = estimate_curvature_2d_quadric(recons_sub, k)
+                curv_sub = estimate_curvature_2d_quadric(pts_sub, k)
 
-            curv_in.append(curv_in_sub)
-            curv_lat.append(curv_lat_sub)
-            curv_rec.append(curv_rec_sub)
+            curv_list.append(curv_sub)
 
-        curv_in = np.concatenate(curv_in)
-        curv_lat = np.concatenate(curv_lat)
-        curv_rec = np.concatenate(curv_rec)
-
+        curv = np.concatenate(curv_list)
     else:
+        # Safety; _get_estimator_for_dataset already guards unknown names
         raise InvalidConfigError(f"Unknown dataset name: {config.dataset_name}")
 
-    # Apply filter to smooth out curves
-    if config.smoothing:
-        curv_in = savgol_filter(curv_in, 20, 6)
-        curv_lat = savgol_filter(curv_lat, 20, 6)
-        curv_rec = savgol_filter(curv_rec, 20, 6)
-    return curv_in, curv_lat, curv_rec, labels
+    # Optional smoothing
+    curv = _apply_smoothing(config.smoothing, curv)
+    return curv
