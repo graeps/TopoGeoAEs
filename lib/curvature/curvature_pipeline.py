@@ -4,145 +4,188 @@ import torch
 
 from .pullback_curvature import compute_curvature_true, compute_curvature_learned
 from .quadric_curvature import compute_quadric_curvature
+from .curvature_metrics import (
+    compute_curvature_error_mse,
+    compute_curvature_error_smape,
+)
 
 os.environ["GEOMSTATS_BACKEND"] = "pytorch"
 
 from scipy.spatial import cKDTree
+from ..models.lookup import is_euclidean_model
 
 
 def compute_all_curvatures(config, model, recons, latents, inputs, labels, save_dir="./curvatures"):
     """
-    Compute a set of curvature quantities on full data and a curated subset,
-    then return legacy tuple outputs and persist a structured bundle for easy access.
+    Computes various curvature metrics and organizes them into a structured dictionary, with options
+    to save the results to a file. This function calculates curvatures on
+    inputs, latents, and reconstructions, using the best quadric fit method,
+    along with true and learned curvature metrics, using the pullback method.
+    It supports optional alignment for spherical VAE models.
 
-    Returns (unchanged for backward compatibility):
-      points_sub: (inputs_sub, latents_sub, recons_sub)
-      curvatures_sub: (labels_sub, curv_true, curv_learned, curv_learned_rotated, z_grid)
-      curvatures_emp_full: (labels, curv_in, curv_lat, curv_rec)
-      points: (inputs, latents, recons)
+    Args:
+        config: Configuration object containing settings and parameters.
+        model: The model object used to compute learned curvature.
+        recons: Torch tensor representing reconstruction points.
+        latents: Torch tensor representing latent points.
+        inputs: Torch tensor representing input points.
+        labels: Torch tensor representing labels of the points.
+        save_dir: Directory where the computed curvatures dictionary will be saved. Default is "./curvatures".
 
-    Additionally, a structured 'bundle' with named keys is saved to disk.
+    Returns:
+        A dictionary containing metadata, points, and computed curvatures.
     """
-    # Determine subset size and indices (square number for grid-friendly plots)
     total_count = len(labels)
     target = min(getattr(config, "n_points_pullback_curv", total_count), total_count)
-    sub_count = int(np.sqrt(target)) ** 2
-    sub_count = max(1, sub_count)  # ensure at least one sample
-    sampled_indices = np.random.choice(total_count, size=sub_count, replace=False)
-    sampled_indices.sort()
+    n_pullback_points = int(np.sqrt(target)) ** 2
+    n_pullback_points = max(1, n_pullback_points)
 
-    # Empirical (quadric) curvature on full data with minimal branching
-    def _zeros_full():
-        return np.zeros(total_count)
+    curv_quadric_inputs = None
+    curv_quadric_latents = None
+    curv_quadric_recons = None
+    z_grid = None
+    curv_true = None
+    curv_learned = None
+    curv_learned_rotated = None
 
-    compute_flags = {
-        "inputs": getattr(config, "compute_quadric_curv_inputs", False),
-        "latents": getattr(config, "compute_quadric_curv_latents", False),
-        "recons": getattr(config, "compute_quadric_curv_recons", False),
-    }
-    curv_emp_full = {
-        "inputs": compute_quadric_curvature(config=config, labels=labels, points=inputs, k=config.k)
-        if compute_flags["inputs"] else _zeros_full(),
-        "latents": compute_quadric_curvature(config=config, labels=labels, points=latents, k=config.k)
-        if compute_flags["latents"] else _zeros_full(),
-        "recons": compute_quadric_curvature(config=config, labels=labels, points=recons, k=config.k)
-        if compute_flags["recons"] else _zeros_full(),
-    }
+    # Only compute quadric curvature for Euclidean models
+    if is_euclidean_model(getattr(config, "model_type", None)):
+        if getattr(config, "compute_quadric_curv_inputs", False):
+            curv_quadric_inputs = compute_quadric_curvature(config=config, labels=labels, points=inputs, k=config.k)
+        if getattr(config, "compute_quadric_curv_latents", False):
+            curv_quadric_latents = compute_quadric_curvature(config=config, labels=labels, points=latents, k=config.k)
+        if getattr(config, "compute_quadric_curv_recons", False):
+            curv_quadric_recons = compute_quadric_curvature(config=config, labels=labels, points=recons, k=config.k)
+    elif getattr(config, "verbose", False) and (
+            getattr(config, "compute_quadric_curv_inputs", False) or
+            getattr(config, "compute_quadric_curv_latents", False) or
+            getattr(config, "compute_quadric_curv_recons", False)
+    ):
+        print(
+            f"Skipping quadric curvature: model_type={getattr(config, 'model_type', None)} "
+            f"is non-Euclidean (Euclidean required)."
+        )
 
-    # True curvature and grid (defined even if not computed)
-    z_grid = torch.zeros(sub_count)
-    curv_true = np.zeros(sub_count)
     if getattr(config, "compute_true_curv", False):
-        z_res = compute_curvature_true(config=config, n_grid_points=sub_count)
-        # Accept either (z_grid, _, curv_true) or any compatible tuple length
-        if isinstance(z_res, (list, tuple)):
-            if len(z_res) >= 3:
-                z_grid, _, curv_true = z_res[-3], z_res[-2], z_res[-1]
-            elif len(z_res) == 2:
-                z_grid, curv_true = z_res
-            else:
-                # Only z_grid returned, keep defaults
-                z_grid = z_res[0]
-        else:
-            # Unexpected non-iterable result; keep defaults
-            pass
-
-    # Learned curvature (robust to varying return signatures)
-    curv_learned = np.zeros(sub_count)
-    curv_learned_rotated = np.zeros(sub_count)
+        z_grid, _, curv_true = compute_curvature_true(config=config, n_grid_points=n_pullback_points)
     if getattr(config, "compute_learned_curv", False):
-        learned_res = compute_curvature_learned(config=config, model=model, n_grid_points=sub_count)
-        if isinstance(learned_res, (list, tuple)) and len(learned_res) > 0:
-            curv_learned = learned_res[-1]
-        else:
-            curv_learned = learned_res  # assume it's already the curvature array
-
-        # Optional alignment for spherical models
-        if getattr(config, "model_type", None) in {"VMFSphericalVAE", "SphericalAE"}:
-            curv_learned_rotated = compute_curvature_rotated(
-                learned_curvature=curv_learned, latents=latents, z_grid=z_grid
+        if not is_euclidean_model(getattr(config, "model_type", None)):
+            z_grid, _, curv_learned = compute_curvature_learned(
+                config=config, model=model, n_grid_points=n_pullback_points
             )
+            # Optional alignment for spherical Manifold-VAEs
+            if getattr(config, "model_type", None) in {"VMFSphericalVAE", "SphericalAE"} and curv_learned is not None:
+                curv_learned_rotated = compute_curvature_rotated(
+                    learned_curvature=curv_learned, latents=latents, labels=labels, z_grid=z_grid
+                )
         else:
-            curv_learned_rotated = curv_learned
+            if getattr(config, "verbose", False):
+                print(
+                    f"Skipping learned curvature: model_type={getattr(config, 'model_type', None)} "
+                    f"is Euclidean (non-Euclidean required)."
+                )
 
-    # Legacy tuple outputs (unchanged)
-    curvatures_sub = (curv_true, curv_learned, curv_learned_rotated, z_grid)
-    curvatures_emp_full = (labels, curv_emp_full["inputs"], curv_emp_full["latents"], curv_emp_full["recons"])
-    points = (inputs, latents, recons)
+    # Compute error metrics if available
+    metrics = {}
+    # (1) Quadric estimate on latents vs quadric estimate on inputs
+    if (curv_quadric_latents is not None) and (curv_quadric_inputs is not None):
+        try:
+            mse_li = compute_curvature_error_mse(curv_quadric_latents, curv_quadric_inputs)
+            smape_li = compute_curvature_error_smape(curv_quadric_latents, curv_quadric_inputs)
+            metrics["quadric_inputs_vs_latents"] = {"mse": float(mse_li), "smape": float(smape_li)}
+        except Exception as e:
+            if getattr(config, "verbose", False):
+                print(f"Warning: failed to compute metrics (latents vs inputs): {e}")
+    # (2) True vs learned_rotated_sub (if available)
+    if (curv_true is not None) and (curv_learned_rotated is not None):
+        try:
+            mse_tl = compute_curvature_error_mse(curv_true, curv_learned_rotated)
+            smape_tl = compute_curvature_error_smape(curv_true, curv_learned_rotated)
+            metrics["true_vs_learned_rotated_sub"] = {"mse": float(mse_tl), "smape": float(smape_tl)}
+        except Exception as e:
+            if getattr(config, "verbose", False):
+                print(f"Warning: failed to compute metrics (true vs learned_rotated_sub): {e}")
 
-    # Structured bundle for easy, named access after saving
-    bundle = {
+    print(metrics)
+    results_dict = {
         "metadata": {
             "experiment": getattr(config, "experiment", "unknown"),
-            "sampled_indices": sampled_indices,
-            "total_count": int(total_count),
-            "sub_count": int(sub_count),
-        },
-        "labels": {
-            "full": labels,
-            "sub": labels_sub,
+            "n_points": int(total_count),
+            "n_pullback_points": int(n_pullback_points),
         },
         "points": {
-            "full": {"inputs": inputs, "latents": latents, "recons": recons},
-            "sub": {"inputs": inputs_sub, "latents": latents_sub, "recons": recons_sub},
+            "labels": labels,
+            "inputs": inputs,
+            "latents": latents,
+            "recons": recons,
         },
         "curvatures": {
-            "empirical_full": {
-                "inputs": curv_emp_full["inputs"],
-                "latents": curv_emp_full["latents"],
-                "recons": curv_emp_full["recons"],
-            },
+            "inputs": curv_quadric_inputs ,
+            "latents": curv_quadric_latents,
+            "recons": curv_quadric_recons,
             "true_sub": curv_true,
             "learned_sub": curv_learned,
             "learned_rotated_sub": curv_learned_rotated,
             "z_grid": z_grid,
         },
+        "metrics": metrics,
     }
 
-    # Persist both legacy tuples and the structured bundle
+    # Save results_dict if requested
     if save_dir is not None:
         os.makedirs(save_dir, exist_ok=True)
         filename = f"curvatures_{getattr(config, 'experiment', 'exp')}.pt"
         save_path = os.path.join(save_dir, filename)
-
-        torch.save(
-            {
-                "bundle": bundle,  # new, structured and self-descriptive
-                "curvatures_sub": curvatures_sub,  # legacy
-                "curvatures_emp_full": curvatures_emp_full,  # legacy
-                "points_sub": points_sub,  # legacy
-                "points": points,  # legacy
-            },
-            save_path,
-        )
-
+        torch.save(results_dict, save_path)
         if getattr(config, "verbose", False):
             print(f"Saved curvatures to {save_path}")
 
-    return points_sub, curvatures_sub, curvatures_emp_full, points
+    return results_dict
 
 
 def compute_curvature_rotated(learned_curvature, latents, labels, z_grid):
+    """
+    Aligns the learned curvature values on a spherical or circular latent space
+    by rotating the evaluation grid to match the orientation of the ground-truth
+    labels. This is useful when the latent manifold exhibits rotational invariance,
+    such as in Spherical VAEs or circular latent spaces, ensuring that curvature
+    comparisons are not biased by arbitrary coordinate system choices.
+
+    The function performs the following steps:
+        1. Converts latent coordinates and label coordinates from angular
+           representations to Cartesian vectors (2D or 3D, depending on the latent dimension).
+        2. Computes an optimal rotation matrix $R$ using the orthogonal Procrustes
+           problem to align the latent points to the label points.
+        3. Rotates the grid of evaluation points and identifies the nearest
+           neighbors in the original (unrotated) grid.
+        4. Assigns the learned curvature values from the nearest neighbors
+           to produce a curvature field aligned to the label orientation.
+
+    Args:
+        learned_curvature (torch.Tensor):
+            Tensor of shape $(N,)$ or $(N,d)$ containing the curvature values
+            computed on the grid points $z_{grid}$.
+        latents (torch.Tensor):
+            Tensor of shape $(M,2)$ or $(M,3)$ representing the latent
+            coordinates of the data points in angular coordinates (e.g.,
+            angle for 2D circle or $(\theta,\phi)$ for 3D sphere).
+        labels (torch.Tensor):
+            Tensor of shape $(M,2)$ or $(M,3)$ providing the true angular
+            coordinates of the data points.
+        z_grid (torch.Tensor):
+            Tensor of shape $(N,1)$ for 2D or $(N,2)$ for 3D containing
+            the angular grid points on which the curvature was computed.
+
+    Returns:
+        torch.Tensor:
+            Rotated curvature tensor of the same shape as `learned_curvature`,
+            where each entry corresponds to the curvature at the rotated grid
+            point matched to its nearest original grid neighbor.
+
+    Raises:
+        NotImplementedError:
+            If the latent dimension is not 2 or 3.
+    """
     latents = latents.to(torch.float32)
     labels = labels.to(torch.float32)
     z_grid = z_grid.to(torch.float32)

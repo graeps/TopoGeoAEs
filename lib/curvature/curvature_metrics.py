@@ -21,14 +21,20 @@ def compute_curvature_error_mse(
     Returns:
         Mean squared error as a float or NumPy scalar.
     """
-    arr1 = np.asarray(curv1)
-    arr2 = np.asarray(curv2)
-    arr1 = np.clip(arr1, eps, None)
-    arr2 = np.clip(arr2, eps, None)
+    arr1 = _to_float_array(curv1)
+    arr2 = _to_float_array(curv2)
 
-    diff = (arr1 - arr2) ** 2
-    mse = diff.sum() / len(arr1)
-    return mse
+    # Compute only where both arrays are finite
+    valid = np.isfinite(arr1) & np.isfinite(arr2)
+    if not np.any(valid):
+        return float("nan")
+
+    a1 = np.clip(arr1[valid], eps, None)
+    a2 = np.clip(arr2[valid], eps, None)
+
+    diff = (a1 - a2) ** 2
+    mse = diff.mean()
+    return float(mse)
 
 
 def compute_curvature_error_smape(
@@ -49,10 +55,65 @@ def compute_curvature_error_smape(
     Returns:
         SMAPE percentage in [0, 100] as a float or NumPy scalar.
     """
-    true_arr = np.asarray(true_curv)
-    approx_arr = np.asarray(approx_curv)
+    true_arr = _to_float_array(true_curv)
+    approx_arr = _to_float_array(approx_curv)
 
-    denominator = np.clip(np.abs(true_arr) + np.abs(approx_arr), eps, None)
-    smape = np.abs(true_arr - approx_arr) / denominator
+    # Compute only where both arrays are finite
+    valid = np.isfinite(true_arr) & np.isfinite(approx_arr)
+    if not np.any(valid):
+        return float("nan")
 
-    return 100 * np.mean(smape)
+    t = true_arr[valid]
+    a = approx_arr[valid]
+
+    denominator = np.clip(np.abs(t) + np.abs(a), eps, None)
+    smape = np.abs(t - a) / denominator
+
+    return float(100 * np.mean(smape))
+
+
+def _to_float_array(x) -> np.ndarray:
+    """
+    Convert input to a float NumPy array, handling None and object-dtype safely.
+    - If x is None: return an empty float array of shape (0,).
+    - If x has object dtype (e.g., contains None), replace None with NaN and cast to float.
+    - Otherwise cast to float without copying if possible.
+    """
+    if x is None:
+        return np.array([], dtype=float)
+
+    arr = np.asarray(x)
+    if arr.dtype == object:
+        flat = arr.ravel()
+        flat_conv = np.array([np.nan if (v is None) else v for v in flat], dtype=float)
+        return flat_conv.reshape(arr.shape)
+    return arr.astype(float, copy=False)
+
+
+# TODO: add error metrics to curvature plots
+def compute_all_error_metrics(curv1, curv2):
+    """
+    Calculates error metrics between two lists of curvature estimates.
+
+    This function computes two error metrics: Symmetric Mean Absolute Percentage Error
+    (SMAPE) and Mean Squared Error (MSE) between two input curvature sequences.
+
+    Args:
+        curv1: Input list of curvature estimates.
+        curv2: Another input list of curvature estimates.
+
+    Returns:
+        Tuple containing:
+            - mse (list): A list of MSE values for the curvature comparison.
+            - smape (list): A list of SMAPE values for the curvature comparison.
+    """
+    smape = []
+    mse = []
+    try:
+        sm = compute_curvature_error_smape(curv1, curv2)
+        ms = compute_curvature_error_mse(curv1, curv2)
+        smape.append(sm)
+        mse.append(ms)
+    except Exception as e:
+        print(f"compute_all_error_metrics: Skipping metric computation due to error: {e}")
+    return mse, smape

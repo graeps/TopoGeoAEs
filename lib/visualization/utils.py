@@ -4,6 +4,28 @@ import numpy as np
 
 def scatter_datapoints(ax, data, title, dot_size=2, colors=None, color_norm=None, cmap='hsv', apply_pca=True,
                         pca_dim=3):
+    """
+    Plots a scatter plot of input data. Can handle 1D, 2D, and 3D data, with optional PCA reduction to 2/3 dimensions. 
+    Customizable dot size, colors, color normalization, and colormap.
+
+    Args:
+        ax (matplotlib.axes.Axes): The matplotlib axis where the scatter plot will be rendered.
+        data (numpy.ndarray): The input data for the scatter plot. Should have shape (n_samples, n_features).
+        title (str): The title of the scatter plot. A " (PCA)" suffix will be applied if PCA is used.
+        dot_size (float, optional): The size of scatter points. Defaults to 2.
+        colors (array-like, optional): The colors for each data point. Defaults to None.
+        color_norm (matplotlib.colors.Normalize, optional): Normalization for color mapping. Defaults to None.
+        cmap (str, optional): The colormap name for the scatter points. Defaults to 'hsv'.
+        apply_pca (bool, optional): Whether to apply PCA for dimensionality reduction if the data has more than 
+            three dimensions. Defaults to True.
+        pca_dim (int, optional): Number of dimensions for PCA projection if applied. Should be 2 or 3. Defaults to 3.
+
+    Returns:
+        matplotlib.collections.PathCollection: The scatter plot object created by matplotlib.
+
+    Raises:
+        ValueError: If the data dimensionality is higher than 3 and `apply_pca` is False.
+    """
     d = data.shape[1]
     pca_applied = False
 
@@ -30,7 +52,3 @@ def scatter_datapoints(ax, data, title, dot_size=2, colors=None, color_norm=None
     ax.set_aspect('equal', adjustable='datalim')
 
     return sc
-
-
-def normalize(arr):
-    return (arr - np.min(arr)) / (np.max(arr) - np.min(arr) + 1e-8)

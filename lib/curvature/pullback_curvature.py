@@ -1,3 +1,11 @@
+"""
+    Adapted from:
+    Acosta, Francisco, et al. "Quantifying extrinsic curvature in neural manifolds."
+    Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. 2023.
+    https://arxiv.org/abs/2212.10414
+    https://github.com/geometric-intelligence/neurometry
+"""
+
 import os
 from typing import Optional, Tuple
 

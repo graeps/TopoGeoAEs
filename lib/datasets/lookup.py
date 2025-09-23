@@ -2,7 +2,6 @@ from typing import Literal
 
 from ..errors import InvalidConfigError
 
-# Dataset category constants (single source of truth)
 ONE_D_DATASETS = {
     "s1_low",
     "interlocking_rings_synthetic",
@@ -27,7 +26,7 @@ TWO_D_DATASETS = {
 }
 
 # Datasets where curvature must be computed per entity and concatenated
-ENTITY_DATASETS = {
+MULTI_ENTITY_DATASETS = {
     "nested_spheres",
     "nested_spheres_high_dim",
     "interlocked_tori",
@@ -46,7 +45,7 @@ def get_dataset_category(dataset_name: str) -> Literal["1d", "2d", "multi_entity
         return "1d"
     if dataset_name in TWO_D_DATASETS:
         return "2d"
-    if dataset_name in ENTITY_DATASETS:
+    if dataset_name in MULTI_ENTITY_DATASETS:
         return "multi_entity"
     raise InvalidConfigError(f"Unknown dataset name: {dataset_name}")
 
@@ -57,7 +56,7 @@ def get_manifold_dim(dataset_name: str) -> int:
     Use get_dataset_category() when you need to distinguish entity datasets.
 
     Raises:
-        InvalidConfigError if dataset is unknown or belongs to ENTITY_DATASETS.
+        InvalidConfigError if dataset is unknown or belongs to MULTI_ENTITY_DATASETS.
     """
     category = get_dataset_category(dataset_name)
     if category == "1d":
@@ -66,5 +65,5 @@ def get_manifold_dim(dataset_name: str) -> int:
         return 2
     raise InvalidConfigError(
         f"Dataset '{dataset_name}' is an entity dataset; "
-        f"use ENTITY_DATASETS to handle per-entity curvature."
+        f"use MULTI_ENTITY_DATASETS to handle per-entity curvature."
     )

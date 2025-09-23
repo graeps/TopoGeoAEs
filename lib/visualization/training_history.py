@@ -4,6 +4,20 @@ from matplotlib import pyplot as plt
 
 
 def show_training_history(config, history):
+    """
+    Visualizes the training history by plotting loss curves for each type of loss
+    present in the provided history dictionary. Allows for saving the plotted
+    figure to a specified logging directory if `log_dir` is configured in the
+    `config` object.
+
+    Args:
+        config: An object or configuration with a `log_dir` attribute that
+            specifies the directory path to save the training history plot. If set
+            to None, the figure will not be saved but only displayed.
+        history: A dictionary where keys represent loss types in training (`train_`)
+            and validation (`test_`) phases, and values are the respective loss
+            values logged per epoch.
+    """
     loss_keys = [key.replace('train_', '') for key in history.keys() if key.startswith('train_')]
     unique_losses = sorted(set(loss_keys))
 

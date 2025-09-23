@@ -86,7 +86,7 @@ def estimate_curvature_2d_quadric(points, k=200):
 
 
 # Dataset category constants (centralized) and getters
-from ..datasets.lookup import ONE_D_DATASETS, TWO_D_DATASETS, ENTITY_DATASETS, get_dataset_category
+from ..datasets.lookup import get_dataset_category
 
 
 def _get_estimator_for_dataset(dataset_name: str):
@@ -129,7 +129,7 @@ def compute_quadric_curvature(config, labels, points, k: int = 160):
     if estimator is not None:
         # Standard 1D/2D datasets
         curv = estimator(points, k)
-    elif config.dataset_name in ENTITY_DATASETS:
+    elif get_dataset_category(config.dataset_name) == "multi_entity":
         # Multi-entity datasets: compute per-entity then concatenate
         entity_indices = labels[:, 0]
         unique_entities = entity_indices.unique(sorted=True)

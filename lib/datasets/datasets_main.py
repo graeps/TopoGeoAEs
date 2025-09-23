@@ -506,12 +506,12 @@ def load_s2_high(n_points, radius, noise_var, embedding_dim,
     gs.random.seed(random_seed)
     torch.manual_seed(random_seed)
     rot = torch.eye(embedding_dim)
+    trans = torch.zeros(embedding_dim)
     if rotation == "random":
         rot = SpecialOrthogonal(n=embedding_dim).random_point()
-    if translation is None:
-        trans = torch.zeros(embedding_dim)
-    else:
-        trans = translation
+    if translation == "random":
+        trans = 100 * torch.rand(embedding_dim)
+
     immersion = get_s2_high_immersion(
         radius=radius,
         embedding_dim=embedding_dim,

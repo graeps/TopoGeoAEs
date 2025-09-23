@@ -54,7 +54,6 @@ def render_curvature_stats(json_path):
 
     comparisons = stats["error_comparisons"]
     errors = stats["errors"]
-    curvature_std = stats["curvature_std"]
 
     html = ""
 
@@ -68,16 +67,6 @@ def render_curvature_stats(json_path):
         html += row
 
     html += "</table><br>"
-
-    # Table 2: Curvature Standard Deviations
-    html += "<h2>Curvature Standard Deviations</h2>"
-    html += "<table>"
-    html += "<tr><th>Label</th><th>Std. Deviation</th></tr>"
-    for label, value in zip(curvature_std["labels"], curvature_std["values"]):
-        html += f"<tr><td>{label}</td><td>{value:.4f}</td></tr>"
-
-    html += "</table><br>"
-
     return html
 
 

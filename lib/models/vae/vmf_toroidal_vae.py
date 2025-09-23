@@ -37,7 +37,7 @@ class VMFToroidalVAE(nn.Module):
             NotImplementedError: If an unsupported activation function is specified.
         """
         super().__init__()
-        self.posterior_type = "vmf_toroidal_vae"
+        self.type = "vmf_toroidal_vae"
         self.data_dim = config.embedding_dim
         self.latent_dim = config.latent_dim
         self.sftbeta = config.sftbeta

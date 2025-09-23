@@ -4,6 +4,31 @@ import torch
 
 
 def get_vectors(config, model, data_loader, n_samples, save_dir="./learned_vectors"):
+    """
+    Computes latent representations, reconstructions, and organizes data from a dataset using
+    a specified model. Handles data preprocessing, saving, and sorting of results as required.
+
+    Args:
+        config: Configuration object that includes model settings, device information, and
+            other experimental parameters.
+        model: The neural network model used to compute latent representations and reconstructions.
+        data_loader: DataLoader object to iterate over the dataset.
+        n_samples: Number of samples to return after random selection.
+        save_dir: Directory path where computed vectors (inputs, latents, recons, labels) are saved.
+            Defaults to "./learned_vectors".
+
+    Returns:
+        A tuple containing reconstructions, latent representations, original inputs, and
+        sorted labels in the following order:
+        - `recons`: Tensor with reconstructed data.
+        - `latents`: Tensor containing latent representations computed by the model.
+        - `inputs`: Tensor with the original input data.
+        - `labels`: Tensor containing sorted labels corresponding to the input data.
+
+    Raises:
+        NotImplementedError: If the model type is not supported or if labels have an
+            unexpected dimensional structure.
+    """
     if config.verbose:
         print("Forwarding data through model to compute latents and recons...")
 

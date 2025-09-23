@@ -94,12 +94,8 @@ def plot_betti_curves(config, suptitle, betti_curves, homology_dimensions=None):
     plt.show()
 
 
-def plot_curvature_persistence(config, model, data_loader):
+def plot_persistence(config, model, data_loader):
     recons, latents, inputs, labels = get_vectors(config, model, data_loader, config.n_points_emp_curv)
-    _plot_all_curvatures_from_vectors(config=config, model=model, recons=recons, latents=latents, inputs=inputs,
-                                      labels=labels)
-
-    # Subsample before persistent homology
 
     start_time = time.time()
 
