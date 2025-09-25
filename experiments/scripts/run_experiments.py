@@ -22,7 +22,6 @@ import lib.models.ae.euclidean_ae as ae_model
 import lib.models.ae.spherical_ae as spherical_model
 import lib.models.ae.toroidal_ae as toroidal_model
 import lib.trainer as trainer
-import lib.utils as utils
 import lib.visualization as visual
 
 from .experiment_utils import generate_experiment_report
@@ -93,8 +92,8 @@ def run_experiment(name=None, all_configs=None):
         visual.training_history.show_training_history(config, history)
         visual.plot_data_latents_recon(config, model, train_loader)
 
-        if config.persistent_homology:
-            visual.plot_curvature_persistence(config=config, model=model, data_loader=train_loader)
+        if config.compute_persistent_homology:
+            visual.plot_persistence(config=config, model=model, data_loader=train_loader)
         elif config.plot_curvatures:
             visual.plot_all_curvatures(config=config, model=model, data_loader=train_loader)
 

@@ -1,4 +1,5 @@
 import os
+import json
 import numpy as np
 import torch
 
@@ -15,7 +16,7 @@ from scipy.spatial import cKDTree
 from ..models.lookup import is_euclidean_model
 
 
-def compute_all_curvatures(config, model, recons, latents, inputs, labels, save_dir="./curvatures"):
+def compute_all_curvatures(config, model, recons, latents, inputs, labels):
     """
     Computes various curvature metrics and organizes them into a structured dictionary, with options
     to save the results to a file. This function calculates curvatures on
@@ -30,7 +31,6 @@ def compute_all_curvatures(config, model, recons, latents, inputs, labels, save_
         latents: Torch tensor representing latent points.
         inputs: Torch tensor representing input points.
         labels: Torch tensor representing labels of the points.
-        save_dir: Directory where the computed curvatures dictionary will be saved. Default is "./curvatures".
 
     Returns:
         A dictionary containing metadata, points, and computed curvatures.
@@ -46,7 +46,7 @@ def compute_all_curvatures(config, model, recons, latents, inputs, labels, save_
     z_grid = None
     curv_true = None
     curv_learned = None
-    curv_learned_rotated = None
+    curv_learned_transformed = None
 
     # Only compute quadric curvature for Euclidean models
     if is_euclidean_model(getattr(config, "model_type", None)):
@@ -75,7 +75,7 @@ def compute_all_curvatures(config, model, recons, latents, inputs, labels, save_
             )
             # Optional alignment for spherical Manifold-VAEs
             if getattr(config, "model_type", None) in {"VMFSphericalVAE", "SphericalAE"} and curv_learned is not None:
-                curv_learned_rotated = compute_curvature_rotated(
+                curv_learned_transformed = compute_curvature_transformed(
                     learned_curvature=curv_learned, latents=latents, labels=labels, z_grid=z_grid
                 )
         else:
@@ -97,10 +97,10 @@ def compute_all_curvatures(config, model, recons, latents, inputs, labels, save_
             if getattr(config, "verbose", False):
                 print(f"Warning: failed to compute metrics (latents vs inputs): {e}")
     # (2) True vs learned_rotated_sub (if available)
-    if (curv_true is not None) and (curv_learned_rotated is not None):
+    if (curv_true is not None) and (curv_learned_transformed is not None):
         try:
-            mse_tl = compute_curvature_error_mse(curv_true, curv_learned_rotated)
-            smape_tl = compute_curvature_error_smape(curv_true, curv_learned_rotated)
+            mse_tl = compute_curvature_error_mse(curv_true, curv_learned_transformed)
+            smape_tl = compute_curvature_error_smape(curv_true, curv_learned_transformed)
             metrics["true_vs_learned_rotated_sub"] = {"mse": float(mse_tl), "smape": float(smape_tl)}
         except Exception as e:
             if getattr(config, "verbose", False):
@@ -108,11 +108,7 @@ def compute_all_curvatures(config, model, recons, latents, inputs, labels, save_
 
     print(metrics)
     results_dict = {
-        "metadata": {
-            "experiment": getattr(config, "experiment", "unknown"),
-            "n_points": int(total_count),
-            "n_pullback_points": int(n_pullback_points),
-        },
+        "experiment": getattr(config, "experiment", "unknown"),
         "points": {
             "labels": labels,
             "inputs": inputs,
@@ -123,27 +119,56 @@ def compute_all_curvatures(config, model, recons, latents, inputs, labels, save_
             "inputs": curv_quadric_inputs ,
             "latents": curv_quadric_latents,
             "recons": curv_quadric_recons,
-            "true_sub": curv_true,
-            "learned_sub": curv_learned,
-            "learned_rotated_sub": curv_learned_rotated,
+            "true": curv_true,
+            "learned": curv_learned,
+            "learned_transformed": curv_learned_transformed,
             "z_grid": z_grid,
         },
         "metrics": metrics,
     }
 
     # Save results_dict if requested
-    if save_dir is not None:
-        os.makedirs(save_dir, exist_ok=True)
-        filename = f"curvatures_{getattr(config, 'experiment', 'exp')}.pt"
-        save_path = os.path.join(save_dir, filename)
-        torch.save(results_dict, save_path)
+    if config.log_dir is not None:
+        os.makedirs(config.log_dir, exist_ok=True)
+        filename = f"vectors_curvatures_{getattr(config, 'experiment', 'exp')}.json"
+        save_path = os.path.join(config.log_dir, filename)
+
+        def _to_serializable(obj):
+            if obj is None:
+                return None
+            # Native JSON types
+            if isinstance(obj, (bool, int, float, str)):
+                return obj
+            # NumPy scalars
+            if isinstance(obj, np.floating):
+                return float(obj)
+            if isinstance(obj, np.integer):
+                return int(obj)
+            # NumPy arrays
+            if isinstance(obj, np.ndarray):
+                return obj.tolist()
+            # Torch tensors
+            if isinstance(obj, torch.Tensor):
+                return obj.detach().cpu().tolist()
+            # Dicts
+            if isinstance(obj, dict):
+                return {k: _to_serializable(v) for k, v in obj.items()}
+            # Lists/Tuples
+            if isinstance(obj, (list, tuple)):
+                return [_to_serializable(v) for v in obj]
+            # Fallback to string
+            return str(obj)
+
+        results_json = _to_serializable(results_dict)
+        with open(save_path, "w") as f:
+            json.dump(results_json, f, indent=2)
         if getattr(config, "verbose", False):
-            print(f"Saved curvatures to {save_path}")
+            print(f"Saved curvatures (JSON) to {save_path}")
 
     return results_dict
 
 
-def compute_curvature_rotated(learned_curvature, latents, labels, z_grid):
+def compute_curvature_transformed(learned_curvature, latents, labels, z_grid):
     """
     Aligns the learned curvature values on a spherical or circular latent space
     by rotating the evaluation grid to match the orientation of the ground-truth

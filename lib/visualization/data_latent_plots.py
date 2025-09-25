@@ -10,7 +10,18 @@ from ..models.lookup import is_euclidean_model
 
 
 def plot_data_latents_recon(config, model, data_loader):
+    """
+    Generates and visualizes comparison plots for input data, latent representations, and reconstructed data.
+    The function creates three subplots: original dataset, latent space, and reconstruction.
+    It also saves the generated plots to the specified logging directory. The visualization offers support
+    for both 2D and 3D datasets, dynamically adjusting rendering based on the dataset type.
 
+    Args:
+        config (Any): Contains configuration parameters for the visualization, including dataset options,
+                      logging directory, and normalization flags.
+        model (Any): The trained model used to generate latent representations and reconstructions.
+        data_loader (Any): The data loader providing input data and labels for visualization.
+    """
     recons, latents, inputs, labels = get_vectors(config, model, data_loader, config.n_plot_points)
     if torch.isnan(latents).any():
         print("NaNs detected in the dataset!")

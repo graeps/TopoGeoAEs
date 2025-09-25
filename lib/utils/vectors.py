@@ -57,17 +57,6 @@ def get_vectors(config, model, data_loader, n_samples, save_dir="./learned_vecto
     recons = torch.cat(recons, dim=0)
     labels = torch.cat(labels, dim=0)
 
-    if save_dir is not None:
-        os.makedirs(save_dir, exist_ok=True)
-        name = f"vectors_{config.experiment}_.pt"
-        save_path = os.path.join(save_dir, name)
-        torch.save({
-            'inputs': inputs,
-            'latents': latents,
-            'recons': recons,
-            'labels': labels
-        }, save_path)
-
     n_total = latents.shape[0]
     n_samples = min(n_samples, n_total)
     indices = torch.randperm(n_total)[:n_samples]

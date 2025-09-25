@@ -182,7 +182,7 @@ def compute_curvature_learned(
 def compute_curvature_true(
         config,
         n_grid_points: int = 2000,
-        cache_dir: str = "./curvature_cache",
+        cache_dir: str = "./true_curvature_cache",
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Compute curvature for the true (ground-truth) immersion, with caching.

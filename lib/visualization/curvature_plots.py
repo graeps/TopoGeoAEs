@@ -457,15 +457,15 @@ def plot_all_curvatures(config, model, data_loader):
     curv_rec = results_dict["curvatures"]["recons"]
 
     # Pullback / true / rotated from results_dict
-    curv_true = results_dict["curvatures"]["true_sub"]
-    curv_learned = results_dict["curvatures"]["learned_sub"]
-    curv_learned_rotated = results_dict["curvatures"]["learned_rotated_sub"]
+    curv_true = results_dict["curvatures"]["true"]
+    curv_learned = results_dict["curvatures"]["learned"]
+    curv_learned_transformed = results_dict["curvatures"]["learned_transformed"]
     z_grid = results_dict["curvatures"]["z_grid"]
 
     is_spherical = is_spherical_model(config.model_type)
     is_euclidean = is_euclidean_model(config.model_type)
     has_true = bool(getattr(config, "compute_true_curv", False) and (curv_true is not None) and (z_grid is not None))
-    learned_source = curv_learned_rotated if is_spherical else curv_learned
+    learned_source = curv_learned_transformed if is_spherical else curv_learned
     has_learned = bool(getattr(config, "compute_learned_curv", False) and (learned_source is not None) and (z_grid is not None))
     dataset_category = get_dataset_category(config.dataset_name)
 
@@ -477,7 +477,7 @@ def plot_all_curvatures(config, model, data_loader):
             if has_learned:
                 plot_curvature_norms(angles=z_grid, curvature_norms=curv_learned, config=config, norm_val=None,
                                      profile_type="learned", title="Latents", small_text=_compose_small_text())
-                plot_curvature_norms(angles=z_grid, curvature_norms=curv_learned_rotated, config=config, norm_val=None,
+                plot_curvature_norms(angles=z_grid, curvature_norms=curv_learned_transformed, config=config, norm_val=None,
                                      profile_type="learned", title="Latents Transformed", small_text=_compose_small_text())
         else:
             # Plot Inputs vs Latents over labels
@@ -532,10 +532,10 @@ def plot_all_curvatures(config, model, data_loader):
                 plot_curvatures_2d(angles=z_grid, curvature_norms=tl_series, config=config, title="Estimated Curvature (Pullback)")
 
         # Spherical variants (rotated learned)
-        if is_spherical and (curv_learned_rotated is not None):
+        if is_spherical and (curv_learned_transformed is not None):
             plot_curvatures_2d(
                 angles=z_grid,
-                curvature_norms={"Learned Curvature (Rotated)": curv_learned_rotated},
+                curvature_norms={"Learned Curvature (Rotated)": curv_learned_transformed},
                 config=config,
                 title="Surfaces: Learned Rotated"
             )
@@ -572,7 +572,7 @@ def plot_all_curvatures(config, model, data_loader):
             plot_curvature_norms(angles=z_grid, curvature_norms=curv_learned, config=config, norm_val=None, profile_type="learned", title="Latents", small_text=_compose_small_text())
         elif is_spherical:
             plot_curvature_norms(angles=z_grid, curvature_norms=curv_true, config=config, norm_val=None, profile_type="true", title="Data")
-            plot_curvature_norms(angles=z_grid, curvature_norms=curv_learned_rotated, config=config, norm_val=None, profile_type="learned", title="Latents Transformed", small_text=_compose_small_text())
+            plot_curvature_norms(angles=z_grid, curvature_norms=curv_learned_transformed, config=config, norm_val=None, profile_type="learned", title="Latents Transformed", small_text=_compose_small_text())
         else:
             raise NotImplementedError
 
