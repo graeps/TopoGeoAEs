@@ -10,6 +10,8 @@ The thesis investigates the capacity of several autoencoder architectures to
 
 In particular, the impact of **topological regularization** on the learned topology and geometry is analyzed.
 
+![](.sphere_high_topo_euclidean.png)
+
 The repository provides implementations of four classes of autoencoder architectures:
 
 - **Euclidean Autoencoders (AEs)**
