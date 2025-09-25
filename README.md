@@ -1,10 +1,30 @@
-# MVAE
+# Latent Topology and Geometry in Riemannian Autoencoders
 
-`lib` ~~includes~~ will include Variational AutoEncoders with varios manifolds as latent space. Including
-* eucliden flat space
-* p-torus
-* hyperbolic space (Lorentz model)
+This repository contains the code for my Diploma thesis *"Exploratory Analysis of Latent Topology and Geometry in
+Riemannian Autoencoders"*.  
+The thesis investigates the capacity of several autoencoder architectures to
 
-`experiments` ~~includes~~ will include jupyter notebooks to compare the performance of the architectures.
+1. learn representations of data that are **topologically and geometrically aligned** with the underlying data manifold,
+   and
+2. learn a **parametrization of the data manifold** by exploiting the decoder network.
 
-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
+In particular, the impact of **topological regularization** on the learned topology and geometry is analyzed.
+
+The repository provides implementations of four classes of autoencoder architectures:
+
+- **Euclidean Autoencoders (AEs)**
+- **Euclidean Variational Autoencoders (VAEs)**
+- **Manifold Autoencoders (Manifold-AEs)** with non-Euclidean latent spaces
+- **Manifold Variational Autoencoders (Manifold-VAEs)** with non-Euclidean latent spaces
+
+The `lib/` module contains the tools to train these models on synthetic datasets, visualize the learned latent
+representations, and evaluate the quality of the recovered topology and geometry. Exemplary usage and the conducted experiments can be found in the
+`notebooks/` directory.
+
+## Dependencies and Related Work
+
+This project builds on the following implementations:
+
+- [Spherical VAEs](https://github.com/nicola-decao/s-vae-pytorch)
+- [Toroidal VAEs, synthetic datasets, and pullback curvature estimation](https://github.com/geometric-intelligence/neurometry/tree/main/neurometry)
+- [Topological autoencoders with persistence-based regularization](https://github.com/BorgwardtLab/topological-autoencoders)  

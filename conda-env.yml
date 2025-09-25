@@ -1,0 +1,28 @@
+name: mvae-env
+channels:
+  - https://repo.anaconda.com/pkgs/main
+  - https://repo.anaconda.com/pkgs/r
+dependencies:
+  - geomstats
+  - jupyter
+  - matplotlib
+  - numpy
+  - plotly
+  - python=3.10
+  - scipy=1.13.1
+  - torchvision
+  - scikit-image
+  - tqdm
+  - wandb
+  - pip
+  - pip:
+      - --extra-index-url https://download.pytorch.org/whl/cpu
+      - torch
+      - torchvision
+      - torchaudio
+      - git+https://github.com/geoopt/geoopt.git
+      - torch-topological
+      - giotto-tda
+variables:
+  GEOMSTATS_BACKEND: pytorch
+prefix: /home/timtom/miniconda3/envs/mvae-env
