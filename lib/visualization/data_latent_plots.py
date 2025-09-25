@@ -88,7 +88,7 @@ def plot_data_latents_recon(config, model, data_loader):
     # Latent space plot
     ax2 = fig.add_subplot(1, 3, 2, projection='3d' if latents.shape[1] >= 3 and pca_dim == 3 else None)
     scatter_datapoints(ax=ax2, data=latents, title="Latent Representation", colors=colors, cmap=color_map,
-                        pca_dim=pca_dim)
+                        pca_dim=pca_dim, apply_pca=False)
     if not is_euclidean_model(getattr(config, "model_type", "")):
         _set_axis_limits(ax2, config.dataset_name)
 
@@ -109,7 +109,7 @@ def plot_data_latents_recon(config, model, data_loader):
             fig_input = plt.figure()
             ax_input = fig_input.add_subplot(1, 1, 1,
                                              projection='3d' if inputs.shape[1] >= 3 and pca_dim == 3 else None)
-            scatter_datapoints(ax=ax_input, data=inputs, title=None, colors=colors, cmap=color_map, pca_dim=pca_dim)
+            scatter_datapoints(ax=ax_input, data=inputs, title="", colors=colors, cmap=color_map, pca_dim=pca_dim)
             fig_input.tight_layout()
             fig_input.savefig(os.path.join(config.log_dir, "input_data.png"))
             plt.close(fig_input)
@@ -118,7 +118,11 @@ def plot_data_latents_recon(config, model, data_loader):
             fig_latent = plt.figure()
             ax_latent = fig_latent.add_subplot(1, 1, 1,
                                                projection='3d' if latents.shape[1] >= 3 and pca_dim == 3 else None)
-            scatter_datapoints(ax=ax_latent, data=latents, title=None, colors=colors, cmap=color_map, pca_dim=pca_dim)
+            if not is_euclidean_model(getattr(config, "model_type", "")):
+                apply_pca=False
+            else:
+                apply_pca=True
+            scatter_datapoints(ax=ax_latent, data=latents, apply_pca=apply_pca, title="", colors=colors, cmap=color_map, pca_dim=pca_dim)
             if not is_euclidean_model(getattr(config, "model_type", "")):
                 _set_axis_limits(ax_latent, config.dataset_name)
             fig_latent.tight_layout()
@@ -129,7 +133,7 @@ def plot_data_latents_recon(config, model, data_loader):
             fig_recon = plt.figure()
             ax_recon = fig_recon.add_subplot(1, 1, 1,
                                              projection='3d' if recons.shape[1] >= 3 and pca_dim == 3 else None)
-            scatter_datapoints(ax=ax_recon, data=recons, title=None, colors=colors, cmap=color_map, pca_dim=pca_dim)
+            scatter_datapoints(ax=ax_recon, data=recons, title="", colors=colors, cmap=color_map, pca_dim=pca_dim)
             fig_recon.tight_layout()
             fig_recon.savefig(os.path.join(config.log_dir, "reconstructed_data.png"))
             plt.close(fig_recon)

@@ -14,9 +14,10 @@ os.environ["GEOMSTATS_BACKEND"] = "pytorch"
 
 from scipy.spatial import cKDTree
 from ..models.lookup import is_euclidean_model
+from ..utils.vectors import get_vectors
 
 
-def compute_all_curvatures(config, model, recons, latents, inputs, labels):
+def compute_all_curvatures(config, model, data_loader):
     """
     Computes various curvature metrics and organizes them into a structured dictionary, with options
     to save the results to a file. This function calculates curvatures on
@@ -27,19 +28,15 @@ def compute_all_curvatures(config, model, recons, latents, inputs, labels):
     Args:
         config: Configuration object containing settings and parameters.
         model: The model object used to compute learned curvature.
-        recons: Torch tensor representing reconstruction points.
-        latents: Torch tensor representing latent points.
-        inputs: Torch tensor representing input points.
-        labels: Torch tensor representing labels of the points.
+        data_loader: The data loader object of the dataset of interest, used to extract points and labels.
 
     Returns:
         A dictionary containing metadata, points, and computed curvatures.
     """
-    total_count = len(labels)
-    target = min(getattr(config, "n_points_pullback_curv", total_count), total_count)
-    n_pullback_points = int(np.sqrt(target)) ** 2
-    n_pullback_points = max(1, n_pullback_points)
-
+    inputs = None
+    latents = None
+    recons = None
+    labels = None
     curv_quadric_inputs = None
     curv_quadric_latents = None
     curv_quadric_recons = None
@@ -50,6 +47,7 @@ def compute_all_curvatures(config, model, recons, latents, inputs, labels):
 
     # Only compute quadric curvature for Euclidean models
     if is_euclidean_model(getattr(config, "model_type", None)):
+        recons, latents, inputs, labels = get_vectors(config=config, model=model, data_loader=data_loader, n_samples=config.n_points_emp_curv)
         if getattr(config, "compute_quadric_curv_inputs", False):
             curv_quadric_inputs = compute_quadric_curvature(config=config, labels=labels, points=inputs, k=config.k)
         if getattr(config, "compute_quadric_curv_latents", False):
@@ -66,6 +64,8 @@ def compute_all_curvatures(config, model, recons, latents, inputs, labels):
             f"is non-Euclidean (Euclidean required)."
         )
 
+    n_pullback_points = int(np.sqrt(config.n_points_pullback_curv)) ** 2
+    n_pullback_points = max(1, n_pullback_points)
     if getattr(config, "compute_true_curv", False):
         z_grid, _, curv_true = compute_curvature_true(config=config, n_grid_points=n_pullback_points)
     if getattr(config, "compute_learned_curv", False):
@@ -75,6 +75,7 @@ def compute_all_curvatures(config, model, recons, latents, inputs, labels):
             )
             # Optional alignment for spherical Manifold-VAEs
             if getattr(config, "model_type", None) in {"VMFSphericalVAE", "SphericalAE"} and curv_learned is not None:
+                _, latents, _, labels = get_vectors(config=config, model=model, data_loader=data_loader)
                 curv_learned_transformed = compute_curvature_transformed(
                     learned_curvature=curv_learned, latents=latents, labels=labels, z_grid=z_grid
                 )
@@ -96,15 +97,15 @@ def compute_all_curvatures(config, model, recons, latents, inputs, labels):
         except Exception as e:
             if getattr(config, "verbose", False):
                 print(f"Warning: failed to compute metrics (latents vs inputs): {e}")
-    # (2) True vs learned_rotated_sub (if available)
+    # (2) True vs learned_transformed (if available)
     if (curv_true is not None) and (curv_learned_transformed is not None):
         try:
             mse_tl = compute_curvature_error_mse(curv_true, curv_learned_transformed)
             smape_tl = compute_curvature_error_smape(curv_true, curv_learned_transformed)
-            metrics["true_vs_learned_rotated_sub"] = {"mse": float(mse_tl), "smape": float(smape_tl)}
+            metrics["true_vs_learned_transformed"] = {"mse": float(mse_tl), "smape": float(smape_tl)}
         except Exception as e:
             if getattr(config, "verbose", False):
-                print(f"Warning: failed to compute metrics (true vs learned_rotated_sub): {e}")
+                print(f"Warning: failed to compute metrics (true vs learned_transformed): {e}")
 
     print(metrics)
     results_dict = {
@@ -130,7 +131,7 @@ def compute_all_curvatures(config, model, recons, latents, inputs, labels):
     # Save results_dict if requested
     if config.log_dir is not None:
         os.makedirs(config.log_dir, exist_ok=True)
-        filename = f"vectors_curvatures_{getattr(config, 'experiment', 'exp')}.json"
+        filename = f"curvatures_{getattr(config, 'experiment', 'exp')}.json"
         save_path = os.path.join(config.log_dir, filename)
 
         def _to_serializable(obj):

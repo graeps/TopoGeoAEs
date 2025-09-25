@@ -149,9 +149,9 @@ def plot_curvature_norms(angles, curvature_norms, config, norm_val, profile_type
     plt.close()
 
 
-def scatter_curvature_heatmaps(config, pts, curv, title=None, small_text=None):
+def scatter_curvature_heatmaps(config, pts, curv, apply_pca=True, title=None, small_text=None):
     """
-    Visualizes curvature data as a scatter plot heatmap on the input data, latents or recons of euclidean models.
+    Visualizes curvature data as a scatter plot heatmap on the input data, latents or recons of Euclidean models.
     The function adjusts dimensionality using principal component
     analysis (PCA) based on the dataset and creates either a 2D or 3D scatter plot.
     Color gradients represent curvature magnitudes.
@@ -161,6 +161,7 @@ def scatter_curvature_heatmaps(config, pts, curv, title=None, small_text=None):
         pts: List or array-like of points to be used for scatter visualization.
         curv: List or array-like containing curvature magnitudes corresponding to the
             points.
+        apply_pca: Boolean flag indicating whether PCA should be applied to the data before plotting.
         title: Optional. Title for the heatmap plot.
         small_text: Optional. Additional text annotation to be displayed in the plot.
     """
@@ -179,7 +180,7 @@ def scatter_curvature_heatmaps(config, pts, curv, title=None, small_text=None):
         111,
         projection='3d' if points.shape[1] >= 3 and pca_dim == 3 else None
     )
-    sc = scatter_datapoints(ax=ax, data=points, title=title, colors=curvature_norms, cmap='rainbow', pca_dim=pca_dim)
+    sc = scatter_datapoints(ax=ax, data=points, title=title, colors=curvature_norms, cmap='rainbow', apply_pca=apply_pca, pca_dim=pca_dim)
     fig.colorbar(sc, ax=ax, shrink=0.7)
 
     # Optional small annotation in upper-left corner
@@ -425,10 +426,9 @@ def plot_all_curvatures(config, model, data_loader):
         data_loader: DataLoader object providing input data for the model and relevant labels for subsequent
             computations and plots.
     """
-    recons, latents, inputs, labels = get_vectors(config, model, data_loader, config.n_points_emp_curv)
-    results_dict = compute_all_curvatures(config, model, recons, latents, inputs, labels)
-
-    points = (inputs, latents, recons)
+    get_vectors(config, model, data_loader, save=True)
+    results_dict = compute_all_curvatures(config, model, data_loader)
+    
     metrics = results_dict.get("metrics", {})
 
     def _compose_small_text():
@@ -441,7 +441,7 @@ def plot_all_curvatures(config, model, data_loader):
                 lines.append(f"data/latents \nMSE={mse:.3g}, SMAPE={smape:.3g}%")
             except Exception:
                 pass
-        d2 = metrics.get("true_vs_learned_rotated_sub")
+        d2 = metrics.get("true_vs_learned_transformed")
         if isinstance(d2, dict):
             try:
                 mse = d2.get("mse", float("nan"))
@@ -451,6 +451,12 @@ def plot_all_curvatures(config, model, data_loader):
                 pass
         return "\n".join(lines) if lines else None
 
+    # Extract points
+    inputs = results_dict["points"]["inputs"]
+    latents = results_dict["points"]["latents"]
+    recons = results_dict["points"]["recons"]
+    labels = results_dict["points"]["labels"]
+    
     # Extract empirical quadric curvatures (full)
     curv_in = results_dict["curvatures"]["inputs"]
     curv_lat = results_dict["curvatures"]["latents"]
@@ -515,11 +521,11 @@ def plot_all_curvatures(config, model, data_loader):
                 )
             # Individual heatmaps
             if curv_in is not None:
-                scatter_curvature_heatmaps(config, points[0], curv_in, title="Inputs Heatmap")
+                scatter_curvature_heatmaps(config, inputs, curv_in, title="Inputs Heatmap")
             if curv_lat is not None:
-                scatter_curvature_heatmaps(config, points[1], curv_lat, title="Latents Heatmap", small_text=_compose_small_text())
+                scatter_curvature_heatmaps(config, latents, curv_lat, title="Latents Heatmap", small_text=_compose_small_text())
             if curv_rec is not None:
-                scatter_curvature_heatmaps(config, points[2], curv_rec, title="Recons Heatmap")
+                scatter_curvature_heatmaps(config, recons, curv_rec, title="Recons Heatmap")
 
     elif dataset_category == "2d":
         if not is_euclidean:
@@ -562,11 +568,11 @@ def plot_all_curvatures(config, model, data_loader):
                 plot_curvatures_2d(angles=labels, curvature_norms=label_series, config=config,
                                    title="Estimated Curvature (Quadric)")
             if curv_in is not None:
-                scatter_curvature_heatmaps(config, points[0], curv_in, title="Inputs Heatmap")
+                scatter_curvature_heatmaps(config, inputs, curv_in, title="Inputs Heatmap")
             if curv_lat is not None:
-                scatter_curvature_heatmaps(config, points[1], curv_lat, title="Latents Heatmap", small_text=_compose_small_text())
+                scatter_curvature_heatmaps(config, latents, curv_lat, title="Latents Heatmap", small_text=_compose_small_text())
             if curv_rec is not None:
-                scatter_curvature_heatmaps(config, points[2], curv_rec, title="Recons Heatmap")
+                scatter_curvature_heatmaps(config, recons, curv_rec, title="Recons Heatmap")
         elif not is_euclidean and not is_spherical:
             plot_curvature_norms(angles=z_grid, curvature_norms=curv_true, config=config, norm_val=None, profile_type="true", title="Data")
             plot_curvature_norms(angles=z_grid, curvature_norms=curv_learned, config=config, norm_val=None, profile_type="learned", title="Latents", small_text=_compose_small_text())
@@ -589,7 +595,6 @@ def plot_all_curvatures(config, model, data_loader):
             inputs_entity = inputs[mask]
             latents_entity = latents[mask]
             recons_entity = recons[mask]
-            points_entity = (inputs_entity, latents_entity, recons_entity)
 
             curv_true_entity = curv_true[mask_sub]
             curv_in_entity = curv_in[mask]

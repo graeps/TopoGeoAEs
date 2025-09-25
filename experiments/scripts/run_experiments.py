@@ -24,30 +24,8 @@ import lib.models.ae.toroidal_ae as toroidal_model
 import lib.trainer as trainer
 import lib.visualization as visual
 
-from .experiment_utils import generate_experiment_report
-
-# Optional: Map your config names to their import paths
-CONFIG_MODULES = {
-    "scrunchy": "configs.scruchy_configs",
-    "flower_curve": "configs.flower_curve_configs",
-    "flower_scrunchy": "configs.flower_scrunchy_configs",
-    "clelia_curve": "configs.clelia_curve_configs",
-    "torus": "configs.torus_configs",
-    "wiggling_tube": "configs.wiggling_tube_configs",
-    "interlocked_tori": "configs.interlocked_tori_configs",
-    "nested_spheres": "configs.nested_spheres_configs",
-}
-
-
-def run_experiment(name=None, all_configs=None):
+def run_experiment(all_configs):
     start_time = time.time()
-
-    if all_configs is None:
-        assert name in CONFIG_MODULES, f"Unknown config name: {name}"
-        config_module = __import__(CONFIG_MODULES[name], fromlist=["all_configs"])
-        all_configs = config_module.all_configs
-    else:
-        assert isinstance(all_configs, dict), "all_configs must be a dict if provided directly"
 
     for config_name, config in all_configs.items():
         print("\n======================================================================================")
@@ -96,9 +74,6 @@ def run_experiment(name=None, all_configs=None):
             visual.plot_persistence(config=config, model=model, data_loader=train_loader)
         elif config.plot_curvatures:
             visual.plot_all_curvatures(config=config, model=model, data_loader=train_loader)
-
-        if config.logging:
-            generate_experiment_report(config)
 
         end_time = time.time()
         print(f"Execution time {config_name}: {end_time - start_time:.4f} seconds")
