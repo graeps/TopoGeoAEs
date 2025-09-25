@@ -4,3 +4,8 @@ experiments/results/
 /experiments/results/selection/
 */.ipynb_checkpoints
 */results/
+/experiments/OLD_notebooks_euclid_ae/
+/experiments/OLD_notebooks_euclid_vae/
+/experiments/OLD_notebooks_m_ae/
+/experiments/OLD_notebooks_m_vae/
+/experiments/OLD_notebooks_supp_exps/
