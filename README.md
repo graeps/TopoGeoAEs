@@ -114,9 +114,11 @@ If you use this code, please cite the Diploma thesis:
   author={Samuel Graepler},
   year={2025}
 }
+```
 
 For the citation of the extended abstracts please use:
 
+```
 @inproceedings{
 graepler2025on,
 title={On the Impact of Topological Regularization on Geometrical and Topological Alignment in Autoencoders: An Empirical Study},
@@ -134,3 +136,4 @@ booktitle={NeurIPS 2025 Workshop on Symmetry and Geometry in Neural Representati
 year={2025},
 url={https://openreview.net/forum?id=d5MaJiYmUB}
 }
+```
