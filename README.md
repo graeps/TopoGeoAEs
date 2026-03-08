@@ -93,10 +93,13 @@ The full thesis is available here:
 Parts of this work were accepted as an extended abstract and poster tracks at the NeurIPS 2025 "NeurReps" and "UniReps" workshops
 
 Extended abstracts:
+
 `paper/unireps_extended_abstract.pdf`
+
 `paper/neurreps_extended_abstract.pdf`
 
 Poster:  
+
 `paper/neurreps_poster.pdf`
 
 ---
