@@ -25,4 +25,3 @@ dependencies:
       - giotto-tda
 variables:
   GEOMSTATS_BACKEND: pytorch
-prefix: /home/timtom/miniconda3/envs/mvae-env
