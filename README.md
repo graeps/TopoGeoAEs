@@ -88,16 +88,15 @@ https://github.com/BorgwardtLab/topological-autoencoders
 
 The full thesis is available here:
 
-`paper/thesis.pdf`
+`latent_geometry_and_topology_in_autoencoders_thesis`
 
-Parts of this work were accepted as an extended abstract and poster tracks at the NeurIPS 2025 **NeurReps** and **UniReps"" workshops
+Parts of this work were accepted as an extended abstract and poster tracks at the NeurIPS 2025 "NeurReps" and "UniReps" workshops
 
 Extended abstracts:
 `paper/unireps_extended_abstract.pdf`
 `paper/neurreps_extended_abstract.pdf`
 
-Posters:  
-`paper/unireps_poster.pdf`
+Poster:  
 `paper/neurreps_poster.pdf`
 
 ---
@@ -111,4 +110,24 @@ If you use this code, please cite the Diploma thesis:
   title={Exploratory Analysis of Latent Topology and Geometry in some Riemannian Autoencoders},
   author={Samuel Graepler},
   year={2025}
+}
+
+For the citation of the extended abstracts please use:
+
+@inproceedings{
+graepler2025on,
+title={On the Impact of Topological Regularization on Geometrical and Topological Alignment in Autoencoders: An Empirical Study},
+author={Samuel Graepler and Nico Scherf and Anna Wienhard and Diaaeldin Taha},
+booktitle={UniReps: 3rd Edition of the Workshop on Unifying Representations in Neural Models},
+year={2025},
+url={https://openreview.net/forum?id=5i6cA8XS3T}
+}
+
+@inproceedings{
+graepler2025on,
+title={On the Impact of Topological Regularization on Geometrical and Topological Alignment in Autoencoders: An Empirical Study},
+author={Samuel Graepler and Nico Scherf and Anna Wienhard and Diaaeldin Taha},
+booktitle={NeurIPS 2025 Workshop on Symmetry and Geometry in Neural Representations},
+year={2025},
+url={https://openreview.net/forum?id=d5MaJiYmUB}
 }
